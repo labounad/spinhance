@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Environments
+.env
+.venv
+env/
+venv/
+*.conda
+*.mamba
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Data / outputs (large files — store externally or use DVC)
+data/raw/
+data/processed/
+outputs/
+*.sdf
+*.mol2
+*.log
+
+# MNova outputs (keep XMLs committed if small; ignore large batch dirs)
+simulation/mnova_outputs/
+
+# ML checkpoints
+ml_model/checkpoints/
+ml_model/runs/
+*.pt
+*.pth
+*.ckpt
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+*.swp

@@ -1,0 +1,46 @@
+name: spinhance
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.14
+  - pip
+
+  # --- Cheminformatics ---
+  - rdkit>=2024.03
+  - openbabel
+
+  # --- Scientific computing ---
+  - numpy>=2.0
+  - scipy>=1.14
+  - pandas>=2.2
+
+  # --- 3D visualization / structure ---
+  - py3dmol
+
+  # --- NMR / simulation utilities ---
+  - lxml          # XML parsing for MNova spin-system files
+
+  # --- Machine learning ---
+  - pytorch>=2.4          # CPU build; override with cuda variant locally if needed
+  - torchvision
+  - scikit-learn>=1.5
+
+  # --- Plotting ---
+  - matplotlib>=3.9
+  - seaborn
+
+  # --- Dev / notebook ---
+  - jupyterlab
+  - ipywidgets
+  - tqdm
+  - rich
+
+  # --- Testing ---
+  - pytest
+  - pytest-cov
+
+  - pip:
+    # Anything not yet on conda-forge for py3.14:
+    - nmrglue          # NMR data I/O (FID processing)
+    - qmsolve          # optional: quantum spin Hamiltonian reference
