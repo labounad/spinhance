@@ -23,19 +23,21 @@ import sys
 
 
 # ── Argument parsing ──────────────────────────────────────────────────────────
-# MNova passes script args after '--' as sys.argv[1:]
+# MNova's --py flag only accepts the script path; additional CLI args are
+# interpreted as files to open. We use environment variables instead:
+#
+#   XML_DIR=/path/to/xmls OUT_DIR=/path/to/out \
+#       MestReNova --nogui --py /abs/path/to/batch_simulate.py
 def _parse_args():
-    args = sys.argv[1:]
-    # Strip leading '--' sentinel if present
-    if args and args[0] == "--":
-        args = args[1:]
-    if len(args) >= 2:
-        return args[0], args[1]
+    xml_dir = os.environ.get("SPINHANCE_XML_DIR", "").strip()
+    out_dir = os.environ.get("SPINHANCE_OUT_DIR", "").strip()
+    if xml_dir and out_dir:
+        return xml_dir, out_dir
     # Fallback: hard-code for GUI/console testing
     repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     xml_dir = os.path.join(repo, "data", "processed", "xmls", "100MHz")
     out_dir = os.path.join(repo, "data", "processed", "txt", "100MHz")
-    print(f"[batch_simulate] No args supplied; using defaults:\n  xml_dir={xml_dir}\n  out_dir={out_dir}")
+    print(f"[batch_simulate] No env vars set; using defaults:\n  xml_dir={xml_dir}\n  out_dir={out_dir}")
     return xml_dir, out_dir
 
 

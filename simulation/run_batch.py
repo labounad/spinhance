@@ -24,6 +24,7 @@ Or import and call `run_pipeline()` programmatically.
 
 from __future__ import annotations
 import argparse
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -102,24 +103,26 @@ def run_mnova_batch(
     n_xml = len(list(xml_dir.glob("*.xml")))
     total_timeout = max(120, n_xml * timeout_per_file)
 
-    py_script = Path(__file__).parent / "batch_simulate.py"
+    py_script = (Path(__file__).parent / "batch_simulate.py").resolve()
 
     cmd = [
         str(mnova_exe),
         "--nogui",
         "--py", str(py_script),
-        "--",
-        str(xml_dir),
-        str(txt_out_dir),
     ]
     print(f"  Running MNova on {n_xml} files in {xml_dir.name} ...")
     print(f"  CMD: {' '.join(cmd)}")
+
+    env = os.environ.copy()
+    env["SPINHANCE_XML_DIR"] = str(xml_dir.resolve())
+    env["SPINHANCE_OUT_DIR"] = str(txt_out_dir.resolve())
 
     result = subprocess.run(
         cmd,
         capture_output=True,
         text=True,
         timeout=total_timeout,
+        env=env,
     )
 
     if result.returncode != 0:
