@@ -17,6 +17,9 @@ dependencies:
   # --- 3D visualization / structure ---
   - py3dmol
 
+  # --- AWS ---
+  - boto3
+
   # --- NMR / simulation utilities ---
   - lxml          # XML parsing for MNova spin-system files
 
