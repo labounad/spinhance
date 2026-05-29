@@ -35,6 +35,11 @@ import numpy as np
 REPO_ROOT   = Path(__file__).resolve().parent.parent
 SCRIPT_PATH = Path(__file__).resolve().parent / "batch_simulate.qs"
 
+# Ensure the repo root is importable so `from simulation.xml_utils import ...`
+# works when this file is run directly (python simulation/run_batch.py).
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 # Default MNova executable location on macOS
 MNOVA_DEFAULT = Path("/Applications/MestReNova.app/Contents/MacOS/MestReNova")
 
