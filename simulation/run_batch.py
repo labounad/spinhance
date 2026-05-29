@@ -92,16 +92,22 @@ def run_mnova_batch(
     """
     Call MNova headlessly on all XMLs in xml_dir.
     Outputs one .txt per XML into txt_out_dir.
+
+    Uses MNova 16 flags:
+        --nogui          headless mode (no GUI window)
+        --py <script>    run a Python script inside MNova's Python engine
     """
     txt_out_dir.mkdir(parents=True, exist_ok=True)
 
     n_xml = len(list(xml_dir.glob("*.xml")))
     total_timeout = max(120, n_xml * timeout_per_file)
 
+    py_script = Path(__file__).parent / "batch_simulate.py"
+
     cmd = [
         str(mnova_exe),
-        "--no-gui",
-        "-sf", str(SCRIPT_PATH),
+        "--nogui",
+        "--py", str(py_script),
         "--",
         str(xml_dir),
         str(txt_out_dir),
