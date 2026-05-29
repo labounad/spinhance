@@ -6,7 +6,7 @@ Python orchestrator for the SpinHance simulation pipeline.
 Pipeline
 --------
 1. Take a directory of source XMLs (one per molecule, any field).
-2. For each molecule generate two field-patched XMLs: 100 MHz and 600 MHz.
+2. For each molecule generate two field-patched XMLs: 90 MHz and 600 MHz.
 3. Invoke MNova headlessly on each XML directory via batch_simulate.qs.
 4. Load the exported .txt intensity arrays, normalise, and save as .npy.
 
@@ -117,7 +117,6 @@ def run_mnova_batch(
     Outputs one .txt per XML into txt_out_dir.
 
     Strategy (MNova 16) — CORRECTED invocation:
-        -nogui                      headless mode (single dash)
         -sf spinhanceBatch,XMLDIR,OUTDIR
                                     call the registered JS function by NAME
                                     (no parentheses), passing args after commas.
@@ -150,9 +149,13 @@ def run_mnova_batch(
     check_qs_script()
 
     # CORRECT: single dash, function NAME (no parens), comma-separated args.
+    # NOTE: do NOT pass -nogui. Under -nogui, Application.quit() does not
+    # terminate the process (no GUI event loop to quit) and MNova hangs forever,
+    # even though the output IS written. With the window visible it runs the
+    # whole batch in one launch and exits cleanly (exit code 0). The window just
+    # opens and closes itself.
     cmd = [
         str(mnova_exe),
-        "-nogui",
         "-sf", f"spinhanceBatch,{xml_dir_abs},{out_dir_abs}",
     ]
     print(f"  Running MNova on {n_xml} files in {xml_dir.name} ...")
@@ -227,7 +230,7 @@ def run_pipeline(
     source_xml_dir: Path,
     out_dir: Path,
     mnova_exe: Path,
-    fields_mhz: list[float] = (100.0, 600.15),
+    fields_mhz: list[float] = (90.0, 600.15),
 ) -> None:
     """
     End-to-end: source XMLs → patched XMLs → MNova simulation → .npy arrays.
@@ -281,8 +284,8 @@ def _parse_args() -> argparse.Namespace:
     )
     p.add_argument(
         "--fields", type=float, nargs="+",
-        default=[100.0, 600.15],
-        help="Spectrometer frequencies in MHz (default: 100.0 600.15)",
+        default=[90.0, 600.15],
+        help="Spectrometer frequencies in MHz (default: 90.0 600.15)",
     )
     return p.parse_args()
 

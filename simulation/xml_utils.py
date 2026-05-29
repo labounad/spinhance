@@ -55,7 +55,7 @@ def matrix_to_xml(
     shifts       : chemical shifts in ppm (diagonal of J-matrix)
     couplings    : scalar couplings in Hz (off-diagonal); must be symmetric
     degeneracy   : number of protons per spin group
-    frequency_mhz: spectrometer frequency (e.g. 100.0 or 600.15)
+    frequency_mhz: spectrometer frequency (e.g. 90.0 or 600.15)
     points       : number of spectral points (recommend 16384 = 2^14)
     ppm_from/to  : spectral window in ppm
     linewidths   : peak linewidths in Hz per group (default 1.0 Hz each)
@@ -143,13 +143,13 @@ def patch_frequency(xml_path: str | Path, new_freq_mhz: float) -> ET.ElementTree
     return ET.ElementTree(root)
 
 
-# ── Generate paired XMLs (100 MHz + 600 MHz) for one molecule ─────────────────
+# ── Generate paired XMLs (90 MHz + 600 MHz) for one molecule ──────────────────
 
 def generate_field_pair(
     source_xml: str | Path,
     output_dir: str | Path,
     stem: str | None = None,
-    low_field_mhz: float = 100.0,
+    low_field_mhz: float = 90.0,
     high_field_mhz: float = 600.15,
 ) -> tuple[Path, Path]:
     """
@@ -164,7 +164,7 @@ def generate_field_pair(
     output_dir.mkdir(parents=True, exist_ok=True)
     stem = stem or source_xml.stem
 
-    low_path = output_dir / f"{stem}_100MHz.xml"
+    low_path = output_dir / f"{stem}_90MHz.xml"
     high_path = output_dir / f"{stem}_600MHz.xml"
 
     save_xml(patch_frequency(source_xml, low_field_mhz), low_path)
@@ -183,7 +183,7 @@ if __name__ == "__main__":
     couplings = [[0.0, 8.0], [8.0, 0.0]]
     degeneracy = [1, 1]
 
-    tree = matrix_to_xml(shifts, couplings, degeneracy, frequency_mhz=100.0)
+    tree = matrix_to_xml(shifts, couplings, degeneracy, frequency_mhz=90.0)
     save_xml(tree, "/tmp/test_ax.xml")
     print("Wrote /tmp/test_ax.xml")
 

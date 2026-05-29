@@ -2,7 +2,7 @@
 
 ## What This Project Is
 
-SpinHance is a hackathon project to automatically extract ¹H chemical shifts and scalar coupling constants from **low-field (100 MHz) ¹H NMR spectra** of small molecules using deep learning. The key insight: at low field, spin systems are strongly coupled (non-first-order), making simple peak-picking fail. We train a neural network to invert the spectrum back to the underlying spin-system parameters.
+SpinHance is a hackathon project to automatically extract ¹H chemical shifts and scalar coupling constants from **low-field (90 MHz) ¹H NMR spectra** of small molecules using deep learning. The key insight: at low field, spin systems are strongly coupled (non-first-order), making simple peak-picking fail. We train a neural network to invert the spectrum back to the underlying spin-system parameters.
 
 **Team of 3. Lucas (labounader@scripps.edu) owns Task 3 (simulation) and is the user in this project.**
 
@@ -59,10 +59,10 @@ Screen SMILES from USPTO/PubChem, filter to exactly 8 hard-equivalent (chemicall
 3D embed with ETKDG + MMFF94 (RDKit), assign shifts via heuristic tables, compute *J* couplings via Karplus equations and geminal/aryl/vinyl/benzylic tables. Assemble the 8×8 J-matrix + degeneracy vector. Output: `data/processed/matrices/*.npy`.
 
 ### Task 3 — SIMULATION (`simulation/`) ← LUCAS'S TASK
-Take the shift+J matrix, convert to MNova XML format, run MNova's quantum spin simulator at **100 MHz** (low-field, non-first-order) and **600 MHz** (high-field, reference). Output: 2¹⁴-point normalized intensity arrays as `.npy` files. See detailed status below.
+Take the shift+J matrix, convert to MNova XML format, run MNova's quantum spin simulator at **90 MHz** (low-field, non-first-order) and **600 MHz** (high-field, reference). Output: 2¹⁴-point normalized intensity arrays as `.npy` files. See detailed status below.
 
 ### Task 4 — ML MODEL (`ml_model/`)
-Train a neural network: input = 16384-point normalized spectrum (100 MHz), output = 8×9 shift+J+degeneracy matrix. Key challenge: permutation invariance of spin-group labels (Hungarian matching loss).
+Train a neural network: input = 16384-point normalized spectrum (90 MHz), output = 8×9 shift+J+degeneracy matrix. Key challenge: permutation invariance of spin-group labels (Hungarian matching loss).
 
 ---
 
@@ -79,12 +79,12 @@ Train a neural network: input = 16384-point normalized spectrum (100 MHz), outpu
 from simulation.xml_utils import matrix_to_xml, save_xml, patch_frequency, generate_field_pair
 
 # Build XML from matrix
-tree = matrix_to_xml(shifts, couplings, degeneracy, frequency_mhz=100.0)
+tree = matrix_to_xml(shifts, couplings, degeneracy, frequency_mhz=90.0)
 save_xml(tree, "output.xml")
 
 # Patch an existing XML to a different field
-patched = patch_frequency("existing.xml", 100.0)
-save_xml(patched, "patched_100MHz.xml")
+patched = patch_frequency("existing.xml", 90.0)
+save_xml(patched, "patched_90MHz.xml")
 
 # Generate both field variants at once
 lo, hi = generate_field_pair("source.xml", "output_dir/", stem="mol_001")
