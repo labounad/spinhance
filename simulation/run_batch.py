@@ -86,7 +86,7 @@ def prepare_xmls(
 
 MNOVA_SCRIPTS_DIR = Path.home() / "Library" / "Application Support" / \
                     "Mestrelab Research S.L." / "MestReNova" / "scripts"
-QS_SCRIPT = Path(__file__).parent / "batch_simulate.qs"
+QS_SCRIPT = Path(__file__).parent / "spinhanceBatch.qs"
 
 
 def install_qs_script(force: bool = False) -> Path:
@@ -107,7 +107,7 @@ def install_qs_script(force: bool = False) -> Path:
 
 # ── MNova invocation ──────────────────────────────────────────────────────────
 
-CONFIG_PATH = Path("/tmp/spinhance_batch_config.json")
+CONFIG_PATH = Path.home() / ".spinhance_batch_config.json"
 
 
 def run_mnova_batch(
@@ -148,7 +148,7 @@ def run_mnova_batch(
     cmd = [
         str(mnova_exe),
         "--nogui",
-        "--sf", "spinhanceBatch()",
+        "--sf", str(QS_SCRIPT.resolve()),
     ]
     print(f"  Running MNova on {n_xml} files in {xml_dir.name} ...")
     print(f"  CMD: {' '.join(cmd)}")

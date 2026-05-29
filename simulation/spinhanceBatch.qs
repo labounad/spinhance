@@ -158,8 +158,5 @@ function _processOne(xmlPath, outPath) {
     return true;
 }
 
-// Auto-execute when loaded via --sf <file> (not needed when called by name,
-// but harmless — the guard prevents double-execution if both paths are used)
-if (typeof _spinhanceBatchAutoRun === "undefined") {
-    var _spinhanceBatchAutoRun = true;
-}
+// Auto-execute when this file is loaded directly via --sf /path/to/spinhanceBatch.qs
+spinhanceBatch();
