@@ -1,22 +1,33 @@
+//<GUI menuname="SpinHance Batch" shortcut="Ctrl+9" tooltip="Run SpinHance batch spin simulation"/>
 /**
- * batch_simulate.qs  —  SpinHance batch spin simulation
+ * spinhanceBatch.qs  —  SpinHance batch spin simulation
  * -------------------------------------------------------
  * MNova 16 JavaScript (.qs) batch script.
  *
- * INSTALL (once):
- *   cp simulation/batch_simulate.qs \
- *      /Applications/MestReNova.app/Contents/Resources/scripts/
+ * THREE RULES that make -sf work (these were the cause of the earlier failures):
+ *   1. File name MUST equal the function name: this file is spinhanceBatch.qs
+ *      and it defines function spinhanceBatch(...).
+ *   2. The folder containing this file MUST be registered in
+ *      Edit > Preferences > Scripting > Directories (do this once via the GUI,
+ *      then restart MNova). Mnova only resolves -sf names from registered dirs.
+ *   3. NO top-level auto-executing call. A bare spinhanceBatch() at file scope
+ *      runs at startup before the NMR API exists and crashes MNova. -sf calls
+ *      the function for you.
  *
- * INVOKE:
- *   # 1. Write config (done automatically by run_batch.py):
- *   python -c "
- *   import json; from pathlib import Path
- *   Path.home().joinpath('.spinhance_batch_config.json').write_text(
- *       json.dumps({'xml_dir': '/path/to/xmls', 'out_dir': '/path/to/out'}))
- *   "
- *   # 2. Run MNova:
+ * INSTALL (once):
+ *   - Put this file in a folder, e.g. ~/mnova_scripts/spinhanceBatch.qs
+ *   - GUI: Edit > Preferences > Scripting > Directories > add ~/mnova_scripts
+ *   - Restart MNova.
+ *
+ * INVOKE (correct syntax — single dash, NO parentheses, args comma-separated):
  *   /Applications/MestReNova.app/Contents/MacOS/MestReNova \
- *       --sf "spinhanceBatch()"
+ *       -sf spinhanceBatch,/path/to/xml_dir,/path/to/out_dir
+ *
+ *   You can also run with no args; it then falls back to the config JSON at
+ *   ~/.spinhance_batch_config.json  ({"xml_dir": "...", "out_dir": "..."}).
+ *
+ *   NOTE: pass -nogui to suppress the main window if your MNova build supports
+ *   it. If -nogui causes problems, run with the GUI visible — it still batches.
  *
  * API REFERENCES (confirmed from Mnova 15/16 docs + bundled examples):
  *   serialization.open(path)          — open a file, becomes activeDocument
@@ -38,28 +49,36 @@
 
 // ── Main entry point ──────────────────────────────────────────────────────────
 
-function spinhanceBatch() {
+function spinhanceBatch(argXmlDir, argOutDir) {
     "use strict";
 
-    // ── 1. Read config JSON ───────────────────────────────────────────────────
-    var configPath = Dir.home() + "/.spinhance_batch_config.json";
-    var configFile = new File(configPath);
-    if (!configFile.exists) {
-        print("ERROR: config file not found: " + configPath);
-        print("Write it via run_batch.py before invoking MNova.");
-        return;
-    }
-    configFile.open(File.ReadOnly);
-    var ts = new TextStream(configFile);
-    var raw = ts.readAll();
-    configFile.close();
+    var xmlDir;
+    var outDir;
 
-    var config = JSON.parse(raw);
-    var xmlDir  = config.xml_dir;
-    var outDir  = config.out_dir;
+    // ── 1. Prefer command-line args (-sf spinhanceBatch,xmlDir,outDir) ────────
+    if (argXmlDir && argOutDir) {
+        xmlDir = String(argXmlDir);
+        outDir = String(argOutDir);
+    } else {
+        // Fall back to config JSON written by run_batch.py
+        var configPath = Dir.home() + "/.spinhance_batch_config.json";
+        var configFile = new File(configPath);
+        if (!configFile.exists) {
+            print("ERROR: no args given and config file not found: " + configPath);
+            return;
+        }
+        configFile.open(File.ReadOnly);
+        var ts = new TextStream(configFile);
+        var raw = ts.readAll();
+        configFile.close();
+
+        var config = JSON.parse(raw);
+        xmlDir = config.xml_dir;
+        outDir = config.out_dir;
+    }
 
     if (!xmlDir || !outDir) {
-        print("ERROR: config must contain xml_dir and out_dir");
+        print("ERROR: xml_dir and out_dir must both be provided");
         return;
     }
 
@@ -158,5 +177,6 @@ function _processOne(xmlPath, outPath) {
     return true;
 }
 
-// Auto-execute when this file is loaded directly via --sf /path/to/spinhanceBatch.qs
-spinhanceBatch();
+// NO top-level call here. A bare spinhanceBatch() at file scope runs when MNova
+// loads the script at startup — before the NMR API is ready — and crashes MNova.
+// -sf invokes spinhanceBatch() for you after the app is initialized.

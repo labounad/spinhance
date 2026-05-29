@@ -120,12 +120,20 @@ def run_mnova_batch(
     Call MNova 16 headlessly on all XMLs in xml_dir.
     Outputs one .txt per XML into txt_out_dir.
 
-    Strategy (MNova 16):
-        --nogui          headless mode
-        --sf "spinhanceBatch()"   call our auto-loaded JS function
+    Strategy (MNova 16) — CORRECTED invocation:
+        -nogui                      headless mode (single dash)
+        -sf spinhanceBatch,XMLDIR,OUTDIR
+                                    call the registered JS function by NAME
+                                    (no parentheses), passing args after commas.
 
-    Paths are passed via a JSON config file at /tmp/spinhance_batch_config.json
-    which the .qs script reads on startup.
+    REQUIREMENTS for -sf to resolve the name (see spinhanceBatch.qs header):
+        - The .qs file is named exactly spinhanceBatch.qs.
+        - Its containing folder is registered in
+          Edit > Preferences > Scripting > Directories (one-time GUI step).
+        - The script has NO top-level auto-executing call.
+
+    A JSON config is still written as a fallback for running the function from
+    the GUI play button, but the CLI passes the paths as args directly.
     """
     import json
 
@@ -134,21 +142,22 @@ def run_mnova_batch(
     n_xml = len(list(xml_dir.glob("*.xml")))
     total_timeout = max(120, n_xml * timeout_per_file)
 
-    # Write config for the JS script
-    config = {
-        "xml_dir": str(xml_dir.resolve()),
-        "out_dir": str(txt_out_dir.resolve()),
-    }
+    xml_dir_abs = str(xml_dir.resolve())
+    out_dir_abs = str(txt_out_dir.resolve())
+
+    # Write config as a fallback (used when run from the GUI without args)
+    config = {"xml_dir": xml_dir_abs, "out_dir": out_dir_abs}
     CONFIG_PATH.write_text(json.dumps(config))
     print(f"  Config written to {CONFIG_PATH}")
 
-    # Ensure script is installed in MNova's scripts dir
+    # Ensure script is installed in MNova's user scripts dir
     install_qs_script()
 
+    # CORRECT: single dash, function NAME (no parens), comma-separated args.
     cmd = [
         str(mnova_exe),
-        "--nogui",
-        "--sf", str(QS_SCRIPT.resolve()),
+        "-nogui",
+        "-sf", f"spinhanceBatch,{xml_dir_abs},{out_dir_abs}",
     ]
     print(f"  Running MNova on {n_xml} files in {xml_dir.name} ...")
     print(f"  CMD: {' '.join(cmd)}")
