@@ -84,25 +84,21 @@ def prepare_xmls(
 
 # ── MNova script installation ─────────────────────────────────────────────────
 
-MNOVA_SCRIPTS_DIR = Path.home() / "Library" / "Application Support" / \
-                    "Mestrelab Research S.L." / "MestReNova" / "scripts"
-QS_SCRIPT = Path(__file__).parent / "spinhanceBatch.qs"
+# Canonical, version-controlled location of the script. Register THIS folder in
+# Edit > Preferences > Scripting > Directories (one-time GUI step). No copying.
+MNOVA_SCRIPTS_DIR = Path(__file__).resolve().parent / "mnova_scripts"
+QS_SCRIPT = MNOVA_SCRIPTS_DIR / "spinhanceBatch.qs"
 
 
-def install_qs_script(force: bool = False) -> Path:
+def check_qs_script() -> Path:
     """
-    Copy batch_simulate.qs into MNova's user scripts directory so MNova
-    auto-loads it on startup and the function spinhanceBatch() is available.
+    Verify the in-repo script exists and remind the user to register its folder.
     """
-    MNOVA_SCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
-    dest = MNOVA_SCRIPTS_DIR / QS_SCRIPT.name
-    if not dest.exists() or force:
-        import shutil
-        shutil.copy2(QS_SCRIPT, dest)
-        print(f"  Installed {QS_SCRIPT.name} → {dest}")
-    else:
-        print(f"  Script already installed at {dest}")
-    return dest
+    if not QS_SCRIPT.exists():
+        raise FileNotFoundError(f"Missing script: {QS_SCRIPT}")
+    print(f"  Using script: {QS_SCRIPT}")
+    print(f"  (Ensure this folder is registered in MNova: {MNOVA_SCRIPTS_DIR})")
+    return QS_SCRIPT
 
 
 # ── MNova invocation ──────────────────────────────────────────────────────────
@@ -150,8 +146,8 @@ def run_mnova_batch(
     CONFIG_PATH.write_text(json.dumps(config))
     print(f"  Config written to {CONFIG_PATH}")
 
-    # Ensure script is installed in MNova's user scripts dir
-    install_qs_script()
+    # Verify the in-repo script is present (folder must be registered in MNova)
+    check_qs_script()
 
     # CORRECT: single dash, function NAME (no parens), comma-separated args.
     cmd = [
