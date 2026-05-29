@@ -7,7 +7,7 @@ dependencies:
 
   # --- Cheminformatics ---
   - rdkit>=2024.03
-  - openbabel
+  # openbabel excluded: no py3.14 build on conda-forge yet; rdkit covers all needed functionality
 
   # --- Scientific computing ---
   - numpy>=2.0
