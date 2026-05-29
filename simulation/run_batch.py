@@ -82,7 +82,33 @@ def prepare_xmls(
     return field_dirs
 
 
+# ── MNova script installation ─────────────────────────────────────────────────
+
+MNOVA_SCRIPTS_DIR = Path.home() / "Library" / "Application Support" / \
+                    "Mestrelab Research S.L." / "MestReNova" / "scripts"
+QS_SCRIPT = Path(__file__).parent / "batch_simulate.qs"
+
+
+def install_qs_script(force: bool = False) -> Path:
+    """
+    Copy batch_simulate.qs into MNova's user scripts directory so MNova
+    auto-loads it on startup and the function spinhanceBatch() is available.
+    """
+    MNOVA_SCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
+    dest = MNOVA_SCRIPTS_DIR / QS_SCRIPT.name
+    if not dest.exists() or force:
+        import shutil
+        shutil.copy2(QS_SCRIPT, dest)
+        print(f"  Installed {QS_SCRIPT.name} → {dest}")
+    else:
+        print(f"  Script already installed at {dest}")
+    return dest
+
+
 # ── MNova invocation ──────────────────────────────────────────────────────────
+
+CONFIG_PATH = Path("/tmp/spinhance_batch_config.json")
+
 
 def run_mnova_batch(
     mnova_exe: Path,
@@ -91,38 +117,47 @@ def run_mnova_batch(
     timeout_per_file: float = 30.0,
 ) -> None:
     """
-    Call MNova headlessly on all XMLs in xml_dir.
+    Call MNova 16 headlessly on all XMLs in xml_dir.
     Outputs one .txt per XML into txt_out_dir.
 
-    Uses MNova 16 flags:
-        --nogui          headless mode (no GUI window)
-        --py <script>    run a Python script inside MNova's Python engine
+    Strategy (MNova 16):
+        --nogui          headless mode
+        --sf "spinhanceBatch()"   call our auto-loaded JS function
+
+    Paths are passed via a JSON config file at /tmp/spinhance_batch_config.json
+    which the .qs script reads on startup.
     """
+    import json
+
     txt_out_dir.mkdir(parents=True, exist_ok=True)
 
     n_xml = len(list(xml_dir.glob("*.xml")))
     total_timeout = max(120, n_xml * timeout_per_file)
 
-    py_script = (Path(__file__).parent / "batch_simulate.py").resolve()
+    # Write config for the JS script
+    config = {
+        "xml_dir": str(xml_dir.resolve()),
+        "out_dir": str(txt_out_dir.resolve()),
+    }
+    CONFIG_PATH.write_text(json.dumps(config))
+    print(f"  Config written to {CONFIG_PATH}")
+
+    # Ensure script is installed in MNova's scripts dir
+    install_qs_script()
 
     cmd = [
         str(mnova_exe),
         "--nogui",
-        "--py", str(py_script),
+        "--sf", "spinhanceBatch()",
     ]
     print(f"  Running MNova on {n_xml} files in {xml_dir.name} ...")
     print(f"  CMD: {' '.join(cmd)}")
-
-    env = os.environ.copy()
-    env["SPINHANCE_XML_DIR"] = str(xml_dir.resolve())
-    env["SPINHANCE_OUT_DIR"] = str(txt_out_dir.resolve())
 
     result = subprocess.run(
         cmd,
         capture_output=True,
         text=True,
         timeout=total_timeout,
-        env=env,
     )
 
     if result.returncode != 0:
