@@ -44,7 +44,14 @@ echo "  instance : $INSTANCE_TYPE"
 echo "  args     : $TRAIN_ARGS"
 echo ""
 
-# ── 0. Reuse existing instance if available ──────────────────────────────────
+# ── 0. Session number (auto-increment from S3) ───────────────────────────────
+LAST=$(aws s3 ls "s3://$BUCKET/training/" --profile "$PROFILE" --region "$REGION" 2>/dev/null \
+  | grep -oE 'session([0-9]+)' | grep -oE '[0-9]+' | sort -n | tail -1)
+SESSION=$(printf "%03d" $(( ${LAST:-0} + 1 )))
+S3_CKPT_PREFIX="s3://$BUCKET/training/session$SESSION"
+echo "  session  : $SESSION  ($S3_CKPT_PREFIX)"
+
+# ── Reuse existing instance if available ──────────────────────────────────────
 if [ -f /tmp/spinhance_instance_id ]; then
   EXISTING=$(cat /tmp/spinhance_instance_id)
   STATE=$(aws ec2 describe-instances --profile "$PROFILE" --region "$REGION" \
@@ -215,6 +222,7 @@ _ssh "
   nohup bash -c 'PYTHONPATH=. /opt/conda/bin/conda run -n pytorch python -m model.run_experiment \
     --json mol_to_spin_system/data/spin_systems_60k.json \
     --spectra simulation/data/spectra \
+    --s3-ckpt-prefix $S3_CKPT_PREFIX \
     $TRAIN_ARGS' \
     > /tmp/train.log 2>&1 &
   disown

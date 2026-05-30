@@ -97,7 +97,8 @@ def full_run(args):
         stage1_epochs=args.epochs if not args.stage2 else args.stage1_epochs,
         ramp_epochs=args.ramp_epochs, render_subset_frac=args.render_frac,
         weight_decay=args.weight_decay, patience=args.patience, seed=args.seed,
-        device=args.device, amp_dtype=args.amp, ckpt_path=args.ckpt)
+        device=args.device, amp_dtype=args.amp, ckpt_path=args.ckpt,
+        s3_ckpt_prefix=args.s3_ckpt_prefix)
     print(f"config: {cfg}")
     npar = sum(p.numel() for p in model.parameters())
     print(f"model params: {npar/1e6:.2f}M | device {cfg.device} | "
@@ -129,6 +130,7 @@ def build_parser():
     p.add_argument("--device", default=None)
     p.add_argument("--amp", default="bf16", choices=["bf16", "fp16", "none"])
     p.add_argument("--ckpt", default="model/checkpoints/spinhance.pt")
+    p.add_argument("--s3-ckpt-prefix", default="", help="S3 prefix for per-epoch checkpoints, e.g. s3://bucket/training/session001")
     p.add_argument("--seed", type=int, default=0)
     return p
 

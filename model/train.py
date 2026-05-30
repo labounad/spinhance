@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -70,6 +71,7 @@ class TrainConfig:
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
     amp_dtype: str = "bf16"          # bf16|fp16|none
     ckpt_path: str = "model/checkpoints/spinhance.pt"
+    s3_ckpt_prefix: str = ""         # if set, upload epoch_NNN.pt to S3 after each epoch
 
 
 # -----------------------------------------------------------------------------
@@ -277,12 +279,28 @@ def fit(records, assignment, cfg: TrainConfig, model=None):
               f"deg_acc {va['deg_acc']:.3f} deg_bal {va['deg_acc_balanced']:.3f}")
         score = va["shift_mae_ppm"] + va["j_mae_hz"] / 10.0   # simple early-stop score
         earlystop_active = (epoch >= cfg.stage1_epochs) or (not will_run_stage2)
+
+        import os
+        os.makedirs(os.path.dirname(cfg.ckpt_path) or ".", exist_ok=True)
+        ckpt = {"model": model.state_dict(), "standardizer": vars(std),
+                "cfg": vars(cfg), "epoch": epoch, "metrics": va}
+
+        # Per-epoch checkpoint → S3
+        epoch_path = str(Path(cfg.ckpt_path).parent / f"epoch_{epoch:03d}.pt")
+        torch.save(ckpt, epoch_path)
+        if cfg.s3_ckpt_prefix:
+            import subprocess
+            r = subprocess.run(
+                ["aws", "s3", "cp", epoch_path,
+                 f"{cfg.s3_ckpt_prefix}/epoch_{epoch:03d}.pt"],
+                capture_output=True)
+            if r.returncode == 0:
+                os.remove(epoch_path)
+                print(f"  → uploaded epoch_{epoch:03d}.pt to S3")
+
         if score < best:
             best, bad = score, 0
-            import os
-            os.makedirs(os.path.dirname(cfg.ckpt_path) or ".", exist_ok=True)
-            torch.save({"model": model.state_dict(),
-                        "standardizer": vars(std), "cfg": vars(cfg)}, cfg.ckpt_path)
+            torch.save(ckpt, cfg.ckpt_path)  # keep best.pt locally
         elif earlystop_active:
             bad += 1
             if bad >= cfg.patience:
