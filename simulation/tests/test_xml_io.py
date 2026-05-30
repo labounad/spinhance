@@ -28,7 +28,7 @@ from simulation.xml_io import (  # noqa: E402
     HIGH_FIELD_MHZ,
 )
 
-EXAMPLE_XML = REPO_ROOT / "predicted_mnova_1h (10).xml"
+EXAMPLE_XML = REPO_ROOT / "simulation" / "examples" / "reference_15group.xml"
 
 
 # ── Label generation ──────────────────────────────────────────────────────────

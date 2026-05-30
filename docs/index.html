@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Spinhance — reading coupling constants out of low-field ¹H NMR</title>
+<meta name="description" content="Spinhance: a deep-learning pipeline that recovers ¹H chemical shifts and J-coupling constants from low-field, second-order NMR spectra — so any spectrum can be reconstructed at any field." />
+<style>
+  :root{
+    --bg:#fafafa; --bg-soft:#f0f1f3; --panel:#ffffff; --panel-2:#f5f6f8;
+    --ink:#15171c; --ink-soft:#4a4f5a; --ink-faint:#8a909c;
+    --line:#e3e6ea; --line-strong:#cdd2da;
+    --trace:#101114; --fan:rgba(20,22,28,0.055);
+    --accent:#3b6ef5; --accent-2:#22c1a5; --accent-3:#9b5cf6;
+    --shadow:0 1px 2px rgba(16,24,40,.06),0 8px 28px rgba(16,24,40,.06);
+    --grid:rgba(20,22,28,.07);
+  }
+  [data-theme="dark"]{
+    --bg:#07090d; --bg-soft:#0c0f15; --panel:#0f131b; --panel-2:#121826;
+    --ink:#eef1f6; --ink-soft:#aab2c2; --ink-faint:#6a7385;
+    --line:#1c2330; --line-strong:#2a3344;
+    --trace:#eaf2ff; --fan:rgba(120,170,255,0.07);
+    --accent:#5b8cff; --accent-2:#34e3c4; --accent-3:#b07bff;
+    --shadow:0 1px 2px rgba(0,0,0,.5),0 16px 48px rgba(0,0,0,.45);
+    --grid:rgba(150,180,230,.07);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth;overscroll-behavior-y:none}
+  body{
+    margin:0; background:var(--bg); color:var(--ink); overscroll-behavior-y:none;
+    font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; transition:background .4s ease,color .4s ease;
+  }
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+  h1,h2,h3{line-height:1.15;letter-spacing:-.02em;margin:0}
+  .mono{font-family:"SF Mono",ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace}
+
+  /* ---- nav ---- */
+  nav{position:fixed;top:0;left:0;right:0;z-index:50;backdrop-filter:saturate(140%) blur(12px);
+    background:color-mix(in srgb,var(--bg) 70%,transparent);
+    border-bottom:1px solid color-mix(in srgb,var(--line) 60%,transparent)}
+  .nav-in{display:flex;align-items:center;gap:18px;height:60px;max-width:1080px;margin:0 auto;padding:0 24px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:-.02em;font-size:18px}
+  .brand .dot{width:11px;height:11px;border-radius:50%;
+    background:radial-gradient(circle at 30% 30%,var(--accent-2),var(--accent));
+    box-shadow:0 0 14px var(--accent)}
+  .nav-links{display:flex;gap:22px;margin-left:auto}
+  .nav-links a{color:var(--ink-soft);font-size:14px;font-weight:500}
+  .nav-links a:hover{color:var(--ink);text-decoration:none}
+  .toggle{cursor:pointer;border:1px solid var(--line-strong);background:var(--panel);
+    color:var(--ink);width:40px;height:34px;border-radius:9px;display:grid;place-items:center;
+    transition:.2s;font-size:16px}
+  .toggle:hover{border-color:var(--accent)}
+  @media(max-width:680px){.nav-links{display:none}}
+
+  /* ---- hero ---- */
+  .hero{position:relative;height:360vh}
+  .sticky{position:sticky;top:0;height:100vh;overflow:hidden;display:flex;flex-direction:column}
+  #spectrum{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .hero-grad{position:absolute;inset:0;pointer-events:none;
+    background:linear-gradient(180deg,var(--bg) 0%,color-mix(in srgb,var(--bg) 45%,transparent) 22%,transparent 40%)}
+  .hero-copy{position:absolute;top:84px;left:0;right:0;text-align:center;padding:0 24px;pointer-events:none}
+  .eyebrow{font-size:13px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent-2);font-weight:600;margin-bottom:10px}
+  .hero-copy h1{font-size:clamp(32px,5vw,60px);font-weight:800;white-space:normal}
+  @media(min-width:820px){.hero-copy h1{white-space:nowrap}}
+  .hero-copy p{max-width:540px;margin:14px auto 0;color:var(--ink-soft);font-size:clamp(14px,1.5vw,16.5px)}
+  .mol-tag{margin:16px auto 0;font-size:13px;color:var(--ink-soft);pointer-events:auto}
+  .mol-tag b{color:var(--ink)}
+  .mol-tag .smi{cursor:pointer;border-bottom:1px dashed var(--line-strong);transition:color .2s}
+  .mol-tag .smi:hover{color:var(--accent)}
+  .mol-tag .copied{color:var(--accent-2);margin-left:8px;font-weight:600}
+  .gauge{position:absolute;left:0;right:0;bottom:3.5vh;display:flex;flex-direction:column;align-items:center;gap:9px;pointer-events:none}
+  .field-read{font-weight:800;letter-spacing:-.03em;font-size:clamp(26px,3.6vw,40px);
+    font-variant-numeric:tabular-nums;color:var(--ink)}
+  .field-read .u{font-size:.42em;color:var(--ink-faint);font-weight:600;margin-left:6px;letter-spacing:0}
+  .bar{width:min(440px,72vw);height:5px;border-radius:99px;background:var(--line-strong);position:relative;overflow:hidden}
+  .bar i{position:absolute;left:0;top:0;bottom:0;border-radius:99px;
+    background:linear-gradient(90deg,var(--accent),var(--accent-2));width:0%}
+  .bar-tags{width:min(440px,72vw);display:flex;justify-content:space-between;font-size:12px;color:var(--ink-faint)}
+  .scroll-hint{margin-top:4px;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint);
+    animation:bob 1.8s ease-in-out infinite;transition:opacity .3s}
+  @keyframes bob{0%,100%{transform:translateY(0);opacity:.6}50%{transform:translateY(5px);opacity:1}}
+
+  /* ---- sections ---- */
+  section.block{padding:96px 0;border-top:1px solid var(--line);scroll-margin-top:72px}
+  .kicker{font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);font-weight:600;margin-bottom:14px}
+  .block h2{font-size:clamp(26px,4vw,40px);font-weight:800;max-width:760px}
+  .lead{color:var(--ink-soft);font-size:18px;max-width:740px;margin-top:18px}
+  .muted{color:var(--ink-soft)}
+
+  .pipe{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:42px}
+  @media(max-width:880px){.pipe{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:520px){.pipe{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px;
+    box-shadow:var(--shadow);position:relative;overflow:hidden;transition:transform .25s,border-color .25s}
+  .card:hover{transform:translateY(-3px);border-color:var(--accent)}
+  .card .step{font-size:12px;font-weight:700;color:var(--accent-2);letter-spacing:.1em}
+  .card h3{font-size:18px;margin:10px 0 8px}
+  .card p{font-size:14.5px;color:var(--ink-soft);margin:0}
+  .card .ic{font-size:22px}
+
+  .grid2{display:grid;grid-template-columns:1.1fr .9fr;gap:40px;align-items:center;margin-top:36px}
+  @media(max-width:820px){.grid2{grid-template-columns:1fr}}
+  .rep-pair{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:34px;align-items:stretch}
+  @media(max-width:820px){.rep-pair{grid-template-columns:1fr}}
+  .viewer-card{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:16px;
+    box-shadow:var(--shadow);overflow:hidden;min-height:380px}
+  #mol3d{position:absolute;inset:0;width:100%;height:100%}
+  #mol3d canvas{border-radius:16px}
+  .viewer-load{position:absolute;inset:0;display:grid;place-items:center;color:var(--ink-faint);font-size:13px;pointer-events:none}
+  .v-label{position:absolute;left:14px;top:12px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint);z-index:2}
+  .spin-toggle{position:absolute;right:12px;top:11px;z-index:3;display:flex;align-items:center;gap:8px;
+    font-size:12px;color:var(--ink-soft);user-select:none;cursor:pointer}
+  .switch{position:relative;width:38px;height:21px;border-radius:99px;background:var(--line-strong);transition:background .2s}
+  .switch::after{content:"";position:absolute;top:2px;left:2px;width:17px;height:17px;border-radius:50%;
+    background:#fff;transition:transform .22s ease;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+  .spin-toggle input{position:absolute;opacity:0;pointer-events:none}
+  .spin-toggle input:checked + .switch{background:linear-gradient(90deg,var(--accent),var(--accent-2))}
+  .spin-toggle input:checked + .switch::after{transform:translateX(17px)}
+  .matrix{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:var(--shadow);overflow:auto}
+  table.mx{border-collapse:collapse;font:12px/1 "SF Mono",ui-monospace,Menlo,monospace;width:100%}
+  table.mx td,table.mx th{padding:6px 7px;text-align:center;border:1px solid var(--line);color:var(--ink-soft);white-space:nowrap}
+  table.mx th{color:var(--ink-faint);font-weight:600}
+  table.mx td.diag{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--ink);font-weight:700}
+  table.mx td.deg{background:color-mix(in srgb,var(--accent-2) 16%,transparent);color:var(--ink);font-weight:700}
+
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:36px}
+  @media(max-width:760px){.stats{grid-template-columns:repeat(2,1fr)}}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px;text-align:center;box-shadow:var(--shadow)}
+  .stat b{display:block;font-size:30px;font-weight:800;letter-spacing:-.02em;
+    background:linear-gradient(90deg,var(--accent),var(--accent-2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .stat span{font-size:13px;color:var(--ink-soft)}
+
+  .team{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:36px}
+  @media(max-width:680px){.team{grid-template-columns:1fr}}
+  .member{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;box-shadow:var(--shadow)}
+  .member .av{width:46px;height:46px;border-radius:12px;display:grid;place-items:center;font-weight:800;color:#fff;
+    background:linear-gradient(135deg,var(--accent),var(--accent-3))}
+  .member h3{font-size:17px;margin:14px 0 2px}
+  .member span{font-size:13.5px;color:var(--ink-soft)}
+
+  .btn{display:inline-flex;align-items:center;gap:9px;background:var(--ink);color:var(--bg);
+    padding:12px 20px;border-radius:11px;font-weight:600;font-size:15px;border:1px solid var(--ink)}
+  .btn:hover{text-decoration:none;opacity:.92}
+  .btn.ghost{background:transparent;color:var(--ink);border-color:var(--line-strong)}
+  .cta{display:flex;gap:14px;flex-wrap:wrap;margin-top:30px}
+
+  footer{border-top:1px solid var(--line);padding:40px 0;color:var(--ink-faint);font-size:13.5px}
+  .footer-in{display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px}
+  .tag-pill{display:inline-block;font-size:12px;padding:3px 10px;border:1px solid var(--line-strong);border-radius:99px;color:var(--ink-soft);margin-right:6px}
+</style>
+</head>
+<body>
+<nav>
+  <div class="nav-in">
+    <div class="brand"><span class="dot"></span>Spinhance</div>
+    <div class="nav-links">
+      <a href="#overview">Overview</a>
+      <a href="#pipeline">Pipeline</a>
+      <a href="#results">Results</a>
+      <a href="#team">Team</a>
+    </div>
+    <button class="toggle" id="themeBtn" title="Toggle light / dark" aria-label="Toggle theme">🌙</button>
+  </div>
+</nav>
+
+<!-- ============ HERO ============ -->
+<header class="hero" id="top">
+  <div class="sticky">
+    <canvas id="spectrum"></canvas>
+    <div class="hero-grad"></div>
+    <div class="hero-copy">
+      <div class="eyebrow">Deep learning for ¹H NMR</div>
+      <h1>Read the couplings out of a blurry spectrum.</h1>
+      <p>At low field, ¹H spectra collapse into second-order multiplets. Scroll to sweep the
+         spectrometer from <b>90&nbsp;MHz</b> to <b>600&nbsp;MHz</b> and watch the same molecule resolve.</p>
+      <div class="mol-tag" id="molTag">—</div>
+    </div>
+    <div class="gauge">
+      <div class="field-read"><span id="fieldVal">90</span><span class="u">MHz</span></div>
+      <div class="bar"><i id="barFill"></i></div>
+      <div class="bar-tags"><span>90 MHz · low field</span><span>600 MHz · high field</span></div>
+      <div class="scroll-hint" id="scrollHint">scroll to sweep ↓</div>
+    </div>
+  </div>
+</header>
+
+<!-- ============ OVERVIEW ============ -->
+<section class="block" id="overview">
+  <div class="wrap">
+    <div class="kicker">The problem</div>
+    <h2>Cheap spectrometers see overlapping peaks. We recover the real parameters.</h2>
+    <p class="lead">A 90&nbsp;MHz benchtop ¹H NMR spectrum is rarely first-order: chemical-shift
+      differences are comparable to coupling constants, so multiplets overlap and naive peak-picking
+      fails. <b>Spinhance</b> trains a neural network to invert a normalized low-field spectrum back to
+      the underlying spin system — chemical shifts δ (ppm), scalar couplings <i>J</i> (Hz), and proton
+      degeneracies. Once you have those field-independent parameters, the spectrum can be re-simulated
+      <i>exactly</i> at any field strength.</p>
+    <div class="cta">
+      <a class="btn" href="https://github.com/labounad/spinhance" target="_blank" rel="noopener">★ View on GitHub</a>
+      <a class="btn ghost" href="#pipeline">How it works ↓</a>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PIPELINE ============ -->
+<section class="block" id="pipeline">
+  <div class="wrap">
+    <div class="kicker">The pipeline</div>
+    <h2>Four stages, from molecule to model.</h2>
+    <p class="lead">We scope the problem to molecules with exactly <b>eight</b> hard-equivalent
+      (chemically&nbsp;+&nbsp;magnetically equivalent) spin groups, and build a fully synthetic,
+      physically-plausible training set end to end.</p>
+    <div class="pipe">
+      <div class="card">
+        <div class="ic">⚗️</div>
+        <div class="step">TASK 1 · GENERATE</div>
+        <h3>Screen molecules</h3>
+        <p>Filter large public databases (ChEMBL / USPTO) with RDKit, assigning chemically &amp;
+           magnetically equivalent proton groups, and keep molecules with exactly 8 spin groups.</p>
+      </div>
+      <div class="card">
+        <div class="ic">🧮</div>
+        <div class="step">TASK 2 · SPIN SYSTEM</div>
+        <h3>Heuristic shift + J</h3>
+        <p>Embed each SMILES in 3D, then estimate ²J/³J/⁴J couplings and shifts with Karplus and
+           tabulated rules — a spin-system "shift+J" graph that <i>could</i> have come from a real molecule.</p>
+      </div>
+      <div class="card">
+        <div class="ic">📡</div>
+        <div class="step">TASK 3 · SIMULATE</div>
+        <h3>Exact spin sim</h3>
+        <p>Diagonalize the spin Hamiltonian to produce accurate spectra at 90 and 600&nbsp;MHz — via
+           MestreNova and a fast pure-Python engine. <b>This animation is that engine, live.</b></p>
+      </div>
+      <div class="card">
+        <div class="ic">🧠</div>
+        <div class="step">TASK 4 · MODEL</div>
+        <h3>Spectrum → matrix</h3>
+        <p>Train a network mapping a normalized 2¹⁴-point spectrum back to the 8×9 shift+J+degeneracy
+           block — invariant to the arbitrary labeling of groups (S₈ permutation).</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ REPRESENTATION ============ -->
+<section class="block" id="rep">
+  <div class="wrap">
+    <div class="kicker">The representation</div>
+    <h2>Every molecule is one labeled graph.</h2>
+    <p class="lead">Nodes carry a chemical shift δ (ppm) and a degeneracy <i>n</i> (protons per group);
+      edges carry a coupling <i>J</i> (Hz). Stored as a symmetric 8×8 matrix with shifts on the diagonal
+      and an 8×1 degeneracy vector — equivalent under permutation of the labels (S₈). The structure on
+      the left and the matrix on the right are two views of the <i>same</i> molecule now in the hero.</p>
+    <div class="rep-pair">
+      <div class="viewer-card">
+        <span class="v-label">3D structure</span>
+        <label class="spin-toggle"><input type="checkbox" id="spinToggle" checked><span class="switch"></span>rotate</label>
+        <div id="mol3d"></div>
+        <div class="viewer-load" id="mol3dLoad">building 3D structure…</div>
+      </div>
+      <div class="matrix" id="matrixHost"></div>
+    </div>
+    <p class="muted" id="repNote" style="margin-top:22px">Showing the molecule currently in the hero animation.</p>
+  </div>
+</section>
+
+<!-- ============ RESULTS ============ -->
+<section class="block" id="results">
+  <div class="wrap">
+    <div class="kicker">Where we are</div>
+    <h2>Results &amp; evaluation.</h2>
+    <p class="lead">A reconstruction is good when the spectrum re-simulated from the predicted
+      parameters matches the truth — and when the predicted graph matches under the best label
+      permutation. We evaluate with a permutation-invariant matching loss plus a differentiable
+      spectrum-reconstruction term.</p>
+    <div class="stats">
+      <div class="stat"><b id="statMol">1,072</b><span>8-group molecules in the dataset</span></div>
+      <div class="stat"><b>90→600</b><span>MHz simulated per molecule</span></div>
+      <div class="stat"><b>2¹⁴</b><span>intensity points per spectrum</span></div>
+      <div class="stat"><b>8×9</b><span>shift + J + degeneracy target</span></div>
+    </div>
+    <p class="lead" style="margin-top:34px">Model training is the active frontier of the project.
+      Live metrics (permutation-matched shift / J error and reconstruction fidelity) will land here as
+      checkpoints come in — the data, simulator, and evaluation harness are already in place.</p>
+  </div>
+</section>
+
+<!-- ============ TEAM ============ -->
+<section class="block" id="team">
+  <div class="wrap">
+    <div class="kicker">The team</div>
+    <h2>Built at the 2026 hackathon.</h2>
+    <div class="team">
+      <div class="member">
+        <div class="av">LA</div>
+        <h3>Lucas Abounader</h3>
+        <span>Shenvi Lab · simulation &amp; model</span>
+      </div>
+      <div class="member">
+        <div class="av">SM</div>
+        <h3>Samuel Mansfield</h3>
+        <span>Seiple Lab · generation &amp; model</span>
+      </div>
+      <div class="member">
+        <div class="av">YZ</div>
+        <h3>Yiming Zhang</h3>
+        <span>Shenvi Lab · spin-system generation</span>
+      </div>
+    </div>
+    <div class="cta">
+      <a class="btn" href="https://github.com/labounad/spinhance" target="_blank" rel="noopener">★ Repository</a>
+    </div>
+    <p class="muted" style="margin-top:26px;font-size:13px">
+      <span class="tag-pill">RDKit</span><span class="tag-pill">NumPy / SciPy</span>
+      <span class="tag-pill">PyTorch</span><span class="tag-pill">MestreNova</span>
+      <span class="tag-pill">spin-Hamiltonian simulation</span>
+    </p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap footer-in">
+    <div>Spinhance · low-field ¹H NMR → spin-system parameters</div>
+    <div>Hero spectra simulated in-house · a different molecule on every reload</div>
+  </div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/3dmol@2.4.2/build/3Dmol-min.js"></script>
+<script src="assets/sweep.js"></script>
+<script src="assets/mol3d.js"></script>
+</body>
+</html>

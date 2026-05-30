@@ -20,6 +20,10 @@ lists non-zero inter-group J (Hz, sign retained); absent pairs mean J = 0. The
 pyspin engine consumes records directly; the MNova path materialises XMLs from
 them. Schema field names live in `graph_io.py` constants.
 
+This JSON array is the **only** input format used for the production dataset
+(the per-molecule `.npy`/`.json` path mentioned in `mol_to_matrix` is not used by
+Task 3). Run it with `--graphs mol_to_matrix/data/spin_systems.json`.
+
 - **Low field — 90 MHz:** strongly coupled, non-first-order. The model's *input*.
 - **High field — 600.15 MHz:** first-order reference / optional second input.
 
