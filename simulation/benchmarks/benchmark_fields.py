@@ -43,7 +43,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if __package__ in (None, "") and str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from simulation.mnova_runner import MNOVA_DEFAULT, run_mnova_batch
+from simulation.mnova_runner import MNOVA_DEFAULT, run_mnova_batch, run_mnova_parallel
 from simulation.xml_io import patch_frequency, save_xml
 
 __all__ = ["geometric_frequencies", "run_benchmark"]
@@ -79,7 +79,7 @@ def _mnova_already_running() -> bool:
 
 
 def _time_batch(mnova_exe: Path, xml_paths: list[Path], work_dir: Path,
-                label: str) -> dict:
+                label: str, workers: int = 1, launcher: str = "open") -> dict:
     """Copy ``xml_paths`` into a fresh dir, run one MNova batch, and time it.
 
     Returns a dict with the measured subprocess wall-clock (``dt``), the number
@@ -99,9 +99,14 @@ def _time_batch(mnova_exe: Path, xml_paths: list[Path], work_dir: Path,
         shutil.copy2(p, xml_dir / p.name)
 
     n = len(xml_paths)
-    print(f"\n--- timing '{label}': {n} sims in one launch ---")
+    desc = "one launch" if workers <= 1 else f"{workers} workers ({launcher})"
+    print(f"\n--- timing '{label}': {n} sims, {desc} ---")
     t0 = time.perf_counter()
-    run_mnova_batch(mnova_exe, xml_dir, txt_dir)
+    if workers <= 1:
+        run_mnova_batch(mnova_exe, xml_dir, txt_dir)
+    else:
+        run_mnova_parallel(mnova_exe, xml_dir, txt_dir,
+                           workers=workers, launcher=launcher)
     dt = time.perf_counter() - t0
 
     txts = sorted(txt_dir.glob("*.txt"))
@@ -127,10 +132,14 @@ def run_benchmark(
     fmin: float = 40.0,
     fmax: float = 1200.0,
     calib_n: int = 1,
+    workers: int = 1,
+    launcher: str = "open",
 ) -> dict:
     """Patch one XML to ``n`` geometric frequencies and time the simulation.
 
-    Returns a dict with the timing breakdown.
+    With ``workers > 1`` the full run is sharded across that many MNova
+    instances; the calibration run is always single-worker (it estimates the
+    one-launch startup cost). Returns a dict with the timing breakdown.
     """
     source_xml = Path(source_xml)
     out_dir = Path(out_dir)
@@ -156,45 +165,64 @@ def run_benchmark(
         save_xml(patch_frequency(source_xml, f), p)
         all_xmls.append(p)
 
-    # Two launches: calibration (calib_n) and full (n).
+    # Calibration is always single-worker (estimates one-launch startup cost);
+    # the full run uses the requested worker count.
     calib = _time_batch(mnova_exe, all_xmls[:calib_n], out_dir, "calib")
-    full = _time_batch(mnova_exe, all_xmls, out_dir, "full")
+    full = _time_batch(mnova_exe, all_xmls, out_dir, "full",
+                       workers=workers, launcher=launcher)
     t_calib, t_full = calib["dt"], full["dt"]
 
     complete = (calib["n_out"] == calib["n"]) and (full["n_out"] == full["n"])
-
-    per_sim = (t_full - t_calib) / (n - calib_n) if n > calib_n else float("nan")
-    startup = max(0.0, t_calib - calib_n * per_sim)
+    throughput = (n / t_full) if t_full > 0 else None
 
     report = {
         "n": n,
         "fmin": fmin,
         "fmax": fmax,
         "calib_n": calib_n,
+        "workers": workers,
+        "launcher": launcher if workers > 1 else None,
         "outputs_complete": complete,
         "full_outputs": f"{full['n_out']}/{full['n']}",
         "full_output_mtime_span_s": round(full["mtime_span"], 3),
         "t_calib_s": round(t_calib, 3),
         "t_full_s": round(t_full, 3),
-        "naive_per_sim_s": round(t_full / n, 4),
-        "startup_overhead_s": round(startup, 3),
-        "per_sim_s": round(per_sim, 4),
-        "throughput_sims_per_s": round(1.0 / per_sim, 2) if per_sim > 0 else None,
+        "wallclock_per_sim_s": round(t_full / n, 4),
+        "throughput_sims_per_s": round(throughput, 2) if throughput else None,
     }
+
+    # The startup/marginal linear model only holds for a single sequential
+    # launch (calib and full share the same per-launch model). For parallel
+    # runs we report wall-clock throughput and speedup instead.
+    if workers <= 1:
+        per_sim = (t_full - t_calib) / (n - calib_n) if n > calib_n else float("nan")
+        startup = max(0.0, t_calib - calib_n * per_sim)
+        report["startup_overhead_s"] = round(startup, 3)
+        report["marginal_per_sim_s"] = round(per_sim, 4)
+    else:
+        # calib (1 worker) per-sim ~ single-process cost; compare to parallel.
+        single_per_sim = t_calib / max(1, calib_n)
+        report["est_speedup_x"] = round(single_per_sim / (t_full / n), 2) \
+            if t_full > 0 else None
 
     print("\n================ BENCHMARK REPORT ================")
     print(f"  simulations (n)            : {report['n']}")
+    print(f"  workers                    : {report['workers']}"
+          + (f" ({launcher})" if workers > 1 else " (sequential)"))
     print(f"  outputs complete           : {report['outputs_complete']} "
           f"({report['full_outputs']})")
     print(f"  full run wall-clock        : {report['t_full_s']} s")
     print(f"  output mtime span (xcheck) : {report['full_output_mtime_span_s']} s")
-    print(f"  naive per-sim (total/n)    : {report['naive_per_sim_s']} s")
-    print(f"  estimated startup overhead : {report['startup_overhead_s']} s")
-    print(f"  estimated per-sim (marginal): {report['per_sim_s']} s")
+    print(f"  wall-clock per-sim (total/n): {report['wallclock_per_sim_s']} s")
     print(f"  throughput                 : {report['throughput_sims_per_s']} sims/s")
+    if workers <= 1:
+        print(f"  estimated startup overhead : {report['startup_overhead_s']} s")
+        print(f"  estimated per-sim (marginal): {report['marginal_per_sim_s']} s")
+    else:
+        print(f"  est. speedup vs 1 worker   : {report.get('est_speedup_x')}x")
     if not report["outputs_complete"]:
         print("  >>> TIMING UNRELIABLE: outputs incomplete when MNova returned.")
-        print("  >>> Quit all MestReNova windows and re-run.")
+        print("  >>> If launcher='open' gave 0 outputs, try --launcher direct.")
     print("==================================================")
     return report
 
@@ -212,15 +240,32 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--fmax", type=float, default=1200.0, help="Max frequency (MHz)")
     p.add_argument("--calib_n", type=int, default=1,
                    help="Calibration run size for startup-overhead estimate")
+    p.add_argument("--workers", type=int, default=1,
+                   help="Concurrent MNova instances for the full run (default 1)")
+    p.add_argument("--launcher", choices=["open", "direct"], default="open",
+                   help="Parallel launch method on macOS (default: open)")
     args = p.parse_args(argv)
 
     if not args.mnova.exists():
         print(f"ERROR: MNova not found at {args.mnova}", file=sys.stderr)
         return 2
 
+    # Resolve the source XML relative to cwd, then fall back to the repo root
+    # (where the example XML lives) so the benchmark runs from any directory.
+    source = args.source_xml
+    if not source.exists():
+        candidate = _REPO_ROOT / source
+        if candidate.exists():
+            source = candidate
+        else:
+            print(f"ERROR: source XML not found: {args.source_xml}\n"
+                  f"  (also tried {candidate})", file=sys.stderr)
+            return 2
+
     run_benchmark(
-        source_xml=args.source_xml, out_dir=args.out_dir, mnova_exe=args.mnova,
+        source_xml=source, out_dir=args.out_dir, mnova_exe=args.mnova,
         n=args.n, fmin=args.fmin, fmax=args.fmax, calib_n=args.calib_n,
+        workers=args.workers, launcher=args.launcher,
     )
     return 0
 
