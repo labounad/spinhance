@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from rdkit import Chem
 
-from mol_to_matrix.aromatic import aromatic_couplings
-from mol_to_matrix.geminal import geminal_couplings
-from mol_to_matrix.long_range import long_range_couplings
-from mol_to_matrix.olefinic import olefinic_couplings
-from mol_to_matrix.vicinal import vicinal_couplings
+from mol_to_spin_system.aromatic import aromatic_couplings
+from mol_to_spin_system.geminal import geminal_couplings
+from mol_to_spin_system.long_range import long_range_couplings
+from mol_to_spin_system.olefinic import olefinic_couplings
+from mol_to_spin_system.vicinal import vicinal_couplings
 
 _ESTIMATORS = (
     geminal_couplings,    # 2J, same carbon
@@ -31,7 +31,7 @@ def all_couplings(mol: Chem.Mol) -> dict[tuple[int, int], float]:
 
 
 if __name__ == "__main__":
-    from mol_to_matrix.shifts import make_test_mol_3d
+    from mol_to_spin_system.shifts import make_test_mol_3d
 
     for smi, name in [("C=CC", "propene"), ("Cc1ccccc1", "toluene")]:
         mol = make_test_mol_3d(smi)

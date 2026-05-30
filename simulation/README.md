@@ -5,7 +5,7 @@ degeneracies) into simulated ¹H NMR spectra at two field strengths. This is the
 bridge between **Task 2** (molecule → spin-graph) and **Task 4** (spectrum →
 matrix model).
 
-**Task 2 input format** (`graph_io.py`, matches `mol_to_matrix/data`): a single
+**Task 2 input format** (`graph_io.py`, matches `mol_to_spin_system/data`): a single
 JSON **array**; each element is one molecule:
 
 ```json
@@ -21,8 +21,8 @@ pyspin engine consumes records directly; the MNova path materialises XMLs from
 them. Schema field names live in `graph_io.py` constants.
 
 This JSON array is the **only** input format used for the production dataset
-(the per-molecule `.npy`/`.json` path mentioned in `mol_to_matrix` is not used by
-Task 3). Run it with `--graphs mol_to_matrix/data/spin_systems.json`.
+(the per-molecule `.npy`/`.json` path mentioned in `mol_to_spin_system` is not used by
+Task 3). Run it with `--graphs mol_to_spin_system/data/spin_systems.json`.
 
 - **Low field — 90 MHz:** strongly coupled, non-first-order. The model's *input*.
 - **High field — 600.15 MHz:** first-order reference / optional second input.

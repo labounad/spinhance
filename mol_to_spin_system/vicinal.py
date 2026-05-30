@@ -88,7 +88,7 @@ def vicinal_couplings(mol: Chem.Mol) -> dict[tuple[int, int], float]:
 
 
 if __name__ == "__main__":
-    from mol_to_matrix.shifts import make_test_mol_3d
+    from mol_to_spin_system.shifts import make_test_mol_3d
 
     for smi, name in [("CC", "ethane"), ("CCO", "ethanol"), ("FCCF", "1,2-difluoroethane")]:
         mol = make_test_mol_3d(smi)

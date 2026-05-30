@@ -30,7 +30,7 @@ from model.splits import make_splits
 from model.targets import DegeneracyVocab, Standardizer, encode_target
 
 REPO = Path(__file__).resolve().parents[1]
-DEF_JSON = REPO / "mol_to_matrix/data/spin_systems.json"
+DEF_JSON = REPO / "mol_to_spin_system/data/spin_systems.json"
 DEF_SPECTRA = REPO / "simulation/data/spectra"
 
 

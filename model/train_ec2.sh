@@ -140,7 +140,7 @@ _sync_code() {
     --exclude='__pycache__' \
     --exclude='*.pyc' \
     --exclude='simulation/data' \
-    --exclude='mol_to_matrix/data' \
+    --exclude='mol_to_spin_system/data' \
     --exclude='model/checkpoints' \
     --exclude='autoai' \
     .
@@ -165,11 +165,11 @@ _sync_code
 echo "[4/5] Downloading data from S3..."
 _ssh "
   set -e
-  mkdir -p $WORKSPACE/mol_to_matrix/data $WORKSPACE/simulation/data/spectra/90MHz
+  mkdir -p $WORKSPACE/mol_to_spin_system/data $WORKSPACE/simulation/data/spectra/90MHz
 
   echo '  downloading spin_systems_60k.json...'
   aws s3 cp s3://$BUCKET/spin_systems_60k.json \
-    $WORKSPACE/mol_to_matrix/data/spin_systems_60k.json
+    $WORKSPACE/mol_to_spin_system/data/spin_systems_60k.json
 
   echo '  downloading 90MHz spectra tar...'
   aws s3 cp s3://$BUCKET/spectra/90MHz/mol_all.tar.gz \
@@ -187,7 +187,7 @@ echo "[5/5] Starting training..."
 _ssh "
   cd $WORKSPACE
   nohup bash -c 'PYTHONPATH=. conda run -n pytorch python -m model.run_experiment \
-    --json mol_to_matrix/data/spin_systems_60k.json \
+    --json mol_to_spin_system/data/spin_systems_60k.json \
     --spectra simulation/data/spectra \
     $TRAIN_ARGS' \
     > /tmp/train.log 2>&1 &

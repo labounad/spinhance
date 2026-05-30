@@ -7,9 +7,9 @@ from pathlib import Path
 import numpy as np
 from rdkit import Chem
 
-from mol_to_matrix.coupling import all_couplings
-from mol_to_matrix.groups import degeneracies, proton_groups
-from mol_to_matrix.shifts import DEFAULT_SOLVENT, predict_shifts
+from mol_to_spin_system.coupling import all_couplings
+from mol_to_spin_system.groups import degeneracies, proton_groups
+from mol_to_spin_system.shifts import DEFAULT_SOLVENT, predict_shifts
 
 
 @dataclass
@@ -95,7 +95,7 @@ def save_spin_system(system: SpinSystem, stem: str | Path) -> tuple[Path, Path]:
 
 
 if __name__ == "__main__":
-    from mol_to_matrix.shifts import make_test_mol_3d
+    from mol_to_spin_system.shifts import make_test_mol_3d
 
     mol = make_test_mol_3d("CCO")
     system = build_spin_system(mol)

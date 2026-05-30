@@ -5,9 +5,9 @@
 # the --array range below.
 #
 # Submit from the repo root:
-#   sbatch --export=ALL,INPUT=generate/data/8spin.xyz.gz mol_to_matrix/slurm/convert_array.slurm
+#   sbatch --export=ALL,INPUT=generate/data/8spin.xyz.gz mol_to_spin_system/slurm/convert_array.slurm
 # then merge once it finishes:
-#   micromamba run -n spinhance python -m mol_to_matrix.merge_shards \
+#   micromamba run -n spinhance python -m mol_to_spin_system.merge_shards \
 #       data/processed/spin_systems.json data/processed/shards
 #
 #SBATCH --job-name=mol2mat
@@ -27,7 +27,7 @@ mkdir -p logs data/processed/shards
 INPUT="${INPUT:-generate/data/8spin.xyz.gz}"
 MM="$HOME/.local/bin/micromamba"
 
-"$MM" run -n spinhance python -m mol_to_matrix.xyz \
+"$MM" run -n spinhance python -m mol_to_spin_system.xyz \
     "$INPUT" \
     "data/processed/shards/shard_${SLURM_ARRAY_TASK_ID}.json" \
     --workers "$SLURM_CPUS_PER_TASK" \

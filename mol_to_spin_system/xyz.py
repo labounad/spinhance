@@ -11,8 +11,8 @@ import numpy as np
 from rdkit import Chem
 from rdkit.Geometry import Point3D
 
-from mol_to_matrix.coupling import all_couplings
-from mol_to_matrix.shifts import DEFAULT_SOLVENT, predict_shifts
+from mol_to_spin_system.coupling import all_couplings
+from mol_to_spin_system.shifts import DEFAULT_SOLVENT, predict_shifts
 
 # atom record from a parsed XYZ block: (symbol, x, y, z, group_label, tier_class)
 Atom = tuple[str, float, float, float, "str | None", "str | None"]

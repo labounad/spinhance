@@ -1,4 +1,4 @@
-# mol_to_matrix — setup
+# mol_to_spin_system — setup
 
 Chemical-shift prediction (`shifts.py`) shells out to the standalone
 **NMRShiftDB2 predictor JARs** (Java + CDK), which are **not** part of this repo.
@@ -44,7 +44,7 @@ export NMRSHIFTDB_HOME=/path/to/nmrshiftdb2
 ## 3. Verify
 
 ```bash
-python -m mol_to_matrix.shifts     # prints ethanol 1H shifts (CH3 ~1.2, CH2 ~3.7)
+python -m mol_to_spin_system.shifts     # prints ethanol 1H shifts (CH3 ~1.2, CH2 ~3.7)
 ```
 
 If you see predicted shifts, you're set. A `predictor jar not found` error means

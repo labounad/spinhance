@@ -20,7 +20,7 @@ All commands below assume the environment is active and you are in the repo root
 ```
 SMILES
   └─ generate/          screen to 8 spin groups
-       └─ mol_to_matrix/    compute shift+J matrix
+       └─ mol_to_spin_system/    compute shift+J matrix
             └─ simulation/      simulate spectra at 90 + 600 MHz
                  └─ aws_trainer/    train model
                       └─ model/gui.py    evaluate
@@ -44,17 +44,17 @@ Output: `generate/data/smiles_8group.csv` — one molecule per row with SMILES, 
 
 ---
 
-## Stage 2 — Compute spin-system matrices (`mol_to_matrix/`)
+## Stage 2 — Compute spin-system matrices (`mol_to_spin_system/`)
 
 3D-embeds each molecule and computes heuristic chemical shifts (HOSE codes) and coupling constants (Karplus + literature tables).
 
 ```bash
-python -m mol_to_matrix.pipeline \
+python -m mol_to_spin_system.pipeline \
   --smiles generate/data/smiles_8group.csv \
-  --out mol_to_matrix/data/spin_systems.json
+  --out mol_to_spin_system/data/spin_systems.json
 ```
 
-Output: `mol_to_matrix/data/spin_systems.json` — a JSON array of spin-system records:
+Output: `mol_to_spin_system/data/spin_systems.json` — a JSON array of spin-system records:
 
 ```json
 {
@@ -67,7 +67,7 @@ Output: `mol_to_matrix/data/spin_systems.json` — a JSON array of spin-system r
 
 `spin_groups[i]` = `[shift ppm, #protons]` for `labels[i]`. Absent couplings are J = 0.
 
-The production 60k dataset is already at `mol_to_matrix/data/spin_systems_60k.json`.
+The production 60k dataset is already at `mol_to_spin_system/data/spin_systems_60k.json`.
 
 ---
 
@@ -78,7 +78,7 @@ Runs quantum spin simulation at 90 MHz and 600 MHz using the pure-Python engine 
 ```bash
 # Simulate all molecules in the JSON (uses all CPU cores)
 python -m simulation.cli run \
-  --graphs mol_to_matrix/data/spin_systems_60k.json \
+  --graphs mol_to_spin_system/data/spin_systems_60k.json \
   --out simulation/data/spectra \
   --engine python \
   --workers 8
@@ -95,17 +95,17 @@ Output: `simulation/data/spectra/{90,600}MHz/mol_XXXXXX.npy` — 16384-point nor
 ```bash
 # Validate data paths before training (torch-free)
 PYTHONPATH=. python -m aws_trainer.run \
-  --json mol_to_matrix/data/spin_systems_60k.json \
+  --json mol_to_spin_system/data/spin_systems_60k.json \
   --dry-run
 
 # Stage 1 only (matrix loss) — fast, good for sanity checks
 PYTHONPATH=. python -m aws_trainer.run \
-  --json mol_to_matrix/data/spin_systems_60k.json \
+  --json mol_to_spin_system/data/spin_systems_60k.json \
   --model-size medium --no-stage2 --epochs 80
 
 # Full training: Stage 1 (matrix loss) then Stage 2 (+ spectral consistency)
 PYTHONPATH=. python -m aws_trainer.run \
-  --json mol_to_matrix/data/spin_systems_60k.json \
+  --json mol_to_spin_system/data/spin_systems_60k.json \
   --model-size medium --epochs 110 --stage1-epochs 70
 ```
 
@@ -212,7 +212,7 @@ vars(std).update(ckpt["standardizer"])
 
 | Path | Contents |
 |---|---|
-| `mol_to_matrix/data/spin_systems_60k.json` | 64k molecule spin-system dataset |
+| `mol_to_spin_system/data/spin_systems_60k.json` | 64k molecule spin-system dataset |
 | `simulation/data/spectra/90MHz/mol_XXXXXX.npy` | Simulated 90 MHz spectra |
 | `simulation/data/spectra/600MHz/mol_XXXXXX.npy` | Simulated 600 MHz spectra |
 | `aws_trainer/checkpoints/best.pt` | Best model checkpoint |

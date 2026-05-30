@@ -18,7 +18,7 @@ import plotly.graph_objects as go
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
-DEF_JSON = str(REPO / "mol_to_matrix/data/spin_systems.json")
+DEF_JSON = str(REPO / "mol_to_spin_system/data/spin_systems.json")
 DEF_CKPT = str(REPO / "model/checkpoints/spinhance.pt")
 
 # ─── Page config ──────────────────────────────────────────────────────────────

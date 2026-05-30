@@ -5,7 +5,7 @@ Task 2's spin-system graphs.
 
 ## Provenance
 
-- **Source:** `mol_to_matrix/data/spin_systems.json` (1072 molecules, preliminary set)
+- **Source:** `mol_to_spin_system/data/spin_systems.json` (1072 molecules, preliminary set)
 - **Engine:** `simulation/cli.py run --engine python` (pure-Python, exact;
   local-cluster approximation for any fragment > 12 coupled spins)
 - **Fields:** 90 MHz (low, model input) and 600 MHz (high, reference)
@@ -31,7 +31,7 @@ The `spectra/` contents are **not committed** (large binaries; see
 
 ```bash
 python -m simulation.cli run \
-    --graphs mol_to_matrix/data/spin_systems.json \
+    --graphs mol_to_spin_system/data/spin_systems.json \
     --out_dir simulation/data \
     --fields 90 600 --engine python --workers 8
 ```

@@ -18,7 +18,7 @@ from model.targets import DegeneracyVocab, Standardizer, encode_target
 from model import diff_renderer_ref as R
 
 REPO = Path(__file__).resolve().parents[1]
-JSON = REPO / "mol_to_matrix/data/spin_systems.json"
+JSON = REPO / "mol_to_spin_system/data/spin_systems.json"
 SPECTRA = REPO / "simulation/data/spectra"
 
 

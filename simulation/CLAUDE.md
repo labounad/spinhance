@@ -17,7 +17,7 @@ Git repo, `main` branch, initialized with the following structure:
 ```
 spinhance/
 ├── generate/            # Task 1 — molecule screening (teammate)
-├── mol_to_matrix/       # Task 2 — 3D embedding + J/shift heuristics (teammate)
+├── mol_to_spin_system/       # Task 2 — 3D embedding + J/shift heuristics (teammate)
 ├── simulation/          # Task 3 — spin simulation (LUCAS); two engines
 │   ├── README.md            # human-facing docs + architecture diagram
 │   ├── CLAUDE.md            # this file (AI-facing contract)
@@ -67,7 +67,7 @@ The XML format (`simulation/examples/reference_15group.xml`) encodes this as `<m
 ### Task 1 — GENERATE (`generate/`)
 Screen SMILES from USPTO/PubChem, filter to exactly 8 hard-equivalent (chemically + magnetically equivalent) spin groups using RDKit. Output: `data/raw/smiles_8group.csv`.
 
-### Task 2 — MOL → MATRIX (`mol_to_matrix/`)
+### Task 2 — MOL → MATRIX (`mol_to_spin_system/`)
 3D embed with ETKDG + MMFF94 (RDKit), assign shifts via heuristic tables, compute *J* couplings via Karplus equations and geminal/aryl/vinyl/benzylic tables. Assemble the 8×8 J-matrix + degeneracy vector. Output: `data/processed/matrices/*.npy`.
 
 ### Task 3 — SIMULATION (`simulation/`) ← LUCAS'S TASK
@@ -111,7 +111,7 @@ run_pipeline(Path("xmls_source"), Path("out"), engine="python", workers=8)
 ```
 
 ### Task 2 → Task 3 contract (`graph_io.py`) — FINALIZED
-Task 2 emits a single JSON ARRAY (`mol_to_matrix/data/spin_systems.json`); each
+Task 2 emits a single JSON ARRAY (`mol_to_spin_system/data/spin_systems.json`); each
 element: `{"chembl_id","smiles","inchikey", "labels":["A",...], "spin_groups":[[shift_ppm,n],...] (aligned to labels), "couplings":[["A","B",J_Hz],...]}`.
 Absent couplings ⇒ J=0; sign retained (geminal negative). Keys are constants in
 `graph_io.py` (KEY_LABELS/KEY_GROUPS/KEY_COUPLINGS/ID_KEYS). `record_to_arrays`

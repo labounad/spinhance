@@ -1,4 +1,4 @@
-# mol_to_matrix
+# mol_to_spin_system
 
 Turn a molecule into a ¹H spin-system matrix: a symmetric block with chemical
 shifts (ppm) on the diagonal, inter-group scalar couplings (Hz) off-diagonal,
@@ -11,7 +11,7 @@ SMILES → 3D embed → 1H shifts (NMRShiftDB) → couplings (heuristics) → gr
 ```
 
 ```python
-from mol_to_matrix.pipeline import smiles_to_spin_system
+from mol_to_spin_system.pipeline import smiles_to_spin_system
 
 system = smiles_to_spin_system("CCO")     # ethanol
 system.matrix       # [[1.2, 6.8], [6.8, 3.7]]  (diag = shift, off-diag = J)
@@ -22,7 +22,7 @@ system.pack(8)      # (8, 9) array: 8x8 matrix + degeneracy column
 Batch a SMILES CSV to `.npy` (packed 8×9) + `.json` per molecule:
 
 ```bash
-python -m mol_to_matrix.pipeline input.csv out_dir --smiles-col smiles --id-col id
+python -m mol_to_spin_system.pipeline input.csv out_dir --smiles-col smiles --id-col id
 ```
 
 ## XYZ → spin-system JSON
@@ -31,7 +31,7 @@ Convert Task 1's labelled multi-XYZ (`generate/data/8spin.xyz[.gz]`) to a JSON
 array of per-molecule records (see `data/README.md` for the format):
 
 ```bash
-python -m mol_to_matrix.xyz INPUT.xyz.gz OUT.json --workers 8 [--limit N]
+python -m mol_to_spin_system.xyz INPUT.xyz.gz OUT.json --workers 8 [--limit N]
 ```
 
 ### On Slurm (Garibaldi)
@@ -40,14 +40,14 @@ Scales across nodes with a job array — each task converts the shard of blocks
 where `index % num_shards == task_id` (no file pre-splitting):
 
 ```bash
-sbatch mol_to_matrix/slurm/convert_array.slurm          # writes data/processed/shards/shard_<i>.json
+sbatch mol_to_spin_system/slurm/convert_array.slurm          # writes data/processed/shards/shard_<i>.json
 # after it finishes, merge the shards into one array:
 ~/.local/bin/micromamba run -n spinhance \
-    python -m mol_to_matrix.merge_shards data/processed/spin_systems.json data/processed/shards
+    python -m mol_to_spin_system.merge_shards data/processed/spin_systems.json data/processed/shards
 ```
 
 Set the shard count by editing `--array=0-N` in the script (`num_shards` is
-derived from the array size). `mol_to_matrix/slurm/convert_test.slurm` runs a
+derived from the array size). `mol_to_spin_system/slurm/convert_test.slurm` runs a
 100-molecule single-node smoke test. Requires the HPC setup in
 [SETUP.md](SETUP.md) (env + predictor) — `shared` partition, 16 cores/node.
 

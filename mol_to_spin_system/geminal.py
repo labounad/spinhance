@@ -73,7 +73,7 @@ def geminal_couplings(mol: Chem.Mol) -> dict[tuple[int, int], float]:
 
 
 if __name__ == "__main__":
-    from mol_to_matrix.shifts import make_test_mol_3d
+    from mol_to_spin_system.shifts import make_test_mol_3d
 
     # (SMILES, the carbon's geminal partner, Pretsch reference 2J)
     cases = [

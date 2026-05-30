@@ -1,6 +1,6 @@
 """
 Tests for graph_io — the Task 2 → Task 3 spin-system contract. No MNova required.
-Validated against the real mol_to_matrix/data/spin_systems.json sample.
+Validated against the real mol_to_spin_system/data/spin_systems.json sample.
 """
 
 import sys
@@ -24,7 +24,7 @@ from simulation.graph_io import (  # noqa: E402
 from simulation.xml_io import xml_to_matrix, save_xml  # noqa: E402
 from simulation.pyspin.composite import simulate_spectrum_composite  # noqa: E402
 
-SAMPLE = REPO_ROOT / "mol_to_matrix" / "data" / "spin_systems.json"
+SAMPLE = REPO_ROOT / "mol_to_spin_system" / "data" / "spin_systems.json"
 
 
 def _sample_ready() -> bool:

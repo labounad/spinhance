@@ -19,7 +19,7 @@ molecule is chosen on every reload. Dark / light theme toggle in the nav (persis
 
 ## Rebuild the spectra dataset
 
-Run from the repo root (uses `simulation/pyspin` + `mol_to_matrix/data/spin_systems.json`):
+Run from the repo root (uses `simulation/pyspin` + `mol_to_spin_system/data/spin_systems.json`):
 
 ```bash
 python docs/build_field_sweep.py

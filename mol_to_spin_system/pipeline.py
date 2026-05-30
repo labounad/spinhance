@@ -6,8 +6,8 @@ from pathlib import Path
 import pandas as pd
 from tqdm import tqdm
 
-from mol_to_matrix.matrix import SpinSystem, build_spin_system, save_spin_system
-from mol_to_matrix.shifts import DEFAULT_SOLVENT, make_test_mol_3d
+from mol_to_spin_system.matrix import SpinSystem, build_spin_system, save_spin_system
+from mol_to_spin_system.shifts import DEFAULT_SOLVENT, make_test_mol_3d
 
 
 def smiles_to_spin_system(smiles: str, solvent: str = DEFAULT_SOLVENT) -> SpinSystem:

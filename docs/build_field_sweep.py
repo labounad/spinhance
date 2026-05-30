@@ -5,7 +5,7 @@ precompute_field_sweep.py
 Generate the compact JSON dataset that powers the Spinhance website's
 scroll-driven "field sweep" hero animation.
 
-For a curated subset of molecules from mol_to_matrix/data/spin_systems.json we
+For a curated subset of molecules from mol_to_spin_system/data/spin_systems.json we
 run the pure-Python pyspin composite simulator across a GEOMETRIC sweep of
 spectrometer fields (90 -> 600 MHz) and store downsampled, quantized intensity
 arrays. The site interpolates between frames as the user scrolls.
@@ -48,10 +48,10 @@ SCAN_POINTS = 16384      # resolution of the full-range scan that finds the wind
 
 OUT = REPO / "docs" / "data" / "field_sweep.json"
 # Spin-system source. Prefer the self-contained copy in docs/data so the site can
-# be rebuilt from docs/ alone; fall back to the canonical mol_to_matrix location.
+# be rebuilt from docs/ alone; fall back to the canonical mol_to_spin_system location.
 SPIN = next((p for p in [REPO / "docs" / "data" / "spin_systems.json",
-                         REPO / "mol_to_matrix" / "data" / "spin_systems.json"] if p.exists()),
-            REPO / "mol_to_matrix" / "data" / "spin_systems.json")
+                         REPO / "mol_to_spin_system" / "data" / "spin_systems.json"] if p.exists()),
+            REPO / "mol_to_spin_system" / "data" / "spin_systems.json")
 # Precomputed 3D coordinates (force-field embedded) for the 3D structure view.
 # Prefer the in-docs copy, then the working copy, then the tracked backup.
 XYZ_CANDIDATES = [REPO / "docs" / "data" / "8spin.xyz",
@@ -284,7 +284,7 @@ def main():
             "linewidth_hz": LINEWIDTH_HZ,
             "format": "sticks",
             "encoding": "per frame {c: base64 float32 centers ppm, a: base64 uint16 amps/65535}; broaden client-side",
-            "source": "pyspin composite simulator over mol_to_matrix/data/spin_systems.json",
+            "source": "pyspin composite simulator over mol_to_spin_system/data/spin_systems.json",
         },
         "molecules": molecules,
     }

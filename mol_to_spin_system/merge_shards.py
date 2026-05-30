@@ -29,6 +29,6 @@ def merge_shards(out_path: str | Path, shard_dir: str | Path) -> int:
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        sys.exit("usage: python -m mol_to_matrix.merge_shards OUT.json SHARD_DIR")
+        sys.exit("usage: python -m mol_to_spin_system.merge_shards OUT.json SHARD_DIR")
     out, shard_dir = sys.argv[1], sys.argv[2]
     print(f"merged {merge_shards(out, shard_dir)} records -> {out}")

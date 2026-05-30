@@ -1,6 +1,6 @@
 # SpinHance XYZ Format — Interface spec for Task 1 → Task 2
 
-**For:** Yiming (mol_to_matrix)  
+**For:** Yiming (mol_to_spin_system)  
 **From:** Sam (generate)  
 **File produced by:** `python generate/cli.py xyz` → `generate/data/8spin.xyz.gz`
 
@@ -134,7 +134,7 @@ In this example:
 
 ---
 
-## What mol_to_matrix needs to do with this
+## What mol_to_spin_system needs to do with this
 
 1. **Read** each XYZ block (atom positions + spin-group labels).
 2. **Assign shifts**: for each unique class number, predict one δ (ppm)

@@ -1,9 +1,9 @@
 """
 graph_io.py
 ===========
-The Task 2 → Task 3 data contract. Task 2 (mol_to_matrix) emits each molecule's
+The Task 2 → Task 3 data contract. Task 2 (mol_to_spin_system) emits each molecule's
 ¹H spin system as a labelled graph. The on-disk format is a **single JSON array**
-(``mol_to_matrix/data/spin_systems.json``); each element is one molecule:
+(``mol_to_spin_system/data/spin_systems.json``); each element is one molecule:
 
     {
       "chembl_id": "CHEMBL6622",
@@ -33,7 +33,7 @@ import xml.etree.ElementTree as ET
 
 from simulation.xml_io import matrix_to_xml
 
-# ── Schema (single source of truth; matches mol_to_matrix/data/README.md) ─────
+# ── Schema (single source of truth; matches mol_to_spin_system/data/README.md) ─────
 KEY_LABELS = "labels"
 KEY_GROUPS = "spin_groups"   # list of [shift_ppm, degeneracy], aligned to labels
 KEY_COUPLINGS = "couplings"  # list of [label_i, label_j, J_Hz]

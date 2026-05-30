@@ -7,7 +7,7 @@ the parsing stays consistent with the rest of the project.
 
 Inputs
 ------
-  spin_systems_json : mol_to_matrix/data/spin_systems.json  (Task 2 graphs)
+  spin_systems_json : mol_to_spin_system/data/spin_systems.json  (Task 2 graphs)
   spectra_root      : simulation/data/spectra/  containing <field>MHz/mol_*.npy
 
 Each record:

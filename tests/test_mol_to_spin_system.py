@@ -3,15 +3,15 @@ import shutil
 
 import pytest
 
-from mol_to_matrix import shifts as shifts_mod
-from mol_to_matrix.aromatic import aromatic_couplings
-from mol_to_matrix.coupling import all_couplings
-from mol_to_matrix.geminal import geminal_couplings
-from mol_to_matrix.groups import degeneracies, proton_groups
-from mol_to_matrix.long_range import long_range_couplings
-from mol_to_matrix.olefinic import olefinic_couplings
-from mol_to_matrix.shifts import make_test_mol_3d
-from mol_to_matrix.vicinal import karplus, vicinal_couplings
+from mol_to_spin_system import shifts as shifts_mod
+from mol_to_spin_system.aromatic import aromatic_couplings
+from mol_to_spin_system.coupling import all_couplings
+from mol_to_spin_system.geminal import geminal_couplings
+from mol_to_spin_system.groups import degeneracies, proton_groups
+from mol_to_spin_system.long_range import long_range_couplings
+from mol_to_spin_system.olefinic import olefinic_couplings
+from mol_to_spin_system.shifts import make_test_mol_3d
+from mol_to_spin_system.vicinal import karplus, vicinal_couplings
 
 
 # --- couplings (no Java needed) ---------------------------------------------
@@ -90,7 +90,7 @@ requires_predictor = pytest.mark.skipif(
 
 @requires_predictor
 def test_matrix_ethanol():
-    from mol_to_matrix.matrix import build_spin_system
+    from mol_to_spin_system.matrix import build_spin_system
 
     system = build_spin_system(make_test_mol_3d("CCO"))
     assert system.n_groups == 2
@@ -103,7 +103,7 @@ def test_matrix_ethanol():
 
 @requires_predictor
 def test_shifts_ethanol_methyl():
-    from mol_to_matrix.shifts import predict_shifts
+    from mol_to_spin_system.shifts import predict_shifts
 
     means = [v["mean"] for v in predict_shifts(make_test_mol_3d("CCO"), nucleus="H").values()]
     assert any(abs(m - 1.2) < 0.5 for m in means)  # methyl near 1.2 ppm

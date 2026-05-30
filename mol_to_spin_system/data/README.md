@@ -1,7 +1,7 @@
-# mol_to_matrix/data
+# mol_to_spin_system/data
 
 Spin-system data converted from `generate/data/8spin.xyz{,.gz}` by
-`mol_to_matrix.xyz.convert_file`.
+`mol_to_spin_system.xyz.convert_file`.
 
 - `spin_systems.json` — **1072 molecules** from `8spin.xyz` (small uncompressed set).
   Regenerate with `convert_file('generate/data/8spin.xyz', <out>, workers=8)`.
@@ -37,7 +37,7 @@ A single JSON **array**; each element is one molecule:
 - **Shifts**: NMRShiftDB HOSE-code predictor on the molecule's 3D geometry
   (falls back to non-3D when the predictor's stereo path fails).
 - **Couplings**: geometry-based heuristics (Karplus vicinal, table-based
-  geminal/olefinic/aromatic/allylic); see `mol_to_matrix/README.md`.
+  geminal/olefinic/aromatic/allylic); see `mol_to_spin_system/README.md`.
 - **Averaging**: protons in the same spin group (`labels`) are averaged for
   both shift and J; protons sharing a tier class number (chemically equivalent
   across groups) are averaged for shift only.

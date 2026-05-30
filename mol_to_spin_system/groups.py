@@ -47,7 +47,7 @@ def degeneracies(groups: list[list[int]]) -> list[int]:
 
 
 if __name__ == "__main__":
-    from mol_to_matrix.shifts import make_test_mol_3d
+    from mol_to_spin_system.shifts import make_test_mol_3d
 
     for smi, name in [("CCO", "ethanol"), ("Cc1ccccc1", "toluene"),
                       ("c1ccccc1", "benzene"), ("CC(C)(C)O", "tert-butanol")]:
