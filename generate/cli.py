@@ -74,6 +74,7 @@ def _cmd_xyz(args: argparse.Namespace) -> int:
     _, written = write_xyz_gz(
         input_path  = Path(args.input),
         output_path = Path(args.output),
+        workers     = args.workers,
     )
     return 0 if written >= 0 else 1
 
@@ -190,6 +191,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_xyz.add_argument(
         "--output", default=str(_xyz_out), metavar="PATH",
         help=f"Output .xyz.gz  (default: {_xyz_out.name})",
+    )
+    p_xyz.add_argument(
+        "--workers", type=int, default=_DEFAULT_WORKERS, metavar="N",
+        help=f"Worker processes  (default: {_DEFAULT_WORKERS})",
     )
     p_xyz.set_defaults(func=_cmd_xyz)
 
