@@ -206,6 +206,12 @@ def run_benchmark(
         startup = max(0.0, t_calib - calib_n * per_sim)
         report["startup_overhead_s"] = round(startup, 3)
         report["marginal_per_sim_s"] = round(per_sim, 4)
+        # With few sims (or sub-second sims), startup jitter swamps the marginal
+        # estimate — fall back to the mtime span as the honest compute measure.
+        if n - calib_n < 10 or per_sim <= 0:
+            report["marginal_unreliable"] = True
+            span_per_sim = (full["mtime_span"] / max(1, n - 1)) if full["mtime_span"] else None
+            report["mtime_per_sim_s"] = round(span_per_sim, 4) if span_per_sim else None
     elif baseline:
         base = _time_batch(mnova_exe, all_xmls, out_dir, "baseline", workers=1)
         t_base = base["dt"]
@@ -225,6 +231,9 @@ def run_benchmark(
     if workers <= 1:
         print(f"  estimated startup overhead : {report['startup_overhead_s']} s")
         print(f"  estimated per-sim (marginal): {report['marginal_per_sim_s']} s")
+        if report.get("marginal_unreliable"):
+            print("  >>> marginal unreliable at this n (startup jitter dominates).")
+            print(f"  >>> use mtime-based per-sim: {report.get('mtime_per_sim_s')} s")
     elif baseline:
         print(f"  1-worker baseline wall-clock: {report['t_baseline_1worker_s']} s")
         print(f"  REAL speedup vs 1 worker   : {report['speedup_vs_1worker_x']}x")
