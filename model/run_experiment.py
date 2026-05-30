@@ -35,7 +35,8 @@ DEF_SPECTRA = REPO / "simulation/data/spectra"
 
 
 def _load(args):
-    recs = load_records(args.json, args.spectra, fields=(90, 600))
+    fields = tuple(int(f) for f in args.fields.split(","))
+    recs = load_records(args.json, args.spectra, fields=fields)
     if args.max_mol:
         recs = recs[:args.max_mol]
     assignment, report = make_splits(recs, ratios=(0.7, 0.2, 0.1), seed=args.seed,
@@ -112,6 +113,7 @@ def build_parser():
     p.add_argument("--spectra", default=str(DEF_SPECTRA))
     p.add_argument("--dry-run", action="store_true", help="validate data path only (no torch)")
     p.add_argument("--no-scaffold", action="store_true", help="skip RDKit scaffold split")
+    p.add_argument("--fields", default="90,600", help="comma-separated MHz fields to require, e.g. 90 or 90,600")
     p.add_argument("--max-mol", type=int, default=0, help="subset N molecules (smoke)")
     p.add_argument("--small", action="store_true", help="lighter encoder for small data")
     p.add_argument("--stage2", action="store_true", help="enable Stage-2 spectral loss")
