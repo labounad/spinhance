@@ -1,0 +1,18 @@
+{
+  "model_size": "medium",
+  "batch_size": 256,
+  "accum_steps": 4,
+  "lr": 3e-4,
+  "epochs": 80,
+  "stage1_epochs": 80,
+  "stage2_enabled": false,
+  "amp_dtype": "bf16",
+  "compile_model": false,
+  "ema_decay": 0.9999,
+  "ckpt_dir": "aws_trainer/checkpoints/medium_s1",
+  "log_dir": "aws_trainer/runs",
+  "num_workers": 4,
+  "preload_spectra": true,
+  "scaffold_split": true,
+  "run_name": "medium_s1"
+}
