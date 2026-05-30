@@ -76,8 +76,11 @@ simulation/
 ├── cli.py               # `python -m simulation.cli run|plot`
 ├── mnova_scripts/
 │   └── spinhanceBatch.qs   # MNova JS batch script (register this folder)
+├── benchmarks/
+│   └── benchmark_fields.py # throughput benchmark over a geometric field grid
 └── tests/
-    └── test_xml_io.py      # unit tests (no MNova required)
+    ├── test_xml_io.py           # XML/matrix unit tests (no MNova required)
+    └── test_benchmark_fields.py # frequency-grid unit tests (no MNova)
 ```
 
 ---
@@ -156,8 +159,25 @@ python -m pytest simulation/tests -v
 ```
 
 The tests cover label generation, XML construction, *J*-coupling symmetry,
-save/reload round-trips, frequency patching, and field-pair generation. They do
-**not** require MestReNova.
+save/reload round-trips, frequency patching, field-pair generation, and the
+geometric frequency grid. They do **not** require MestReNova.
+
+## Benchmark
+
+Measure simulator throughput by patching one XML to `n` geometrically-spaced
+frequencies (denser at low field) and simulating them all in a single MNova
+launch. A small calibration run separates startup overhead from marginal
+per-simulation cost.
+
+```bash
+python -m simulation.benchmarks.benchmark_fields \
+    --source_xml "predicted_mnova_1h (10).xml" \
+    --mnova "/Applications/MestReNova.app/Contents/MacOS/MestReNova" \
+    --n 100 --fmin 40 --fmax 1200
+```
+
+The report prints total wall-clock, naive per-sim (`total / n`), estimated MNova
+startup overhead, marginal per-sim time, and throughput (sims/s).
 
 ---
 
