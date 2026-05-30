@@ -115,3 +115,31 @@ def test_graph_and_matrix_give_same_spectrum():
     _, from_arrays = simulate_spectrum_composite(shifts, couplings, deg, 90.0)
     # build arrays a second way via xml round-trip would also work; here direct
     assert abs(from_arrays.sum() * (12 / len(from_arrays)) - 1.0) < 1e-6
+
+
+EXAMPLE_XML = REPO_ROOT / "simulation" / "examples" / "R_5_methylcyclohexenone.xml"
+
+
+@pytest.mark.skipif(not EXAMPLE_XML.exists(), reason="example XML not present")
+def test_graph_path_matches_xml_path_exactly():
+    """End-to-end equivalence: the graph contract must reproduce the validated
+    XML path bit-for-bit. XML → matrix → graph → matrix must round-trip, and the
+    spectra simulated from each must be identical."""
+    m = xml_to_matrix(EXAMPLE_XML)
+    g = arrays_to_graph(["A", "B", "C", "D", "E", "F", "G", "H"],
+                        m["shifts"], m["couplings"], m["degeneracy"],
+                        smiles="example")
+    labels, shifts, couplings, deg = graph_to_arrays(g)
+
+    # arrays identical to the XML-derived ones
+    assert shifts == pytest.approx(m["shifts"])
+    assert deg == m["degeneracy"]
+    for i in range(len(labels)):
+        for j in range(len(labels)):
+            assert couplings[i][j] == pytest.approx(m["couplings"][i][j])
+
+    # spectra identical (graph-derived vs XML-derived)
+    _, sp_graph = simulate_spectrum_composite(shifts, couplings, deg, 90.0)
+    _, sp_xml = simulate_spectrum_composite(m["shifts"], m["couplings"],
+                                            m["degeneracy"], 90.0)
+    assert np.corrcoef(sp_graph, sp_xml)[0, 1] > 0.999999
