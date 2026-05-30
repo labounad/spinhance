@@ -32,9 +32,11 @@ __all__ = ["matrix_loss", "wasserstein1", "spectral_loss", "curriculum_weights"]
 # Stage 1 — matrix loss
 # -----------------------------------------------------------------------------
 
-def matrix_loss(pred, target, weights=None, huber_beta=1.0):
+def matrix_loss(pred, target, weights=None, huber_beta=1.0,
+                deg_class_weight=None, presence_pos_weight=None):
     """pred: model output dict; target: batch dict (standardized).
-    Returns (total, components)."""
+    ``deg_class_weight`` (C,) and ``presence_pos_weight`` (scalar) counter class
+    imbalance (degeneracy ~89% d=1; couplings sparse). Returns (total, components)."""
     w = {"shift": 1.0, "jmag": 1.0, "presence": 0.5, "deg": 0.5}
     if weights:
         w.update(weights)
@@ -47,11 +49,13 @@ def matrix_loss(pred, target, weights=None, huber_beta=1.0):
     denom = mask.sum().clamp_min(1.0)
     jmag = (jmag_el * mask).sum() / denom            # masked mean over present
 
-    presence = F.binary_cross_entropy_with_logits(pred["j_presence"], mask)
+    presence = F.binary_cross_entropy_with_logits(
+        pred["j_presence"], mask, pos_weight=presence_pos_weight)
 
     B, G, C = pred["deg_logits"].shape
     deg = F.cross_entropy(pred["deg_logits"].reshape(B * G, C),
-                          target["deg_class"].reshape(B * G))
+                          target["deg_class"].reshape(B * G),
+                          weight=deg_class_weight)
 
     total = (w["shift"] * shift + w["jmag"] * jmag
              + w["presence"] * presence + w["deg"] * deg)

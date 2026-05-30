@@ -74,14 +74,22 @@ def compute_metrics(pred, target, standardizer, vocab, presence_thresh=0.5):
     f1 = 2 * prec * rec / max(prec + rec, 1e-9)
     pres_acc = float((pp == tgt_present).mean())
 
-    # degeneracy accuracy
+    # degeneracy accuracy (raw + BALANCED = mean per-class recall).
+    # Raw acc is misleading under heavy imbalance (~89% d=1): a model that always
+    # predicts 1 scores ~0.89. Balanced acc exposes that collapse (would be ~1/#classes).
     tgt_deg = np.stack([vocab.from_index(target["deg_class"][b])
                         for b in range(target["deg_class"].shape[0])])
-    deg_acc = float((dec["degeneracy"] == tgt_deg).mean())
+    pred_deg = dec["degeneracy"]
+    deg_acc = float((pred_deg == tgt_deg).mean())
+    recalls = []
+    for v in np.unique(tgt_deg):
+        m = tgt_deg == v
+        recalls.append(float((pred_deg[m] == v).mean()))
+    deg_acc_balanced = float(np.mean(recalls)) if recalls else 0.0
 
     return dict(shift_mae_ppm=shift_mae, j_mae_hz=j_mae,
                 presence_acc=pres_acc, presence_f1=float(f1),
-                deg_acc=deg_acc)
+                deg_acc=deg_acc, deg_acc_balanced=deg_acc_balanced)
 
 
 def wasserstein1_np(spec_a, spec_b, dx=1.0, eps=1e-12):

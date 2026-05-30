@@ -103,7 +103,7 @@ def full_run(args):
           f"stage2 {'ON' if args.stage2 else 'OFF'}")
 
     fit(recs, assignment, cfg, model=model)
-    print("TRAINING COMPLETE — best checkpoint at", cfg.ckpt)
+    print("TRAINING COMPLETE — best checkpoint at", cfg.ckpt_path)
 
 
 def build_parser():

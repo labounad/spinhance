@@ -23,7 +23,7 @@ import numpy as np
 from model.splits import canonical_order, reorder
 
 __all__ = ["DegeneracyVocab", "encode_target", "Standardizer",
-           "augment_spectrum", "bucket_key", "DEFAULT_DEG_VOCAB"]
+           "augment_spectrum", "bucket_key", "DEFAULT_DEG_VOCAB", "class_balance"]
 
 DEFAULT_DEG_VOCAB = (1, 2, 3, 4, 6, 9, 12, 18)
 
@@ -175,3 +175,45 @@ def bucket_key(shifts, couplings, degeneracy):
     order = canonical_order(shifts, couplings, degeneracy)
     _, _, d = reorder(shifts, couplings, degeneracy, order)
     return tuple(int(x) for x in d)
+
+
+# -----------------------------------------------------------------------------
+# Class balancing (fit on TRAIN) — fixes degeneracy majority-class collapse
+# -----------------------------------------------------------------------------
+
+def class_balance(train_records, vocab: DegeneracyVocab, power=0.5, cap=8.0):
+    """Return numpy weights to counter class imbalance (computed on train):
+      deg_weights        (C,)  tempered inverse-frequency CE weights over the deg
+                               vocab (unused classes -> 0; present mean-normalised to 1)
+      presence_pos_weight float  #absent / #present couplings, for BCE pos_weight
+
+    Degeneracy is ~89% d=1, so without this the deg head collapses to predicting
+    1 everywhere (acc == base rate). Couplings are sparse (~30% present), so the
+    presence head benefits from up-weighting positives.
+    """
+    C = len(vocab)
+    deg_counts = np.zeros(C)
+    n_present = 0
+    n_pairs_total = 0
+    for r in train_records:
+        t = encode_target(r["shifts"], r["couplings"], r["degeneracy"], vocab)
+        for c in t["deg_class"]:
+            deg_counts[int(c)] += 1
+        n_present += int(t["j_presence"].sum())
+        n_pairs_total += t["j_presence"].size
+
+    # Tempered inverse-frequency (power<1) + cap: pure 1/freq zeroes the majority
+    # class under a ~760:1 imbalance. power=0.5 (inverse-sqrt) and a max/min cap
+    # keep d=1 meaningful while still up-weighting rare degeneracies.
+    present = deg_counts > 0
+    deg_weights = np.zeros(C)
+    raw = (1.0 / deg_counts[present]) ** power
+    raw = raw / raw.mean()
+    raw = np.clip(raw, 1.0 / cap, cap)
+    raw = raw / raw.mean()                                  # re-normalise to ~1
+    deg_weights[present] = raw
+    n_absent = n_pairs_total - n_present
+    presence_pos_weight = float(n_absent / max(n_present, 1))
+    return dict(deg_weights=deg_weights.astype(np.float32),
+                presence_pos_weight=presence_pos_weight,
+                deg_counts=deg_counts.astype(int))

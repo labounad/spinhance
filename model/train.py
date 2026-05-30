@@ -148,8 +148,9 @@ def _to_device(batch, device):
 
 
 def train_epoch(model, loader, opt, sched, scaler, cfg, std, epoch, device,
-                amp_ctx):
+                amp_ctx, balance=None):
     model.train()
+    bal = balance or {}
     w_mat, w_spec = curriculum_weights(epoch, cfg.stage1_epochs, cfg.ramp_epochs,
                                        cfg.spectral_max, cfg.matrix_anchor)
     running = {}
@@ -158,7 +159,9 @@ def train_epoch(model, loader, opt, sched, scaler, cfg, std, epoch, device,
         opt.zero_grad(set_to_none=True)
         with amp_ctx():
             pred = model(batch["spectrum"])
-            mloss, comps = matrix_loss(pred, batch, weights=cfg.loss_weights)
+            mloss, comps = matrix_loss(pred, batch, weights=cfg.loss_weights,
+                                       deg_class_weight=bal.get("deg_weights"),
+                                       presence_pos_weight=bal.get("presence_pos_weight"))
             total = w_mat * mloss
             if w_spec > 0:
                 pred_phys = decode_physical(pred, std)
@@ -183,14 +186,17 @@ def train_epoch(model, loader, opt, sched, scaler, cfg, std, epoch, device,
 
 
 @torch.no_grad()
-def evaluate(model, loader, cfg, std, vocab, device, amp_ctx):
+def evaluate(model, loader, cfg, std, vocab, device, amp_ctx, balance=None):
     model.eval()
+    bal = balance or {}
     agg, nb = {}, 0
     for batch in loader:
         batch = _to_device(batch, device)
         with amp_ctx():
             pred = model(batch["spectrum"])
-            mloss, _ = matrix_loss(pred, batch, weights=cfg.loss_weights)
+            mloss, _ = matrix_loss(pred, batch, weights=cfg.loss_weights,
+                                   deg_class_weight=bal.get("deg_weights"),
+                                   presence_pos_weight=bal.get("presence_pos_weight"))
         pred_np = {k: pred[k].float().cpu().numpy() for k in pred}
         tgt_np = {k: batch[k].cpu().numpy()
                   for k in ("shifts", "j_mag", "j_presence", "deg_class")}
@@ -230,6 +236,18 @@ def fit(records, assignment, cfg: TrainConfig, model=None):
                         collate_fn=collate_fn)
 
     model = (model or SpinHanceModel(n_groups=8, n_deg_classes=len(vocab))).to(device)
+
+    # class balancing (fit on train) — counters degeneracy majority-class collapse
+    from model.targets import class_balance
+    train_recs = [r for r in records if assignment.get(r["mol_id"]) == "train"]
+    cb = class_balance(train_recs, vocab)
+    balance = {
+        "deg_weights": torch.tensor(cb["deg_weights"], device=device),
+        "presence_pos_weight": torch.tensor(cb["presence_pos_weight"], device=device),
+    }
+    print(f"class balance: deg_counts={cb['deg_counts'].tolist()} "
+          f"presence_pos_weight={cb['presence_pos_weight']:.2f}")
+
     opt = torch.optim.AdamW(model.parameters(), lr=cfg.lr,
                             weight_decay=cfg.weight_decay)
     steps_per_epoch = max(1, len(plain))
@@ -243,13 +261,13 @@ def fit(records, assignment, cfg: TrainConfig, model=None):
     for epoch in range(cfg.epochs):
         loader = plain if epoch < cfg.stage1_epochs else bucketed
         tr = train_epoch(model, loader, opt, sched, scaler, cfg, std, epoch,
-                         device, amp_ctx)
-        va = evaluate(model, val_dl, cfg, std, vocab, device, amp_ctx)
+                         device, amp_ctx, balance=balance)
+        va = evaluate(model, val_dl, cfg, std, vocab, device, amp_ctx, balance=balance)
         print(f"epoch {epoch:3d} | stage {'1' if epoch < cfg.stage1_epochs else '2'} "
               f"| w_spec {tr['w_spec']:.2f} | train_total {tr['total']:.4f} "
               f"| val shift_mae {va['shift_mae_ppm']:.3f}ppm "
               f"J_mae {va['j_mae_hz']:.2f}Hz pres_f1 {va['presence_f1']:.3f} "
-              f"deg_acc {va['deg_acc']:.3f}")
+              f"deg_acc {va['deg_acc']:.3f} deg_bal {va['deg_acc_balanced']:.3f}")
         score = va["shift_mae_ppm"] + va["j_mae_hz"] / 10.0   # simple early-stop score
         if score < best:
             best, bad = score, 0
