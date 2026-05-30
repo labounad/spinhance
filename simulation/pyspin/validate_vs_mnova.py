@@ -77,7 +77,8 @@ def run_mnova_spectrum(xml_path: Path, mnova_exe: Path, field: float,
 
 def compare(xml_path: Path, mnova_exe: Path, field: float | None = None,
             show: bool = False, out: Path | None = None, timeout: float = 120.0,
-            pyspin_only: bool = False, mnova_only: bool = False) -> dict:
+            pyspin_only: bool = False, mnova_only: bool = False,
+            pyspin_engine: str = "exact", max_cluster: int = 9) -> dict:
     meta = xml_to_matrix(xml_path)
     field = field or meta["frequency_mhz"] or 90.0
     points = meta["points"] or 16384
@@ -85,17 +86,31 @@ def compare(xml_path: Path, mnova_exe: Path, field: float | None = None,
     ppm_to = meta["ppm_to"] if meta["ppm_to"] is not None else 12.0
     ppm = np.linspace(ppm_from, ppm_to, points)
 
-    print(f"Comparing at {field} MHz ({points} pts, {ppm_from}-{ppm_to} ppm)")
+    print(f"Comparing at {field} MHz ({points} pts, {ppm_from}-{ppm_to} ppm) "
+          f"[pyspin={pyspin_engine}]")
 
-    # pyspin (composite engine) — timed
+    # pyspin — timed; engine selectable (exact / clustered / auto dispatcher)
     py = None
     if not mnova_only:
         t = time.perf_counter()
-        _, py = simulate_spectrum_composite(
-            meta["shifts"], meta["couplings"], meta["degeneracy"],
-            field, points=points, ppm_from=ppm_from, ppm_to=ppm_to)
+        if pyspin_engine == "clustered":
+            from simulation.pyspin.cluster import simulate_spectrum_clustered
+            _, py = simulate_spectrum_clustered(
+                meta["shifts"], meta["couplings"], meta["degeneracy"], field,
+                max_cluster=max_cluster, points=points,
+                ppm_from=ppm_from, ppm_to=ppm_to)
+        elif pyspin_engine == "auto":
+            from simulation.pyspin.cluster import simulate_spectrum_pyspin
+            _, py = simulate_spectrum_pyspin(
+                meta["shifts"], meta["couplings"], meta["degeneracy"], field,
+                max_cluster=max_cluster, points=points,
+                ppm_from=ppm_from, ppm_to=ppm_to)
+        else:
+            _, py = simulate_spectrum_composite(
+                meta["shifts"], meta["couplings"], meta["degeneracy"],
+                field, points=points, ppm_from=ppm_from, ppm_to=ppm_to)
         py = _normalize(py, ppm_from, ppm_to)
-        print(f"  pyspin (composite): {time.perf_counter() - t:.3f}s")
+        print(f"  pyspin ({pyspin_engine}): {time.perf_counter() - t:.3f}s")
         if pyspin_only:
             print("  (pyspin-only: skipping MNova)")
             return {"field_mhz": field, "pyspin_seconds": True}
@@ -168,6 +183,10 @@ def main(argv: list[str] | None = None) -> int:
                    help="Time pyspin only; skip MNova")
     p.add_argument("--mnova-only", action="store_true",
                    help="Time MNova only; skip pyspin")
+    p.add_argument("--pyspin-engine", choices=["exact", "clustered", "auto"],
+                   default="exact", help="Which pyspin engine to compare")
+    p.add_argument("--max-cluster", type=int, default=9,
+                   help="Cluster size for clustered/auto engines")
     args = p.parse_args(argv)
     if not args.pyspin_only and not args.mnova.exists():
         print(f"ERROR: MNova not found at {args.mnova}", file=sys.stderr)
@@ -181,7 +200,8 @@ def main(argv: list[str] | None = None) -> int:
             return 2
     compare(args.xml, args.mnova, field=args.field, show=args.show, out=args.out,
             timeout=args.timeout, pyspin_only=args.pyspin_only,
-            mnova_only=args.mnova_only)
+            mnova_only=args.mnova_only, pyspin_engine=args.pyspin_engine,
+            max_cluster=args.max_cluster)
     return 0
 
 
