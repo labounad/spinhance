@@ -296,14 +296,19 @@ def equivalence_classes_by_substitution(
     *,
     use_3d: bool,
     merge_enantiotopic: bool = True,
+    candidate_atoms: list[int] | None = None,
 ) -> list[list[int]]:
     """Group C-H protons by chemical equivalence via the deuterium test.
 
     Parameters
     ----------
     mol_h:
-        Molecule with explicit H (output of :func:`strip_exchangeable_protons`).
-        Should carry a 3-D conformer when available.
+        Molecule with explicit H and an optional 3-D conformer.  May contain
+        exchangeable protons (N-H, O-H, S-H) — they are preserved as
+        structural context and are NOT substituted, but their presence in the
+        molecule ensures they correctly break apparent ring symmetry during
+        the test.  Pass the full output of :func:`embed_3d` rather than the
+        stripped output of :func:`strip_exchangeable_protons`.
     use_3d:
         Whether to use :func:`~rdkit.Chem.AssignStereochemistryFrom3D`.
         Pass the ``has_3d`` flag returned by :func:`embed_3d`.
@@ -313,6 +318,11 @@ def equivalence_classes_by_substitution(
         averaged chemical shift, separate spin groups).  When ``False``,
         only homotopic protons are grouped (every enantiotopic pair is its
         own class).
+    candidate_atoms:
+        Explicit list of H atom indices to test.  When provided, only these
+        atoms are included in the output classes; other H atoms (e.g.
+        exchangeable N-H, O-H) remain in the molecule as structural context
+        but are not classified.  When ``None``, all H atoms are tested.
 
     Returns
     -------
@@ -322,17 +332,19 @@ def equivalence_classes_by_substitution(
 
     Notes
     -----
-    Enantiomeric detection: for each H→D substituted molecule, we also
-    compute the SMILES with all tetrahedral chiral tags inverted (the
-    "enantiomer SMILES").  Two protons belong to the same SOFT class iff
-    one's forward SMILES matches the other's enantiomer SMILES (or vice
-    versa).  This correctly identifies enantiotopic protons in achiral
-    molecules while leaving diastereotopic protons in separate classes.
+    **Why exchangeable protons must stay in the molecule** (not be stripped
+    first): removing an indole N-H before the test makes the two junction
+    carbons of the indole 5-membered ring appear equivalent, which propagates
+    a false symmetry to the aromatic CH protons on the 6-membered ring — they
+    appear enantiotopic (SOFT) instead of chemically distinct (NONE).  By
+    keeping N-H in the molecule and passing only C-H atoms as
+    ``candidate_atoms``, the structural asymmetry is preserved.
     """
-    h_idxs = [
-        atom.GetIdx() for atom in mol_h.GetAtoms()
-        if atom.GetAtomicNum() == 1
-    ]
+    h_idxs: list[int] = (
+        candidate_atoms
+        if candidate_atoms is not None
+        else [atom.GetIdx() for atom in mol_h.GetAtoms() if atom.GetAtomicNum() == 1]
+    )
     if not h_idxs:
         return []
 
@@ -374,7 +386,7 @@ def equivalence_classes_by_substitution(
     )
 
 
-# ── HARD-group detection ──────────────────────────────────────────────────────
+# ── HARD/SOFT/NONE classification ────────────────────────────────────────────
 
 def _hydrogen_neighbors(atom: Chem.Atom) -> list[int]:
     """Sorted list of H atom indices directly bonded to *atom*."""
@@ -382,6 +394,134 @@ def _hydrogen_neighbors(atom: Chem.Atom) -> list[int]:
         n.GetIdx() for n in atom.GetNeighbors()
         if n.GetAtomicNum() == 1
     )
+
+
+def _is_magnetically_equivalent(
+    cls: list[int],
+    fwd_sigs: dict[int, str],
+    mol_h: Chem.Mol,
+    all_candidate_h: list[int],
+) -> bool:
+    """Return ``True`` iff every member of *cls* is both homotopic and
+    magnetically equivalent to every other member.
+
+    Two C-H protons are magnetically equivalent iff:
+
+    1. **Homotopic** — they produce *identical* (not merely enantiomeric)
+       D-substitution canonical SMILES.  This rules out enantiotopic pairs
+       (which give enantiomeric SMILES) and diastereotopic pairs immediately.
+
+    2. **Same coupling profile** — every H atom outside *cls* is at the same
+       shortest-bond-path distance from every member of *cls*.  Equal distances
+       imply equal *J* couplings (since *J* falls off steeply with path length),
+       so the full coupling pattern is identical for every class member.
+
+    This single test subsumes the old methyl-rotor check while also handling
+    symmetric aromatic protons (e.g. the two equivalent H's in a
+    1,3,5-trisubstituted benzene that share a C₂ rotation axis).
+
+    Contrast with toluene's two ortho protons: they are homotopic (condition 1
+    passes) but one ortho-H sees the meta-H three bonds away while the other
+    sees it five bonds away (condition 2 fails) → correctly classified SOFT.
+    """
+    # Condition 1: all members produce the same forward SMILES (homotopic).
+    first = fwd_sigs[cls[0]]
+    if not all(fwd_sigs[h] == first for h in cls[1:]):
+        return False
+
+    # Condition 2: identical distance profile to all external H atoms.
+    cls_set  = set(cls)
+    ext_h    = [h for h in all_candidate_h if h not in cls_set]
+    if not ext_h:
+        return True   # no external H → trivially magnetically equivalent
+
+    ref      = cls[0]
+    ref_prof = tuple(
+        len(Chem.GetShortestPath(mol_h, ref, e)) - 1 for e in ext_h
+    )
+    for member in cls[1:]:
+        prof = tuple(
+            len(Chem.GetShortestPath(mol_h, member, e)) - 1 for e in ext_h
+        )
+        if prof != ref_prof:
+            return False
+    return True
+
+
+def _classify_equivalence_classes(
+    mol_h: Chem.Mol,
+    *,
+    use_3d: bool,
+    candidate_atoms: list[int],
+) -> list[tuple[str, list[int]]]:
+    """Group *candidate_atoms* into HARD/SOFT/NONE spin-group classes.
+
+    Returns a list of ``(tier, atom_indices)`` pairs ordered by the smallest
+    atom index in each class.
+
+    Algorithm
+    ---------
+    1. Compute the forward and enantiomer D-substitution SMILES for every
+       candidate H atom.
+    2. Union-Find groups homotopic pairs (identical forward SMILES) and —
+       with ``merge_enantiotopic`` logic — enantiotopic pairs (one's forward
+       SMILES equals the other's enantiomer SMILES) into the same class.
+    3. Each class is then tiered:
+
+       * ``NONE``  — singleton (unique chemical environment).
+       * ``HARD``  — all members are homotopic *and* magnetically equivalent
+                     (see :func:`_is_magnetically_equivalent`).
+       * ``SOFT``  — all other multi-member classes (enantiotopic, or homotopic
+                     but magnetically inequivalent like toluene's ortho-H pair).
+    """
+    if not candidate_atoms:
+        return []
+
+    fwd: dict[int, str] = {}
+    inv: dict[int, str] = {}
+    for idx in candidate_atoms:
+        fwd[idx], inv[idx] = _both_signatures(mol_h, idx, use_3d=use_3d)
+
+    # Union-Find — merge homotopic and enantiotopic pairs.
+    parent = {i: i for i in candidate_atoms}
+
+    def find(x: int) -> int:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a: int, b: int) -> None:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            if rb < ra:
+                ra, rb = rb, ra
+            parent[rb] = ra
+
+    for i, a in enumerate(candidate_atoms):
+        for b in candidate_atoms[i + 1:]:
+            if fwd[a] == fwd[b] or fwd[a] == inv[b] or inv[a] == fwd[b]:
+                union(a, b)
+
+    by_root: dict[int, list[int]] = {}
+    for idx in candidate_atoms:
+        by_root.setdefault(find(idx), []).append(idx)
+    classes = sorted(
+        (sorted(g) for g in by_root.values()), key=lambda g: g[0]
+    )
+
+    # Determine tier for each class.
+    result: list[tuple[str, list[int]]] = []
+    for cls in classes:
+        if len(cls) == 1:
+            tier = "NONE"
+        elif _is_magnetically_equivalent(cls, fwd, mol_h, candidate_atoms):
+            tier = "HARD"
+        else:
+            tier = "SOFT"
+        result.append((tier, cls))
+
+    return result
 
 
 def _is_rotationally_hard_hydrogen_class(
@@ -466,19 +606,25 @@ def analyze_spin_systems(mol: Chem.Mol) -> tuple[int, list[int]]:
     determine the averaged shift.  It does **not** set the spin-group count.
     """
     mol_h, use_3d = embed_3d(mol)
-    mol_h = strip_exchangeable_protons(mol_h)
 
-    classes = equivalence_classes_by_substitution(
-        mol_h, use_3d=use_3d, merge_enantiotopic=True
+    # Keep exchangeable protons (N-H, O-H, S-H) in the molecule so they
+    # act as structural context during the D-substitution test.  Only
+    # non-exchangeable C-H atoms are tested as spin-group candidates.
+    candidate_h = [
+        a.GetIdx() for a in mol_h.GetAtoms()
+        if a.GetAtomicNum() == 1
+        and a.GetNeighbors()[0].GetAtomicNum() not in _EXCHANGEABLE_PARENTS
+    ]
+
+    classified = _classify_equivalence_classes(
+        mol_h, use_3d=use_3d, candidate_atoms=candidate_h,
     )
 
     group_sizes: list[int] = []
-    for cls in classes:
-        if _is_rotationally_hard_hydrogen_class(cls, mol_h):
-            # HARD: one spin group containing all N protons.
+    for tier, cls in classified:
+        if tier == "HARD":
             group_sizes.append(len(cls))
         else:
-            # SOFT (size > 1) or NONE (size == 1): each proton is its own group.
             group_sizes.extend([1] * len(cls))
 
     group_sizes.sort(reverse=True)
@@ -549,38 +695,42 @@ def classify_spin_groups(mol: Chem.Mol) -> tuple[Chem.Mol, list[SpinGroup]]:
     -------
     mol_h:
         The molecule with explicit H and a 3-D conformer (if embedding
-        succeeded), after exchangeable protons have been stripped.  Atom
-        indices of heavy atoms match the original *mol*.
+        succeeded).  Exchangeable protons are retained as structural context.
+        Heavy-atom indices match the original *mol*.
     groups:
         One :class:`SpinGroup` per spin group, in label order (A, B, C …).
         The group count equals ``analyze_spin_systems(mol)[0]``.
 
     Notes
     -----
-    Heavy-atom indices in *mol_h* are identical to those in the original
-    *mol* because :func:`embed_3d` appends H after all heavy atoms and
-    :func:`strip_exchangeable_protons` only removes H atoms.
+    Exchangeable protons (N-H, O-H, S-H) are kept in *mol_h* so that the
+    D-substitution test sees the full structural context.  They are excluded
+    from ``candidate_atoms`` so they are never classified as spin groups.
     """
     mol_h, use_3d = embed_3d(mol)
-    mol_h = strip_exchangeable_protons(mol_h)
 
-    # H atom idx → parent heavy atom idx (stable because H indices > heavy)
+    # Non-exchangeable C-H protons only; exchangeable H stay for context.
+    candidate_h = [
+        a.GetIdx() for a in mol_h.GetAtoms()
+        if a.GetAtomicNum() == 1
+        and a.GetNeighbors()[0].GetAtomicNum() not in _EXCHANGEABLE_PARENTS
+    ]
+
     h_to_heavy: dict[int, int] = {
-        atom.GetIdx(): atom.GetNeighbors()[0].GetIdx()
-        for atom in mol_h.GetAtoms()
-        if atom.GetAtomicNum() == 1
+        h: mol_h.GetAtomWithIdx(h).GetNeighbors()[0].GetIdx()
+        for h in candidate_h
     }
 
-    classes = equivalence_classes_by_substitution(
-        mol_h, use_3d=use_3d, merge_enantiotopic=True
+    classified = _classify_equivalence_classes(
+        mol_h, use_3d=use_3d, candidate_atoms=candidate_h,
     )
 
     groups: list[SpinGroup] = []
     label_idx = 0
 
-    for cls in classes:
+    for tier, cls in classified:
         class_tuple = tuple(cls)
-        if _is_rotationally_hard_hydrogen_class(cls, mol_h):
+        if tier == "HARD":
             heavies = tuple(sorted({h_to_heavy[h] for h in cls}))
             groups.append(SpinGroup(
                 label              = _index_to_excel_letters(label_idx),
@@ -591,7 +741,6 @@ def classify_spin_groups(mol: Chem.Mol) -> tuple[Chem.Mol, list[SpinGroup]]:
             ))
             label_idx += 1
         else:
-            tier = "SOFT" if len(cls) > 1 else "NONE"
             for h_idx in cls:
                 groups.append(SpinGroup(
                     label              = _index_to_excel_letters(label_idx),
