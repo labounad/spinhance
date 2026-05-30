@@ -38,7 +38,7 @@ spinhance/
 │   ├── benchmarks/          # benchmark_fields / _pyspin / _scaling
 │   ├── examples/            # sample spin systems (incl. reference_15group.xml = format ref)
 │   └── tests/               # 44 tests (xml_io, graph_io, mnova_runner, composite, cluster, fields)
-├── ml_model/            # Task 4 — deep learning model (teammate)
+├── model/            # Task 4 — deep learning model (teammate)
 ├── data/
 │   ├── raw/             # SMILES lists (gitignored if large)
 │   └── processed/       # XMLs, spectra
@@ -73,7 +73,7 @@ Screen SMILES from USPTO/PubChem, filter to exactly 8 hard-equivalent (chemicall
 ### Task 3 — SIMULATION (`simulation/`) ← LUCAS'S TASK
 Take the shift+J matrix, convert to MNova XML format, run MNova's quantum spin simulator at **90 MHz** (low-field, non-first-order) and **600 MHz** (high-field, reference). Output: 2¹⁴-point normalized intensity arrays as `.npy` files. See detailed status below.
 
-### Task 4 — ML MODEL (`ml_model/`)
+### Task 4 — ML MODEL (`model/`)
 Train a neural network: input = 16384-point normalized spectrum (90 MHz), output = 8×9 shift+J+degeneracy matrix. Key challenge: permutation invariance of spin-group labels (Hungarian matching loss).
 
 ---

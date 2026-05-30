@@ -1,5 +1,5 @@
 """
-ml_model.train
+model.train
 ==============
 Training loop for Task 4, wiring together the verified components:
 
@@ -20,7 +20,7 @@ Stage logic (curriculum blend):
 
 This module is torch and runs in your env (no torch in the prototyping sandbox);
 all numeric cores it calls are unit-tested in the test_*.py files. A tiny
-synthetic end-to-end smoke test is under ``python3 -m ml_model.train --smoke``.
+synthetic end-to-end smoke test is under ``python3 -m model.train --smoke``.
 """
 
 from __future__ import annotations
@@ -32,14 +32,14 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
-from ml_model import diff_renderer_torch as renderer
-from ml_model.dataset import (SpectrumMatrixDataset, BucketByDegeneracySampler,
+from model import diff_renderer_torch as renderer
+from model.dataset import (SpectrumMatrixDataset, BucketByDegeneracySampler,
                               collate_fn)
-from ml_model.losses import matrix_loss, spectral_loss
-from ml_model.metrics import compute_metrics
-from ml_model.model import SpinHanceModel
-from ml_model.schedules import curriculum_weights, lr_factor
-from ml_model.targets import DegeneracyVocab, Standardizer
+from model.losses import matrix_loss, spectral_loss
+from model.metrics import compute_metrics
+from model.model import SpinHanceModel
+from model.schedules import curriculum_weights, lr_factor
+from model.targets import DegeneracyVocab, Standardizer
 
 
 @dataclass
@@ -69,7 +69,7 @@ class TrainConfig:
     seed: int = 0
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
     amp_dtype: str = "bf16"          # bf16|fp16|none
-    ckpt_path: str = "ml_model/checkpoints/spinhance.pt"
+    ckpt_path: str = "model/checkpoints/spinhance.pt"
 
 
 # -----------------------------------------------------------------------------
@@ -270,7 +270,7 @@ def fit(records, assignment, cfg: TrainConfig):
 # -----------------------------------------------------------------------------
 
 def _smoke():
-    from ml_model.splits import make_splits
+    from model.splits import make_splits
     rng = np.random.default_rng(0)
     G, P = 8, 2048
     recs = []

@@ -1,8 +1,8 @@
 """
-ml_model.dataset
+model.dataset
 ================
 PyTorch Dataset + samplers for Task 4. Thin torch layer over the verified,
-torch-free transforms in ``ml_model.targets``.
+torch-free transforms in ``model.targets``.
 
   * SpectrumMatrixDataset   - one 90 MHz spectrum -> standardized target dict
   * BucketByDegeneracySampler - yields batches whose members share a degeneracy
@@ -13,7 +13,7 @@ torch-free transforms in ``ml_model.targets``.
                               and bucket key for the renderer.
 
 Verify in your env:
-    python3 -m ml_model.dataset      # runs a tiny smoke test on synthetic data
+    python3 -m model.dataset      # runs a tiny smoke test on synthetic data
 Cross-check encoding against the torch-free oracle: targets.encode_target(...).
 """
 
@@ -23,7 +23,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset, Sampler
 
-from ml_model.targets import (DegeneracyVocab, Standardizer, encode_target,
+from model.targets import (DegeneracyVocab, Standardizer, encode_target,
                               augment_spectrum, bucket_key)
 
 

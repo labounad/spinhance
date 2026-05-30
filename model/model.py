@@ -1,5 +1,5 @@
 """
-ml_model.model
+model.model
 ==============
 ResNet-1D encoder + four typed heads (Decision 1 & 2).
 

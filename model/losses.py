@@ -1,5 +1,5 @@
 """
-ml_model.losses
+model.losses
 ===============
 Stage-1 matrix loss and Stage-2 spectral-consistency loss (Decisions 4, 6, 7).
 
@@ -15,7 +15,7 @@ the differentiable renderer (diff_renderer_torch) at 90 (+optional 600) MHz, and
 compare to the reference spectrum with a 1-D Wasserstein distance (+ optional MSE
 lineshape term). Permutation-invariant by construction.
 
-The torch-free schedules live in ml_model.schedules.
+The torch-free schedules live in model.schedules.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from __future__ import annotations
 import torch
 import torch.nn.functional as F
 
-from ml_model.schedules import curriculum_weights  # re-export convenience
+from model.schedules import curriculum_weights  # re-export convenience
 
 __all__ = ["matrix_loss", "wasserstein1", "spectral_loss", "curriculum_weights"]
 
@@ -85,7 +85,7 @@ def spectral_loss(pred_phys, ref_spectra, degeneracy, field_mhz, renderer,
     pred_phys   : dict with physical 'shifts' (B,G) ppm and 'couplings' (B,G,G) Hz
     ref_spectra : (B, points) reference spectra at field_mhz (unit integral)
     degeneracy  : (B, G) int (shared within a bucket -> pass struct once)
-    renderer    : ml_model.diff_renderer_torch module (or .simulate callable)
+    renderer    : model.diff_renderer_torch module (or .simulate callable)
     Returns (loss, per_sample_w1).
     """
     B = ref_spectra.shape[0]

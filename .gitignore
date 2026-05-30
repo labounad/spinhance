@@ -30,8 +30,8 @@ outputs/
 simulation/mnova_outputs/
 
 # ML checkpoints
-ml_model/checkpoints/
-ml_model/runs/
+model/checkpoints/
+model/runs/
 *.pt
 *.pth
 *.ckpt
@@ -47,3 +47,6 @@ Thumbs.db
 
 # pyspin validation overlay artifacts
 simulation/examples/*.cmp_*.png
+
+# Generated spectra dataset (large binaries; regenerate from spin_systems.json)
+simulation/data/spectra/

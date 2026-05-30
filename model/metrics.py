@@ -1,5 +1,5 @@
 """
-ml_model.metrics
+model.metrics
 ================
 Torch-free decode + evaluation metrics (kept numpy so they're unit-tested and
 shared as the eval oracle). The train loop passes detached predictions as numpy.

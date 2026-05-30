@@ -1,11 +1,11 @@
 """Verify torch-free training infrastructure: schedules + decode/metrics.
 
-Run: PYTHONPATH=<repo root> python3 ml_model/test_train_infra.py
+Run: PYTHONPATH=<repo root> python3 model/test_train_infra.py
 """
 import numpy as np
-from ml_model import schedules as SCH
-from ml_model import metrics as M
-from ml_model import targets as T
+from model import schedules as SCH
+from model import metrics as M
+from model import targets as T
 
 rng = np.random.default_rng(3)
 G = 8

@@ -1,5 +1,5 @@
 """
-ml_model.diff_renderer_ref
+model.diff_renderer_ref
 ==========================
 NumPy REFERENCE differentiable 1H renderer + analytic gradients.
 
@@ -14,7 +14,7 @@ coupling parameters, using the SAME eigendecomposition VJP that
 degeneracies produced by equivalent-spin expansion.
 
 It exists for two jobs:
-  1. A correctness oracle: ``ml_model.diff_renderer_torch`` must match this
+  1. A correctness oracle: ``model.diff_renderer_torch`` must match this
      (forward AND gradient) to within float tolerance.
   2. A standalone, torch-free way to gradient-check the whole pipeline against
      finite differences (see tests/test_diff_renderer.py).

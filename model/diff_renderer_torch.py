@@ -1,9 +1,9 @@
 """
-ml_model.diff_renderer_torch
+model.diff_renderer_torch
 ============================
 PyTorch differentiable 1H renderer for the Stage-2 spectral loss.
 
-This is the production twin of ``ml_model.diff_renderer_ref`` (numpy oracle).
+This is the production twin of ``model.diff_renderer_ref`` (numpy oracle).
 It produces a normalized spectrum from per-group (shifts, couplings, degeneracy)
 and is differentiable w.r.t. shifts (ppm) and couplings (Hz), so a spectral loss
 (e.g. Wasserstein/MSE at 90 and/or 600 MHz) can backprop into the model.
@@ -13,7 +13,7 @@ that replaces torch.linalg.eigh's backward with the Lorentzian-regularized VJP
 
     F_ij = (E_j - E_i) / ((E_j - E_i)^2 + eps^2)        # vs naive 1/(E_j - E_i)
 
-The de-risking spike (ml_model/diff_renderer_ref + eigh_grad_spike) showed this
+The de-risking spike (model/diff_renderer_ref + eigh_grad_spike) showed this
 is required for the exact eigenvalue degeneracies that equivalent-spin systems
 produce; the naive backward gives 1/0 -> NaN there. eps ~ linewidth (~1 Hz) is
 insensitive over orders of magnitude and leaves well-separated systems untouched.
@@ -31,7 +31,7 @@ part the spike de-risked.
 
 VERIFY IN YOUR ENV
 ------------------
-    python3 -m ml_model.diff_renderer_torch     # runs torch.autograd.gradcheck
+    python3 -m model.diff_renderer_torch     # runs torch.autograd.gradcheck
 and cross-check forward/gradient against the numpy oracle:
     diff_renderer_ref.loss_and_grad(...)  ==  this (to float tol).
 """

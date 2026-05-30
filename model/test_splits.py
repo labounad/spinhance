@@ -1,11 +1,11 @@
-"""Verify ml_model.splits without RDKit (precomputed 'scaffold' fields).
+"""Verify model.splits without RDKit (precomputed 'scaffold' fields).
 
-Run: PYTHONPATH=<repo root> python3 ml_model/test_splits.py
+Run: PYTHONPATH=<repo root> python3 model/test_splits.py
 Checks: canonical ordering, no scaffold/near-dup leakage across folds,
 target ratios, and stratification balance.
 """
 import numpy as np
-from ml_model import splits as S
+from model import splits as S
 
 rng = np.random.default_rng(42)
 G = 8

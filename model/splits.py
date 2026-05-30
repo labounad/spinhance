@@ -1,9 +1,9 @@
 """
-ml_model.splits
+model.splits
 ===============
 Molecule-level 70/20/10 train/val/test splitter for Task 4 (Decision 8).
 
-Guarantees / design (see ml_model/DESIGN.md §8):
+Guarantees / design (see model/DESIGN.md §8):
   * Folds are assigned at the MOLECULE level, so every spectrum derived from a
     molecule (90 + 600 MHz + augmentations) lands in the same fold. No 90/600
     leakage.

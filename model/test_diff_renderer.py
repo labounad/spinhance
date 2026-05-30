@@ -1,10 +1,10 @@
 """Verify the numpy reference renderer: forward vs pyspin, gradient vs FD.
 
-Run:  PYTHONPATH=<repo root> python3 ml_model/test_diff_renderer.py
+Run:  PYTHONPATH=<repo root> python3 model/test_diff_renderer.py
 (torch-free; this is the oracle that the torch renderer must match.)
 """
 import numpy as np
-from ml_model import diff_renderer_ref as R
+from model import diff_renderer_ref as R
 from simulation.pyspin.composite import simulate_spectrum_composite
 
 FIELD = 90.0

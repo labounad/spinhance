@@ -1,9 +1,9 @@
 """
-ml_model.targets
+model.targets
 =================
 Torch-free target encoding/decoding, standardization, and spectrum augmentation
 for Task 4. Kept torch-free so it can be unit-tested without torch and shared by
-the torch Dataset in ``ml_model.dataset``.
+the torch Dataset in ``model.dataset``.
 
 Target layout (per molecule, G groups, canonical-ordered — Decision 3):
   shifts      (G,)              ppm                 -> regression (standardized)
@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from ml_model.splits import canonical_order, reorder
+from model.splits import canonical_order, reorder
 
 __all__ = ["DegeneracyVocab", "encode_target", "Standardizer",
            "augment_spectrum", "bucket_key", "DEFAULT_DEG_VOCAB"]

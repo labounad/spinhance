@@ -17,7 +17,7 @@ spinhance/
 ├── generate/          # Task 1 — molecule generation & SMILES filtering
 ├── mol_to_matrix/     # Task 2 — 3D embedding + heuristic J/shift matrix
 ├── simulation/        # Task 3 — spin simulation (MNova + pure-Python engines)
-├── ml_model/          # Task 4 — deep learning model (spectrum → matrix)
+├── model/          # Task 4 — deep learning model (spectrum → matrix)
 ├── data/
 │   ├── raw/           # SMILES lists, raw SDF files (gitignored if large)
 │   └── processed/     # shift+J matrices, simulated spectra
@@ -123,7 +123,7 @@ and one-time MNova setup.
 
 ---
 
-### Task 4 — ML MODEL (`ml_model/`)
+### Task 4 — ML MODEL (`model/`)
 **Train a neural network: normalized spectrum → shift+J+degeneracy matrix.**
 
 #### Subtasks
@@ -163,7 +163,7 @@ See `environment.yml` for the full dependency list.
 | 1 — Generate | `generate/` | Sam |
 | 2 — Mol → Matrix | `mol_to_matrix/` | Yiming |
 | 3 — Simulation | `simulation/` | Lucas |
-| 4 — ML Model | `ml_model/` | TBD |
+| 4 — ML Model | `model/` | TBD |
 
 Update this table once responsibilities are assigned.
 
@@ -184,7 +184,7 @@ USPTO / PubChem / ChEMBL SMILES
   [simulation/]    ──→  spectra/{90MHz,600MHz}/mol_<i>.npy  +  index.csv
         │
         ▼
-  [ml_model/]      ──→  trained model  ──→  predicted matrix from spectrum
+  [model/]      ──→  trained model  ──→  predicted matrix from spectrum
 ```
 
 ---

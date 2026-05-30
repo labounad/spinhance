@@ -1,10 +1,10 @@
-"""Verify ml_model.targets (torch-free).
+"""Verify model.targets (torch-free).
 
-Run: PYTHONPATH=<repo root> python3 ml_model/test_targets.py
+Run: PYTHONPATH=<repo root> python3 model/test_targets.py
 """
 import numpy as np
-from ml_model import targets as T
-from ml_model.splits import canonical_order, reorder
+from model import targets as T
+from model.splits import canonical_order, reorder
 
 rng = np.random.default_rng(7)
 G = 8

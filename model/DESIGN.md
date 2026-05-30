@@ -167,15 +167,15 @@ Build order from DESIGN; ✅ = built, 🔬 = numeric core verified in numpy here
 | File | Role | Status |
 |---|---|---|
 | `diff_renderer_ref.py` / `test_diff_renderer.py` | numpy renderer oracle | ✅ 🔬 (fwd corr 0.9999 vs pyspin, grad ~1e-6 vs FD) |
-| `diff_renderer_torch.py` | torch renderer + `RegularizedEigh` | ✅ ⏳ (`-m ml_model.diff_renderer_torch` = gradcheck) |
+| `diff_renderer_torch.py` | torch renderer + `RegularizedEigh` | ✅ ⏳ (`-m model.diff_renderer_torch` = gradcheck) |
 | `splits.py` / `test_splits.py` | scaffold split + matrix dedup (Dec 8) | ✅ 🔬 (zero leakage, ratios ~0.69/0.21/0.10) |
 | `targets.py` / `test_targets.py` | target encode/standardize/augment (Dec 3,4) | ✅ 🔬 |
-| `dataset.py` | torch Dataset + bucketed sampler (Dec 7) | ✅ ⏳ (`-m ml_model.dataset` smoke) |
-| `model.py` | ResNet-1D + 4 heads (Dec 1,2) | ✅ ⏳ (`-m ml_model.model` shape check) |
+| `dataset.py` | torch Dataset + bucketed sampler (Dec 7) | ✅ ⏳ (`-m model.dataset` smoke) |
+| `model.py` | ResNet-1D + 4 heads (Dec 1,2) | ✅ ⏳ (`-m model.model` shape check) |
 | `schedules.py` | curriculum + LR (Dec 7) | ✅ 🔬 |
 | `losses.py` | matrix + spectral loss (Dec 4,6) | ✅ ⏳ (W1/curriculum cores 🔬) |
 | `metrics.py` / `test_train_infra.py` | decode + eval metrics | ✅ 🔬 |
-| `train.py` | config + loop + stage handoff | ✅ ⏳ (`-m ml_model.train --smoke`) |
+| `train.py` | config + loop + stage handoff | ✅ ⏳ (`-m model.train --smoke`) |
 
 **To train when data is ready:** build `records` (mol_id, shifts, couplings,
 degeneracy, smiles/scaffold, and a `spec90` array or `spec90_path`), then

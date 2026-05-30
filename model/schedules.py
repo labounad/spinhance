@@ -1,5 +1,5 @@
 """
-ml_model.schedules
+model.schedules
 ===================
 Torch-free schedules (so they can be unit-tested without torch):
   * curriculum_weights  - Stage-1 -> Stage-2 loss blend (Decision 7)
