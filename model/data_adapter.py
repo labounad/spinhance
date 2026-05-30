@@ -39,6 +39,9 @@ __all__ = ["load_records", "renderable_mask"]
 def load_records(spin_systems_json, spectra_root, fields=(90, 600),
                  require_spectra=True):
     spectra_root = Path(spectra_root)
+    # Check tar existence once per field — avoids 2×N stat() calls in the loop
+    _tar_exists = {f: (spectra_root / f"{int(f)}MHz" / "mol_all.tar.gz").exists()
+                   for f in fields}
     records = []
     missing = []
     for idx, rec in read_spin_systems(spin_systems_json):
@@ -58,8 +61,7 @@ def load_records(spin_systems_json, spectra_root, fields=(90, 600),
         for f in fields:
             p = spectra_root / f"{int(f)}MHz" / f"{stem}.npy"
             d[f"spec{int(f)}_path"] = str(p)
-            tar = spectra_root / f"{int(f)}MHz" / "mol_all.tar.gz"
-            if require_spectra and not p.exists() and not tar.exists():
+            if require_spectra and not _tar_exists[f] and not p.exists():
                 ok = False
         if ok:
             records.append(d)

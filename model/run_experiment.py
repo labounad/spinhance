@@ -98,7 +98,8 @@ def full_run(args):
         ramp_epochs=args.ramp_epochs, render_subset_frac=args.render_frac,
         weight_decay=args.weight_decay, patience=args.patience, seed=args.seed,
         device=args.device, amp_dtype=args.amp, ckpt_path=args.ckpt,
-        s3_ckpt_prefix=args.s3_ckpt_prefix)
+        s3_ckpt_prefix=args.s3_ckpt_prefix, num_workers=args.workers,
+        val_every=args.val_every)
     print(f"config: {cfg}")
     npar = sum(p.numel() for p in model.parameters())
     print(f"model params: {npar/1e6:.2f}M | device {cfg.device} | "
@@ -131,6 +132,8 @@ def build_parser():
     p.add_argument("--amp", default="bf16", choices=["bf16", "fp16", "none"])
     p.add_argument("--ckpt", default="model/checkpoints/spinhance.pt")
     p.add_argument("--s3-ckpt-prefix", default="", help="S3 prefix for per-epoch checkpoints, e.g. s3://bucket/training/session001")
+    p.add_argument("--workers", type=int, default=-1, help="DataLoader num_workers (-1 = auto)")
+    p.add_argument("--val-every", type=int, default=1, help="validate every N epochs")
     p.add_argument("--seed", type=int, default=0)
     return p
 

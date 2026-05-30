@@ -26,6 +26,10 @@ synthetic end-to-end smoke test is under ``python3 -m model.train --smoke``.
 from __future__ import annotations
 
 import argparse
+import os
+import queue as _queue
+import subprocess
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -35,7 +39,7 @@ from torch.utils.data import DataLoader
 
 from model import diff_renderer_torch as renderer
 from model.dataset import (SpectrumMatrixDataset, BucketByDegeneracySampler,
-                              collate_fn)
+                              collate_fn, worker_init_fn)
 from model.losses import matrix_loss, spectral_loss
 from model.metrics import compute_metrics
 from model.model import SpinHanceModel
@@ -72,6 +76,8 @@ class TrainConfig:
     amp_dtype: str = "bf16"          # bf16|fp16|none
     ckpt_path: str = "model/checkpoints/spinhance.pt"
     s3_ckpt_prefix: str = ""         # if set, upload epoch_NNN.pt to S3 after each epoch
+    num_workers: int = -1            # DataLoader workers; -1 = auto (os.cpu_count())
+    val_every: int = 1               # validate every N epochs (>1 reduces CPU blocking)
 
 
 # -----------------------------------------------------------------------------
@@ -156,11 +162,10 @@ def train_epoch(model, loader, opt, sched, scaler, cfg, std, epoch, device,
     w_mat, w_spec = curriculum_weights(epoch, cfg.stage1_epochs, cfg.ramp_epochs,
                                        cfg.spectral_max, cfg.matrix_anchor)
     running = {}
-    for batch in loader:
-        batch = _to_device(batch, device)
+    for batch in _Prefetcher(loader, device):
         opt.zero_grad(set_to_none=True)
         with amp_ctx():
-            pred = model(batch["spectrum"])
+            pred = model(batch["spectrum"])  # batch already on device via prefetcher
             mloss, comps = matrix_loss(pred, batch, weights=cfg.loss_weights,
                                        deg_class_weight=bal.get("deg_weights"),
                                        presence_pos_weight=bal.get("presence_pos_weight"))
@@ -192,8 +197,7 @@ def evaluate(model, loader, cfg, std, vocab, device, amp_ctx, balance=None):
     model.eval()
     bal = balance or {}
     agg, nb = {}, 0
-    for batch in loader:
-        batch = _to_device(batch, device)
+    for batch in _Prefetcher(loader, device):
         with amp_ctx():
             pred = model(batch["spectrum"])
             mloss, _ = matrix_loss(pred, batch, weights=cfg.loss_weights,
@@ -208,6 +212,75 @@ def evaluate(model, loader, cfg, std, vocab, device, amp_ctx, balance=None):
             agg[k] = agg.get(k, 0.0) + v
         nb += 1
     return {k: v / max(1, nb) for k, v in agg.items()}
+
+
+# -----------------------------------------------------------------------------
+# CUDA-stream prefetcher — overlaps host→device transfer with GPU compute
+# -----------------------------------------------------------------------------
+
+class _Prefetcher:
+    """Wraps a DataLoader and pre-transfers the next batch to the GPU while
+    the current batch is being processed, using a dedicated CUDA stream."""
+
+    def __init__(self, loader, device):
+        self._n      = len(loader)
+        self._loader = iter(loader)
+        self._device = device
+        self._stream = torch.cuda.Stream() if device != "cpu" else None
+        self._next   = None
+        self._preload()
+
+    def _preload(self):
+        try:
+            batch = next(self._loader)
+        except StopIteration:
+            self._next = None
+            return
+        if self._stream is not None:
+            with torch.cuda.stream(self._stream):
+                batch = {k: v.to(self._device, non_blocking=True)
+                         if torch.is_tensor(v) else v
+                         for k, v in batch.items()}
+        self._next = batch
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self._stream is not None:
+            torch.cuda.current_stream().wait_stream(self._stream)
+        batch = self._next
+        if batch is None:
+            raise StopIteration
+        self._preload()
+        return batch
+
+    def __len__(self):
+        return self._n
+
+
+# -----------------------------------------------------------------------------
+# Background checkpoint worker
+# -----------------------------------------------------------------------------
+
+def _do_checkpoint(ckpt, epoch_path, s3_dest, best_path):
+    torch.save(ckpt, epoch_path)
+    if s3_dest:
+        r = subprocess.run(["aws", "s3", "cp", epoch_path, s3_dest],
+                           capture_output=True)
+        if r.returncode == 0:
+            os.remove(epoch_path)
+    if best_path:
+        torch.save(ckpt, best_path)
+
+
+def _ckpt_worker(q: "_queue.Queue"):
+    """Persistent checkpoint thread — drains a queue; None item signals exit."""
+    while True:
+        item = q.get()
+        if item is None:
+            return
+        _do_checkpoint(*item)
 
 
 # -----------------------------------------------------------------------------
@@ -228,14 +301,17 @@ def fit(records, assignment, cfg: TrainConfig, model=None):
     device = cfg.device
     ds, std, vocab = build_datasets(records, assignment, cfg)
 
+    pin = (device != "cpu")
+    nw  = cfg.num_workers if cfg.num_workers >= 0 else os.cpu_count() or 4
+    dl_kw = dict(collate_fn=collate_fn, num_workers=nw, pin_memory=pin,
+                 persistent_workers=nw > 0, worker_init_fn=worker_init_fn)
     plain = DataLoader(ds["train"], batch_size=cfg.batch_size, shuffle=True,
-                       collate_fn=collate_fn, drop_last=True)
+                       drop_last=True, **dl_kw)
     bucket_samp = BucketByDegeneracySampler(ds["train"].bucket_keys,
                                             cfg.batch_size, seed=cfg.seed)
-    bucketed = DataLoader(ds["train"], batch_sampler=bucket_samp,
-                          collate_fn=collate_fn)
-    val_dl = DataLoader(ds["val"], batch_size=cfg.batch_size, shuffle=False,
-                        collate_fn=collate_fn)
+    bucketed = DataLoader(ds["train"], batch_sampler=bucket_samp, **dl_kw)
+    val_dl   = DataLoader(ds["val"],   batch_size=cfg.batch_size,
+                          shuffle=False, **dl_kw)
 
     model = (model or SpinHanceModel(n_groups=8, n_deg_classes=len(vocab))).to(device)
 
@@ -265,47 +341,60 @@ def fit(records, assignment, cfg: TrainConfig, model=None):
     # (or when no Stage 2 is planned at all).
     will_run_stage2 = cfg.stage1_epochs < cfg.epochs
     best, bad = float("inf"), 0
+    va = {}
+    os.makedirs(os.path.dirname(cfg.ckpt_path) or ".", exist_ok=True)
+    # Single persistent checkpoint thread driven by a bounded queue (maxsize=1).
+    # Training blocks only if the previous checkpoint hasn't finished — equivalent
+    # to join() but with zero thread-creation overhead per epoch.
+    ckpt_q = _queue.Queue(maxsize=1)
+    ckpt_thread = threading.Thread(target=_ckpt_worker, args=(ckpt_q,), daemon=True)
+    ckpt_thread.start()
+
     for epoch in range(cfg.epochs):
         if epoch == cfg.stage1_epochs and will_run_stage2:
-            bad = 0     # fresh patience window for Stage 2 (objective changed)
+            bad = 0
         loader = plain if epoch < cfg.stage1_epochs else bucketed
         tr = train_epoch(model, loader, opt, sched, scaler, cfg, std, epoch,
                          device, amp_ctx, balance=balance)
-        va = evaluate(model, val_dl, cfg, std, vocab, device, amp_ctx, balance=balance)
+
+        # Validate every val_every epochs (skip intermediate to reduce CPU blocking)
+        do_val = (epoch % cfg.val_every == 0) or (epoch == cfg.epochs - 1)
+        if do_val:
+            va = evaluate(model, val_dl, cfg, std, vocab, device, amp_ctx, balance=balance)
+
         print(f"epoch {epoch:3d} | stage {'1' if epoch < cfg.stage1_epochs else '2'} "
-              f"| w_spec {tr['w_spec']:.2f} | train_total {tr['total']:.4f} "
-              f"| val shift_mae {va['shift_mae_ppm']:.3f}ppm "
-              f"J_mae {va['j_mae_hz']:.2f}Hz pres_f1 {va['presence_f1']:.3f} "
-              f"deg_acc {va['deg_acc']:.3f} deg_bal {va['deg_acc_balanced']:.3f}")
-        score = va["shift_mae_ppm"] + va["j_mae_hz"] / 10.0   # simple early-stop score
+              f"| w_spec {tr['w_spec']:.2f} | train {tr['total']:.4f}"
+              + (f" | val shift {va['shift_mae_ppm']:.3f}ppm "
+                 f"J {va['j_mae_hz']:.2f}Hz f1 {va['presence_f1']:.3f} "
+                 f"deg {va['deg_acc_balanced']:.3f}" if do_val else " | val skipped"))
+
+        score = (va.get("shift_mae_ppm", float("inf")) +
+                 va.get("j_mae_hz", float("inf")) / 10.0)
         earlystop_active = (epoch >= cfg.stage1_epochs) or (not will_run_stage2)
+        is_best = do_val and score < best
 
-        import os
-        os.makedirs(os.path.dirname(cfg.ckpt_path) or ".", exist_ok=True)
-        ckpt = {"model": model.state_dict(), "standardizer": vars(std),
-                "cfg": vars(cfg), "epoch": epoch, "metrics": va}
-
-        # Per-epoch checkpoint → S3
-        epoch_path = str(Path(cfg.ckpt_path).parent / f"epoch_{epoch:03d}.pt")
-        torch.save(ckpt, epoch_path)
-        if cfg.s3_ckpt_prefix:
-            import subprocess
-            r = subprocess.run(
-                ["aws", "s3", "cp", epoch_path,
-                 f"{cfg.s3_ckpt_prefix}/epoch_{epoch:03d}.pt"],
-                capture_output=True)
-            if r.returncode == 0:
-                os.remove(epoch_path)
-                print(f"  → uploaded epoch_{epoch:03d}.pt to S3")
-
-        if score < best:
+        if is_best:
             best, bad = score, 0
-            torch.save(ckpt, cfg.ckpt_path)  # keep best.pt locally
-        elif earlystop_active:
+        elif do_val and earlystop_active:
             bad += 1
             if bad >= cfg.patience:
                 print(f"early stop at epoch {epoch}")
                 break
+
+        # Clone state to CPU — background thread gets independent tensors with no
+        # risk of racing against the next forward pass on the GPU.
+        ckpt = {
+            "model": {k: v.cpu() for k, v in model.state_dict().items()},
+            "standardizer": vars(std), "cfg": vars(cfg),
+            "epoch": epoch, "metrics": va,
+        }
+        epoch_path = str(Path(cfg.ckpt_path).parent / f"epoch_{epoch:03d}.pt")
+        s3_dest    = f"{cfg.s3_ckpt_prefix}/epoch_{epoch:03d}.pt" if cfg.s3_ckpt_prefix else ""
+        # put() blocks only if the worker is still saving the previous checkpoint
+        ckpt_q.put((ckpt, epoch_path, s3_dest, cfg.ckpt_path if is_best else ""))
+
+    ckpt_q.put(None)   # signal worker to exit
+    ckpt_thread.join()
     return model, std, vocab
 
 

@@ -50,8 +50,10 @@ class DegeneracyVocab:
         return np.array(out, dtype=np.int64)
 
     def from_index(self, idx):
-        return np.array([self.vocab[int(i)] for i in np.asarray(idx).ravel()],
-                        dtype=np.int64)
+        idx = np.asarray(idx)
+        shape = idx.shape
+        flat = np.array(self.vocab, dtype=np.int64)[idx.ravel()]
+        return flat.reshape(shape)
 
 
 # -----------------------------------------------------------------------------
@@ -59,8 +61,9 @@ class DegeneracyVocab:
 # -----------------------------------------------------------------------------
 
 def encode_target(shifts, couplings, degeneracy, vocab: DegeneracyVocab,
-                  j_zero_tol=1e-6):
-    order = canonical_order(shifts, couplings, degeneracy)
+                  j_zero_tol=1e-6, order=None):
+    if order is None:
+        order = canonical_order(shifts, couplings, degeneracy)
     s, c, d = reorder(shifts, couplings, degeneracy, order)
     G = len(s)
     iu = np.triu_indices(G, 1)
@@ -169,10 +172,11 @@ def augment_spectrum(spec, ppm_from=0.0, ppm_to=12.0, rng=None,
 # Bucket key for structure-sharing in the Stage-2 renderer
 # -----------------------------------------------------------------------------
 
-def bucket_key(shifts, couplings, degeneracy):
+def bucket_key(shifts, couplings, degeneracy, order=None):
     """Canonical-ordered degeneracy vector -> the renderer ``struct`` is shared
     across all samples with the same key (same Hilbert space + operators)."""
-    order = canonical_order(shifts, couplings, degeneracy)
+    if order is None:
+        order = canonical_order(shifts, couplings, degeneracy)
     _, _, d = reorder(shifts, couplings, degeneracy, order)
     return tuple(int(x) for x in d)
 

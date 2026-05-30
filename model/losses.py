@@ -94,16 +94,11 @@ def spectral_loss(pred_phys, ref_spectra, degeneracy, field_mhz, renderer,
     """
     B = ref_spectra.shape[0]
     dx = (ppm_to - ppm_from) / points
-    sims = []
-    for i in range(B):
-        deg_i = [int(x) for x in degeneracy[i].tolist()]
-        _, spec = renderer.simulate(
-            pred_phys["shifts"][i], pred_phys["couplings"][i], deg_i, field_mhz,
-            points=points, ppm_from=ppm_from, ppm_to=ppm_to,
-            linewidth_hz=linewidth_hz, eigh_eps=eigh_eps,
-            struct=struct if struct is not None else None)
-        sims.append(spec)
-    sim = torch.stack(sims)                          # (B, points)
+    sim = renderer.simulate_batch(
+        pred_phys["shifts"], pred_phys["couplings"], degeneracy, field_mhz,
+        points=points, ppm_from=ppm_from, ppm_to=ppm_to,
+        linewidth_hz=linewidth_hz, eigh_eps=eigh_eps,
+        struct=struct)                               # (B, points)
     w1 = wasserstein1(sim, ref_spectra, dx=dx)
     loss = w1.mean()
     if lineshape_weight > 0:

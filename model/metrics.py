@@ -16,6 +16,9 @@ import numpy as np
 
 __all__ = ["decode", "compute_metrics", "wasserstein1_np"]
 
+# Cache triu_indices per G value — avoids recomputation on every validation batch
+_TRIU_CACHE: dict[int, tuple] = {}
+
 
 def _sigmoid(x):
     return 1.0 / (1.0 + np.exp(-np.asarray(x, float)))
@@ -58,8 +61,10 @@ def compute_metrics(pred, target, standardizer, vocab, presence_thresh=0.5):
 
     shift_mae = float(np.abs(dec["shifts"] - tgt_shifts).mean())
 
-    # J MAE over TRUE-present couplings (upper triangle)
-    iu = np.triu_indices(G, 1)
+    # J MAE over TRUE-present couplings — reuse cached triu indices for this G
+    if G not in _TRIU_CACHE:
+        _TRIU_CACHE[G] = np.triu_indices(G, 1)
+    iu = _TRIU_CACHE[G]
     pred_jmag_ut = dec["couplings"][:, iu[0], iu[1]]
     m = tgt_present
     j_mae = float(np.abs(pred_jmag_ut[m] - tgt_jmag[m]).mean()) if m.any() else 0.0
@@ -74,11 +79,8 @@ def compute_metrics(pred, target, standardizer, vocab, presence_thresh=0.5):
     f1 = 2 * prec * rec / max(prec + rec, 1e-9)
     pres_acc = float((pp == tgt_present).mean())
 
-    # degeneracy accuracy (raw + BALANCED = mean per-class recall).
-    # Raw acc is misleading under heavy imbalance (~89% d=1): a model that always
-    # predicts 1 scores ~0.89. Balanced acc exposes that collapse (would be ~1/#classes).
-    tgt_deg = np.stack([vocab.from_index(target["deg_class"][b])
-                        for b in range(target["deg_class"].shape[0])])
+    # degeneracy accuracy — vectorized vocab lookup over full (B, G) array at once
+    tgt_deg = vocab.from_index(target["deg_class"])   # (B, G)
     pred_deg = dec["degeneracy"]
     deg_acc = float((pred_deg == tgt_deg).mean())
     recalls = []

@@ -94,7 +94,7 @@ def _to(t, arr, device, dtype):
 
 
 def _assemble_H(blk, nu_active, Jpairs, device, dtype):
-    """Block Hamiltonian as a differentiable torch tensor."""
+    """Block Hamiltonian as a differentiable torch tensor. Single-sample."""
     n = blk["n"]
     Mb = _to(None, blk["Mb"], device, dtype)
     ising = _to(None, blk["ising"], device, dtype)
@@ -109,6 +109,29 @@ def _assemble_H(blk, nu_active, Jpairs, device, dtype):
         amps = _to(None, blk["amps"], device, dtype)
         vals = Jpairs[pidx] * amps
         H = H.index_put((rows, cols), vals, accumulate=True)
+    return 0.5 * (H + H.transpose(-2, -1))
+
+
+def _assemble_H_batch(blk, nu_active, Jpairs, device, dtype):
+    """Batched block Hamiltonian: nu_active (B, A), Jpairs (B, P) -> (B, n, n)."""
+    n = blk["n"]
+    Mb    = _to(None, blk["Mb"],    device, dtype)   # (n, A)
+    ising = _to(None, blk["ising"], device, dtype)   # (n, P)
+    diag  = nu_active @ Mb.T                         # (B, n)
+    if ising.shape[1] and Jpairs.shape[1] > 0:
+        diag = diag + Jpairs @ ising.T               # (B, n)
+    H = torch.diag_embed(diag)                       # (B, n, n)
+    if len(blk["rows"]):
+        rows = torch.as_tensor(blk["rows"], device=device)   # (Q,)
+        cols = torch.as_tensor(blk["cols"], device=device)   # (Q,)
+        pidx = torch.as_tensor(blk["pidx"], device=device)   # (Q,)
+        amps = _to(None, blk["amps"], device, dtype)          # (Q,)
+        vals = Jpairs[:, pidx] * amps                         # (B, Q)
+        # Scatter into flattened (B, n*n) then reshape — differentiable via index_add
+        flat  = H.reshape(H.shape[0], n * n)
+        fidx  = (rows * n + cols).unsqueeze(0).expand(vals.shape[0], -1)  # (B, Q)
+        flat  = flat.scatter_add(1, fidx, vals)
+        H     = flat.reshape(H.shape[0], n, n)
     return 0.5 * (H + H.transpose(-2, -1))
 
 
@@ -151,6 +174,85 @@ def simulate(shifts, couplings, degeneracy, field_mhz, points=16384,
                         device, dtype)
     area = spec.sum() * dx
     return grid, spec / area
+
+
+def _broaden_fft_batch(centers, amps, points, ppm_from, ppm_to, dx, hwhm, device, dtype):
+    """Batched FFT broadening: centers (B, K), amps (B, K) -> (B, points).
+    Fully vectorized — no Python loop over batch items."""
+    B = centers.shape[0]
+    pos   = (centers - ppm_from) / dx                             # (B, K)
+    valid = (pos >= 0) & (pos <= points - 1) & (amps.detach() > 0)  # (B, K) bool mask
+
+    # Flat indices into (B * (points+1)) for scatter_add
+    b_idx  = torch.arange(B, device=device).unsqueeze(1).expand_as(pos)  # (B, K)
+    pos_v  = pos[valid];   amp_v = amps[valid];   b_v = b_idx[valid]
+    i0     = torch.floor(pos_v).long()
+    frac   = pos_v - i0.to(dtype)
+    gi0    = b_v * (points + 1) + i0
+    gi1    = gi0 + 1
+
+    stick_flat = torch.zeros(B * (points + 1), device=device, dtype=dtype)
+    stick_flat = stick_flat.index_add(0, gi0, amp_v * (1 - frac))
+    stick_flat = stick_flat.index_add(0, gi1, amp_v * frac)
+    stick = stick_flat.reshape(B, points + 1)[:, :points]          # (B, points)
+
+    x        = (torch.arange(points, device=device, dtype=dtype) - points // 2) * dx
+    kern     = torch.fft.ifftshift(1.0 / (1.0 + (x / hwhm) ** 2))
+    kern_fft = torch.fft.rfft(kern)                                # shared kernel
+    return torch.fft.irfft(torch.fft.rfft(stick) * kern_fft, n=points)  # (B, points)
+
+
+def simulate_batch(shifts, couplings, degeneracy, field_mhz, points=16384,
+                   ppm_from=0.0, ppm_to=12.0, linewidth_hz=1.0,
+                   eigh_eps=DEFAULT_EIGH_EPS, struct=None):
+    """Batched simulate: shifts (B, G), couplings (B, G, G) -> (B, points).
+    All samples must share the same degeneracy pattern (single-bucket assumption).
+    Replaces B serial calls to simulate() with one batched eigh + FFT."""
+    device, dtype = shifts.device, shifts.dtype
+    B = shifts.shape[0]
+    if struct is None:
+        deg_list = [int(x) for x in degeneracy[0].tolist()]
+        struct = _structure(deg_list, device, dtype)
+
+    nu = shifts * field_mhz                                        # (B, G) Hz
+    all_freqs, all_amps = [], []
+
+    for (S_list, weight, sb) in struct["combos"]:
+        active = torch.as_tensor(sb["active"], device=device)
+        nu_active = nu[:, active]                                  # (B, A)
+        if sb["pairs"]:
+            gi = torch.as_tensor([g for (g, h) in sb["pair_groups"]], device=device)
+            hi = torch.as_tensor([h for (g, h) in sb["pair_groups"]], device=device)
+            Jpairs = couplings[:, gi, hi]                          # (B, P)
+        else:
+            Jpairs = torch.zeros(B, 0, device=device, dtype=dtype)
+
+        E, V = {}, {}
+        for mz, blk in sb["blocks"].items():
+            H = _assemble_H_batch(blk, nu_active, Jpairs, device, dtype)  # (B, n, n)
+            e, v = regularized_eigh(H, eigh_eps)                           # (B, n), (B, n, n)
+            E[mz] = e;  V[mz] = v
+
+        for mz, (up, Fp) in sb["fplus"].items():
+            Fpt  = _to(None, Fp, device, dtype)                    # (n_up, n_lo)
+            M    = V[up].transpose(-2, -1) @ Fpt @ V[mz]          # (B, n_up, n_lo)
+            all_amps.append((M * M).reshape(B, -1) * weight)       # (B, T)
+            all_freqs.append(
+                (E[up][:, :, None] - E[mz][:, None, :]).reshape(B, -1))  # (B, T)
+
+    if all_freqs:
+        freqs = torch.cat(all_freqs, dim=1)                        # (B, K)
+        amps  = torch.cat(all_amps,  dim=1)                        # (B, K)
+    else:
+        freqs = torch.zeros(B, 0, device=device, dtype=dtype)
+        amps  = torch.zeros(B, 0, device=device, dtype=dtype)
+
+    dx   = (ppm_to - ppm_from) / points
+    hwhm = (linewidth_hz / 2.0) / field_mhz
+    specs = _broaden_fft_batch(freqs / field_mhz, amps, points,
+                               ppm_from, ppm_to, dx, hwhm, device, dtype)  # (B, points)
+    area  = specs.sum(dim=-1, keepdim=True) * dx + 1e-12
+    return specs / area                                            # (B, points)
 
 
 def _broaden_fft(centers, amps, points, ppm_from, ppm_to, dx, hwhm, device, dtype):
