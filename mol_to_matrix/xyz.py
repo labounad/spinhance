@@ -185,13 +185,18 @@ def convert_file(
     solvent: str = DEFAULT_SOLVENT,
     limit: int | None = None,
     workers: int = 1,
+    num_shards: int | None = None,
+    shard_index: int = 0,
 ) -> dict[str, int]:
     """Convert a multi-XYZ file into one big JSON array on disk.
 
     Streams entries so neither file is held fully in memory. Entries that fail
     to convert are skipped. `limit` caps the number of entries read; `workers`
     sets the number of parallel processes (each runs its own predictor JVM).
-    Output order follows the input. Returns {ok, skipped}.
+    With `num_shards`, only blocks where (global_index % num_shards ==
+    shard_index) are processed -- this lets a Slurm array split one input file
+    across tasks with no pre-splitting. Output order follows the input.
+    Returns {ok, skipped}.
     """
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -201,6 +206,8 @@ def convert_file(
         for count, (comment, atoms) in enumerate(iter_xyz_entries(in_path)):
             if limit is not None and count >= limit:
                 break
+            if num_shards is not None and count % num_shards != shard_index:
+                continue
             yield (comment, atoms, solvent)
 
     with open(out_path, "w") as out:
@@ -226,8 +233,32 @@ def convert_file(
     return {"ok": n_ok, "skipped": n_skipped}
 
 
+def main() -> None:
+    import argparse
+    import time
+
+    parser = argparse.ArgumentParser(
+        description="Convert a labelled multi-XYZ file to a spin-system JSON array."
+    )
+    parser.add_argument("input", help="input .xyz or .xyz.gz")
+    parser.add_argument("output", help="output .json")
+    parser.add_argument("--workers", type=int, default=1, help="parallel processes")
+    parser.add_argument("--limit", type=int, default=None, help="cap entries read")
+    parser.add_argument("--num-shards", type=int, default=None, help="total shards (array size)")
+    parser.add_argument("--shard-index", type=int, default=0, help="this shard's index")
+    args = parser.parse_args()
+
+    t = time.time()
+    summary = convert_file(
+        args.input,
+        args.output,
+        limit=args.limit,
+        workers=args.workers,
+        num_shards=args.num_shards,
+        shard_index=args.shard_index,
+    )
+    print(f"{summary} in {time.time() - t:.0f}s -> {args.output}")
+
+
 if __name__ == "__main__":
-    path = Path(__file__).resolve().parents[1] / "generate" / "data" / "8spin.xyz"
-    comment, atoms = next(iter_xyz_entries(path))
-    system = entry_to_spin_system(comment, atoms)
-    print(json.dumps(system.to_dict(), indent=2))
+    main()
