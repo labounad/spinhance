@@ -257,6 +257,11 @@ def fit(records, assignment, cfg: TrainConfig, model=None):
         opt, lambda s: lr_factor(s, warmup, total_steps))
     amp_ctx, scaler = _amp_context(cfg, device)
 
+    # Early stopping must not fire during Stage 1 when a Stage 2 is planned
+    # (the objective changes at the handoff). Track global-best checkpoint
+    # throughout, but only count "no-improvement" epochs once Stage 2 is active
+    # (or when no Stage 2 is planned at all).
+    will_run_stage2 = cfg.stage1_epochs < cfg.epochs
     best, bad = float("inf"), 0
     for epoch in range(cfg.epochs):
         loader = plain if epoch < cfg.stage1_epochs else bucketed
@@ -269,13 +274,14 @@ def fit(records, assignment, cfg: TrainConfig, model=None):
               f"J_mae {va['j_mae_hz']:.2f}Hz pres_f1 {va['presence_f1']:.3f} "
               f"deg_acc {va['deg_acc']:.3f} deg_bal {va['deg_acc_balanced']:.3f}")
         score = va["shift_mae_ppm"] + va["j_mae_hz"] / 10.0   # simple early-stop score
+        earlystop_active = (epoch >= cfg.stage1_epochs) or (not will_run_stage2)
         if score < best:
             best, bad = score, 0
             import os
             os.makedirs(os.path.dirname(cfg.ckpt_path) or ".", exist_ok=True)
             torch.save({"model": model.state_dict(),
                         "standardizer": vars(std), "cfg": vars(cfg)}, cfg.ckpt_path)
-        else:
+        elif earlystop_active:
             bad += 1
             if bad >= cfg.patience:
                 print(f"early stop at epoch {epoch}")
