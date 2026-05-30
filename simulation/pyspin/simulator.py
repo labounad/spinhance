@@ -152,15 +152,9 @@ def simulate_spectrum(
 
     # Build spectrum: Lorentzian broadening onto the ppm grid.
     ppm = np.linspace(ppm_from, ppm_to, points)
-    spec = np.zeros(points)
     centers_ppm = freqs / field_mhz
     hwhm_ppm = (linewidth_hz / 2.0) / field_mhz
-    # chunk transitions to bound memory
-    chunk = 2000
-    for s in range(0, len(centers_ppm), chunk):
-        c = centers_ppm[s:s + chunk][None, :]
-        a = amps[s:s + chunk][None, :]
-        spec += (a / (1.0 + ((ppm[:, None] - c) / hwhm_ppm) ** 2)).sum(axis=1)
+    spec = lorentzian_broaden(centers_ppm, amps, points, ppm_from, ppm_to, hwhm_ppm)
 
     # normalise to unit integral over ppm
     dppm = (ppm_to - ppm_from) / points
@@ -168,3 +162,29 @@ def simulate_spectrum(
     if total > 0:
         spec = spec / total
     return ppm, spec
+
+
+def lorentzian_broaden(centers, amps, points, ppm_from, ppm_to, hwhm):
+    """Bin transitions to a stick spectrum and FFT-convolve with a Lorentzian.
+
+    O(n_transitions) binning + O(points log points) convolution — independent
+    of the (often huge) number of transitions. Shared by both pyspin engines.
+    """
+    spec = np.zeros(points)
+    if len(centers) == 0:
+        return spec
+    dppm = (ppm_to - ppm_from) / points
+    # Linear-interpolation binning: split each line between its two nearest bins.
+    pos = (np.asarray(centers) - ppm_from) / dppm
+    inrange = (pos >= 0) & (pos <= points - 1)
+    pos = pos[inrange]
+    w = np.asarray(amps)[inrange]
+    i0 = np.floor(pos).astype(int)
+    frac = pos - i0
+    stick = (np.bincount(i0, weights=w * (1 - frac), minlength=points)
+             + np.bincount(i0 + 1, weights=w * frac, minlength=points + 1)[:points])
+    # Lorentzian kernel centred on the grid; circular FFT convolution.
+    x = (np.arange(points) - points // 2) * dppm
+    kern = 1.0 / (1.0 + (x / hwhm) ** 2)
+    return np.fft.irfft(np.fft.rfft(stick) * np.fft.rfft(np.fft.ifftshift(kern)),
+                        n=points)

@@ -46,7 +46,9 @@ def _add_run(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--workers", type=int, default=1,
                    help="Concurrent MNova instances (default 1 = sequential)")
     p.add_argument("--launcher", choices=["open", "direct"], default="open",
-                   help="Parallel launch method on macOS (default: open)")
+                   help="MNova parallel launch method on macOS (default: open)")
+    p.add_argument("--engine", choices=["mnova", "python"], default="mnova",
+                   help="Simulation engine: 'mnova' or pure-Python 'python'")
 
 
 def _add_plot(sub: argparse._SubParsersAction) -> None:
@@ -72,9 +74,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.command == "run":
-        if not args.mnova.exists():
+        if args.engine == "mnova" and not args.mnova.exists():
             print(f"ERROR: MNova executable not found at {args.mnova}\n"
-                  "Pass --mnova /path/to/MestReNova", file=sys.stderr)
+                  "Pass --mnova /path/to/MestReNova (or use --engine python)",
+                  file=sys.stderr)
             return 2
         run_pipeline(
             source_xml_dir=args.xml_dir,
@@ -83,6 +86,7 @@ def main(argv: list[str] | None = None) -> int:
             fields_mhz=args.fields,
             workers=args.workers,
             launcher=args.launcher,
+            engine=args.engine,
         )
         return 0
 

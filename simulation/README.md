@@ -1,9 +1,19 @@
 # SpinHance — Simulation (Task 3)
 
 This package turns spin-system parameters (chemical shifts, *J*-couplings, and
-proton degeneracies) into simulated ¹H NMR spectra at two field strengths, using
-MestReNova's quantum spin simulator. It is the bridge between **Task 2**
-(molecule → matrix) and **Task 4** (spectrum → matrix model).
+proton degeneracies) into simulated ¹H NMR spectra at two field strengths. It is
+the bridge between **Task 2** (molecule → matrix) and **Task 4** (spectrum →
+matrix model).
+
+Two interchangeable simulation engines (`--engine`):
+
+- **`mnova`** — drives MestReNova's quantum spin simulator. Accurate, but
+  ~1 s/molecule and bottlenecked by the license (≈no multi-instance speedup;
+  macOS only).
+- **`python`** (`pyspin`) — pure-Python exact simulator with composite-particle
+  reduction for equivalent groups. License-free, parallel across all CPU cores,
+  runs on HPC. Validated against MNova (r = 0.9993, peak offset 0.0008 ppm).
+  **Recommended for large/HPC dataset generation.**
 
 - **Low field — 90 MHz:** strongly coupled, non-first-order. This is the model's
   *input*.
@@ -76,11 +86,18 @@ simulation/
 ├── cli.py               # `python -m simulation.cli run|plot`
 ├── mnova_scripts/
 │   └── spinhanceBatch.qs   # MNova JS batch script (register this folder)
+├── pyspin/                 # pure-Python exact simulator (engine="python")
+│   ├── simulator.py          # spin-1/2 reference sim + shared FFT broadening
+│   ├── composite.py          # composite-particle reduction (the scalable engine)
+│   ├── batch.py              # multiprocessing XML→npy driver
+│   └── validate_vs_mnova.py  # accuracy check against MNova
 ├── benchmarks/
 │   └── benchmark_fields.py # throughput benchmark over a geometric field grid
 └── tests/
     ├── test_xml_io.py           # XML/matrix unit tests (no MNova required)
-    └── test_benchmark_fields.py # frequency-grid unit tests (no MNova)
+    ├── test_benchmark_fields.py # frequency-grid unit tests (no MNova)
+    ├── test_mnova_runner.py     # parallel runner helper tests
+    └── test_composite.py        # composite-vs-explicit equivalence tests
 ```
 
 ---
@@ -129,7 +146,25 @@ python -m simulation.cli run \
     --workers 8            # parallel MNova instances (default 1 = sequential)
 ```
 
-#### Parallelism
+#### Pure-Python engine (recommended at scale)
+
+```bash
+python -m simulation.cli run \
+    --xml_dir data/processed/xmls_source \
+    --out_dir data/processed \
+    --fields 90 600 \
+    --engine python --workers 8     # parallel across CPU cores; no MNova/license
+```
+
+The `pyspin` engine reads each XML, builds the spin Hamiltonian with
+composite-particle reduction (each equivalent group treated by its total spin,
+so a CH₃/tert-butyl never explodes the Hilbert space), block-diagonalises by
+total Iz, and FFT-broadens the transitions. Output is identical in layout to the
+MNova path (`spectra/<field>MHz/<stem>.npy`). It parallelises across molecules
+with `multiprocessing` (BLAS pinned to one thread per worker) and runs anywhere
+Python + numpy do — including HPC clusters where MNova can't.
+
+#### Parallelism (MNova engine)
 
 MNova's batch loop is single-threaded, so a single launch uses one core. With
 `--workers N`, the XMLs are round-robin sharded across `N` concurrent MNova

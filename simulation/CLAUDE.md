@@ -167,9 +167,24 @@ processes; completion is detected by polling output `.txt` counts. Fallback
 don't hand off). Measured single-process cost: ~0.68 s/sim (8-spin), startup
 ~4.5 s cold. Benchmark with `--workers` to find the core sweet spot.
 
+### pyspin — pure-Python engine (`engine="python"`)
+Validated alternative to MNova (r=0.9993 vs MNova on R-5-MCH). License-free,
+parallel across cores, HPC-capable.
+- `pyspin/simulator.py` — spin-½ reference sim (Iz-block) + shared
+  `lorentzian_broaden` (FFT stick-convolution; O(points·log points)).
+- `pyspin/composite.py` — composite-particle reduction: each equivalent group
+  treated by its total spin (`spin_reps(d)` → (S, multiplicity)); spectrum is
+  the multiplicity-weighted sum over per-group total-spin combinations. Vectorised
+  Hamiltonian (einsum diagonal + searchsorted flip-flop), scipy BLAS eigh when
+  present. ~0.01 s for 10-proton, ~0.8 s for a dense 16-proton (was 23 s naive).
+- `pyspin/batch.py` — `multiprocessing` (spawn) across molecules, BLAS pinned to
+  1 thread/worker (else oversubscription). `run_pipeline(engine="python", workers=N)`.
+Perf wins were: FFT broadening (the real bottleneck, not eigh) and composite
+reduction (makes high-degeneracy groups tractable).
+
 ### Possible future work
-- **Scale:** every XML is opened in one MNova session; if memory grows over many
-  thousand molecules, relaunch MNova every N files (chunking in `pipeline.py`).
+- **Scale:** MNova engine opens every XML in one session; for pyspin, scale by
+  adding workers / HPC nodes (embarrassingly parallel across molecules).
 - **Pure-Python fallback (if MNova ever blocks):** for N≤8 spin-½ systems the
   Hilbert space is ≤ 2⁸ = 256-d. Build H = Σ δᵢ Izᵢ + Σ Jᵢⱼ (IᵢxIⱼx + IᵢyIⱼy +
   IᵢzIⱼz), diagonalise, compute transitions + intensities, Lorentzian-broaden.

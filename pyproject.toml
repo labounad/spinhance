@@ -23,7 +23,7 @@ spinhance-sim = "simulation.cli:main"
 [tool.setuptools]
 # Only the simulation package is installable here; the other task dirs
 # (generate/, mol_to_matrix/, ml_model/) are independent modules.
-packages = ["simulation", "simulation.tests", "simulation.benchmarks"]
+packages = ["simulation", "simulation.tests", "simulation.benchmarks", "simulation.pyspin"]
 
 [tool.setuptools.package-data]
 # Ship the MNova batch script so it travels with non-editable installs too.
