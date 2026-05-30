@@ -46,3 +46,6 @@ dependencies:
     # Anything not yet on conda-forge for py3.14:
     - nmrglue          # NMR data I/O (FID processing)
     - qmsolve          # optional: quantum spin Hamiltonian reference
+    # GUI / dashboards:
+    - streamlit>=1.58
+    - plotly>=6.0
