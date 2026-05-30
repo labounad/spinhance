@@ -2,11 +2,15 @@ from __future__ import annotations
 
 from rdkit import Chem
 
-# Long-range 4J allylic coupling (H-C-C=C-H), Hz. Pretsch (Tables of Spectral
-# Data, 2009, p.165) gives -3 to +2; -1.3 is a representative magnitude that
-# survives the 0.3 Hz pruning threshold. Saturated W-coupling and homoallylic
-# 5J are geometry-specific and usually negligible, so they are omitted here.
+# Long-range 4J couplings (Hz), Pretsch (Tables of Spectral Data, 2009):
+#  - allylic  H-C-C=C-H   p.165: -3 to +2  -> representative -1.3
+#  - benzylic H-C-C(ar):C(ar)-H (sidechain to ortho ring H), p.177 toluene
+#    4J_ab = -0.7
+# Both are small but survive the 0.3 Hz pruning threshold. Homoallylic 5J,
+# benzylic 5J/6J (meta/para), and saturated W-coupling are geometry-specific
+# and omitted.
 J_ALLYLIC = -1.3
+J_BENZYLIC = -0.7
 
 
 def _heavy_neighbor(mol: Chem.Mol, h_idx: int) -> int | None:
@@ -16,7 +20,8 @@ def _heavy_neighbor(mol: Chem.Mol, h_idx: int) -> int | None:
 
 
 def long_range_couplings(mol: Chem.Mol) -> dict[tuple[int, int], float]:
-    """Estimate long-range 4J allylic couplings (H-C-C=C-H).
+    """Estimate long-range 4J couplings: allylic (H-C-C=C-H) and benzylic
+    (H-C-C(ar):C(ar)-H, sidechain proton to ortho ring proton).
 
     Returns {(atom_i, atom_j): J_Hz} with i < j, keyed by RDKit atom indices.
     """
@@ -38,15 +43,21 @@ def long_range_couplings(mol: Chem.Mol) -> dict[tuple[int, int], float]:
                 continue
             bonds = (mol.GetBondBetweenAtoms(ca, cb), mol.GetBondBetweenAtoms(cb, cc))
             doubles = sum(1 for bd in bonds if bd.GetBondType() == Chem.BondType.DOUBLE)
+            aromatic = [mol.GetAtomWithIdx(x).GetIsAromatic() for x in (ca, cb, cc)]
             if doubles == 1:  # one C=C in the path -> allylic
                 couplings[(i, j)] = J_ALLYLIC
+            elif aromatic[1] and (aromatic[0] != aromatic[2]):
+                # middle is a ring carbon, exactly one endpoint is aromatic:
+                # sidechain proton (sp3 end) <-> ortho ring proton (aromatic end)
+                couplings[(i, j)] = J_BENZYLIC
     return couplings
 
 
 if __name__ == "__main__":
     from mol_to_matrix.shifts import make_test_mol_3d
 
-    for smi, name in [("C=CC", "propene"), ("CCC", "propane")]:
+    for smi, name in [("C=CC", "propene (allylic)"), ("Cc1ccccc1", "toluene (benzylic)"),
+                      ("CCC", "propane (none)")]:
         mol = make_test_mol_3d(smi)
         js = sorted(long_range_couplings(mol).values())
-        print(f"{name:>10}: {js} Hz ({len(js)} pairs)")
+        print(f"{name:>22}: {js} Hz ({len(js)} pairs)")

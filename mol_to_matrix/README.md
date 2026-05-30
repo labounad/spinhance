@@ -60,7 +60,7 @@ derived from the array size). `mol_to_matrix/slurm/convert_test.slurm` runs a
 | `vicinal.py` | ³J (H–C–C–H): Karplus on ring dihedrals, empirical value for rotatable bonds |
 | `olefinic.py` | ³J across C=C (cis/trans from geometry) |
 | `aromatic.py` | ortho/meta/para ring couplings |
-| `long_range.py` | ⁴J allylic |
+| `long_range.py` | ⁴J allylic + benzylic |
 | `coupling.py` | merges all coupling estimators into one J dict |
 | `groups.py` | proton equivalence → spin groups + degeneracy |
 | `matrix.py` | assembles the SpinSystem matrix; save/pack |
