@@ -29,7 +29,10 @@ except ImportError as e:
     sys.exit(f"Missing dependency: {e}")
 
 sys.path.insert(0, str(Path(__file__).parent))
-from spin_group_filter import strip_exchangeable_protons, analyze_spin_systems
+from spin_group_filter import (
+    strip_exchangeable_protons, analyze_spin_systems,
+    _embed_3d, _signature,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -132,28 +135,29 @@ def load_sample(path: Path, n: int, seed: int) -> list[dict]:
 
 
 def mol_stats(mol: Chem.Mol) -> tuple[int, int, int, list[int]]:
-    n_c    = sum(1 for a in mol.GetAtoms() if a.GetAtomicNum() == 6)
-    mol_ch = strip_exchangeable_protons(mol)
-    n_h    = sum(1 for a in mol_ch.GetAtoms() if a.GetAtomicNum() == 1)
+    n_c      = sum(1 for a in mol.GetAtoms() if a.GetAtomicNum() == 6)
+    mol_h, _ = _embed_3d(mol)
+    mol_ch   = strip_exchangeable_protons(mol_h)
+    n_h      = sum(1 for a in mol_ch.GetAtoms() if a.GetAtomicNum() == 1)
     n_spin, sizes = analyze_spin_systems(mol)
     return n_c, n_h, n_spin, sizes
 
 
 def deuterated_representatives(mol: Chem.Mol) -> tuple[list[Chem.Mol], list[str]]:
-    mol_h  = strip_exchangeable_protons(mol)
+    mol_h, use_3d = _embed_3d(mol)
+    mol_h = strip_exchangeable_protons(mol_h)
+
     seen: dict[str, Chem.Mol] = {}
     counts: dict[str, int]    = {}
 
     for atom in mol_h.GetAtoms():
         if atom.GetAtomicNum() != 1:
             continue
-        rw = Chem.RWMol(mol_h)
-        rw.GetAtomWithIdx(atom.GetIdx()).SetIsotope(2)
-        d_mol = rw.GetMol()
-        Chem.AssignStereochemistry(d_mol, cleanIt=False, force=True)
-        smi = Chem.MolToSmiles(d_mol, isomericSmiles=True)
+        smi = _signature(mol_h, atom.GetIdx(), use_3d=use_3d)
         if smi not in seen:
-            seen[smi] = d_mol
+            rw = Chem.RWMol(mol_h)
+            rw.GetAtomWithIdx(atom.GetIdx()).SetIsotope(2)
+            seen[smi] = rw.GetMol()
         counts[smi] = counts.get(smi, 0) + 1
 
     mols   = list(seen.values())
