@@ -56,7 +56,7 @@ This is equivalently an **undirected labeled graph**: nodes carry (δ, n), edges
 - [x] Download/sample SMILES from USPTO or another large public database
 - [x] Parse SMILES with RDKit; assign CIP stereochemistry
 - [x] Identify chemically **and** magnetically equivalent proton groups (homotopic/enantiotopic analysis)
-- [ ] Filter to molecules with **exactly 8** hard-equivalent spin groups
+- [x] Filter to molecules with **exactly 8** hard-equivalent spin groups
 - [ ] Output: `data/raw/smiles_8group.csv` (SMILES, InChIKey, n_groups, group_sizes)
 
 #### Key decisions
