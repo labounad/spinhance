@@ -22,7 +22,6 @@ shift 2>/dev/null || true
 
 # Default training args — override by passing after instance type
 TRAIN_ARGS="${*:- \
-  --no-scaffold \
   --fields 90 \
   --stage2 \
   --epochs 110 \
@@ -79,6 +78,7 @@ _launch() {
     --subnet-id "$subnet" \
     --security-group-ids "$SG" \
     --iam-instance-profile "Name=$INST_PROFILE" \
+    --block-device-mappings '[{"DeviceName":"/dev/xvda","Ebs":{"VolumeSize":100,"VolumeType":"gp3"}}]' \
     --metadata-options '{"HttpTokens":"required"}' \
     --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=spinhance-train}]' \
     --query 'Instances[0].InstanceId' \
@@ -130,9 +130,12 @@ _ssh() {
   ssh -F "$SSH_CFG" "$INSTANCE" "$@"
 }
 
-_rsync() {
-  _push_key
-  rsync -az \
+_sync_code() {
+  local archive
+  archive=$(mktemp /tmp/spinhance-code-XXXXX.tar.gz)
+
+  echo "  archiving..."
+  tar czf "$archive" -C "$REPO" \
     --exclude='.git' \
     --exclude='__pycache__' \
     --exclude='*.pyc' \
@@ -140,13 +143,24 @@ _rsync() {
     --exclude='mol_to_matrix/data' \
     --exclude='model/checkpoints' \
     --exclude='autoai' \
-    -e "ssh -F $SSH_CFG" \
-    "$@"
+    .
+
+  echo "  uploading ($(du -sh "$archive" | cut -f1)) to S3..."
+  aws s3 cp "$archive" "s3://$BUCKET/code/spinhance-code.tar.gz" --profile "$PROFILE" --region "$REGION"
+
+  echo "  downloading on EC2 and extracting..."
+  _ssh "mkdir -p $WORKSPACE && \
+    aws s3 cp s3://$BUCKET/code/spinhance-code.tar.gz /tmp/spinhance-code.tar.gz && \
+    tar xzf /tmp/spinhance-code.tar.gz -C $WORKSPACE && \
+    rm /tmp/spinhance-code.tar.gz"
+
+  rm "$archive"
+  echo "  done."
 }
 
 # ── 4. Sync code + download data ──────────────────────────────────────────────
 echo "[3/5] Syncing code..."
-_rsync "$REPO/" "ec2-user@$INSTANCE:$WORKSPACE/"
+_sync_code
 
 echo "[4/5] Downloading data from S3..."
 _ssh "
