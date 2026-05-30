@@ -21,7 +21,7 @@ and solve the two-point line for ``per_sim`` and ``startup``:
 Run it
 ------
     python -m simulation.benchmarks.benchmark_fields \
-        --source_xml "predicted_mnova_1h (10).xml" \
+        --source_xml simulation/examples/reference_15group.xml \
         --mnova "/Applications/MestReNova.app/Contents/MacOS/MestReNova" \
         --n 100 --fmin 40 --fmax 1200
 

@@ -36,15 +36,14 @@ spinhance/
 │   │   ├── batch.py            # multiprocessing XML→npy driver
 │   │   └── validate_vs_mnova.py
 │   ├── benchmarks/          # benchmark_fields / _pyspin / _scaling
-│   ├── examples/            # sample spin systems + validation overlays
-│   └── tests/               # 32 tests (xml_io, mnova_runner, composite, fields)
+│   ├── examples/            # sample spin systems (incl. reference_15group.xml = format ref)
+│   └── tests/               # 44 tests (xml_io, graph_io, mnova_runner, composite, cluster, fields)
 ├── ml_model/            # Task 4 — deep learning model (teammate)
 ├── data/
 │   ├── raw/             # SMILES lists (gitignored if large)
-│   └── processed/       # matrices, XMLs, spectra
+│   └── processed/       # XMLs, spectra
 ├── environment.yml      # micromamba env, Python 3.14, conda-forge only
 ├── setup_env.sh         # creates/updates the micromamba environment
-├── predicted_mnova_1h (10).xml  # example mnova-spinsim XML (reference format)
 └── README.md            # full project documentation
 ```
 
@@ -59,7 +58,7 @@ Each molecule → **8×9 block**:
 
 This is an undirected labeled graph: nodes carry (δ, n), edges carry *J*. Labels are arbitrary (invariant under S₈ permutation). We restrict to molecules with **exactly 8 magnetically distinct spin groups**.
 
-The XML format (`predicted_mnova_1h (10).xml`) encodes this as `<mnova-spinsim>` with `<group>` elements containing `<shift>`, `<jCoupling name="X">`, and a `number=` attribute for degeneracy.
+The XML format (`simulation/examples/reference_15group.xml`) encodes this as `<mnova-spinsim>` with `<group>` elements containing `<shift>`, `<jCoupling name="X">`, and a `number=` attribute for degeneracy.
 
 ---
 
@@ -271,7 +270,7 @@ python -m pytest simulation/tests -v
 ## Key Files to Read First
 
 1. `simulation/README.md` — architecture diagram, usage, MNova setup
-2. `predicted_mnova_1h (10).xml` — the mnova-spinsim XML format (reference)
+2. `simulation/examples/reference_15group.xml` — the mnova-spinsim XML format (reference)
 3. `simulation/xml_io.py` — XML builder/patcher (pure)
 4. `simulation/pipeline.py` — patch → simulate → convert orchestration
 5. `simulation/mnova_scripts/spinhanceBatch.qs` — the MNova JS batch script
@@ -282,7 +281,7 @@ python -m pytest simulation/tests -v
 
 - All 4 tasks are designed to be independent modules with clean interfaces (CSV → npy → npy → model)
 - The shift+J matrix is the shared data contract between Tasks 2 and 3
-- Task 3 needs Task 2's output (XML files or matrices) to proceed at scale; for testing, use `predicted_mnova_1h (10).xml` as a stand-in
+- Task 3 needs Task 2's output (`spin_systems.json`) to proceed at scale; for testing, use the molecules in `simulation/examples/` as stand-ins
 - Degeneracy is stored in the XML `number=` attribute and in the 9th column of the matrix
 - Field strength is baked into the XML `<frequency>` tag; `xml_io.patch_frequency()` generates multi-field variants
 - Target spectral grid: 2¹⁴ = 16384 points, 0–12 ppm, normalized so ∫ intensity dppm = 1

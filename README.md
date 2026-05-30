@@ -193,4 +193,4 @@ USPTO / PubChem / ChEMBL SMILES
 
 - **Task 2 → Task 3:** `mol_to_matrix/data/spin_systems.json` (schema above; parsed by `simulation/graph_io.py`).
 - **Spectra → Task 4:** `spectra/<field>MHz/mol_<i>.npy` (16384-point, ∫=1) + `spectra/index.csv` (index → ChEMBL id), shared `ppm_axis.npy` per field.
-- **MNova XML format:** `predicted_mnova_1h (10).xml` (repo root) shows the `mnova-spinsim` XML used internally by the MNova engine.
+- **MNova XML format:** `simulation/examples/reference_15group.xml` shows the `mnova-spinsim` XML used internally by the MNova engine.
