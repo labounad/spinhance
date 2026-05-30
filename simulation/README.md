@@ -1,80 +1,87 @@
 # SpinHance — Simulation (Task 3)
 
-This package turns spin-system parameters (chemical shifts, *J*-couplings, and
-proton degeneracies) into simulated ¹H NMR spectra at two field strengths. It is
-the bridge between **Task 2** (molecule → matrix) and **Task 4** (spectrum →
-matrix model).
+Turn spin-system parameters (chemical shifts δ, scalar couplings *J*, and proton
+degeneracies) into simulated ¹H NMR spectra at two field strengths. This is the
+bridge between **Task 2** (molecule → matrix) and **Task 4** (spectrum → matrix
+model).
 
-Two interchangeable simulation engines (`--engine`):
+- **Low field — 90 MHz:** strongly coupled, non-first-order. The model's *input*.
+- **High field — 600.15 MHz:** first-order reference / optional second input.
 
-- **`mnova`** — drives MestReNova's quantum spin simulator. Accurate, but
-  ~1 s/molecule and bottlenecked by the license (≈no multi-instance speedup;
-  macOS only).
-- **`python`** (`pyspin`) — pure-Python exact simulator with composite-particle
-  reduction for equivalent groups. License-free, parallel across all CPU cores,
-  runs on HPC. Validated against MNova (r = 0.9993, peak offset 0.0008 ppm).
-  Exact, so cost grows exponentially with the largest *coupled fragment* size
-  (~15 spins is the practical wall); molecules with sparse/local coupling
-  decompose into small fragments and run in milliseconds regardless of total H.
-- **`auto`** — routes each molecule by its largest connected-component spin
-  count: ≤ `--pyspin-max-spins` (default 13) → pyspin; larger → MNova (whose
-  local-cluster method scales ~linearly with system size). Reports the routing
+Every spectrum is a normalised intensity array of `16384 = 2¹⁴` points over
+`0–12 ppm` (∫ = 1), saved as `.npy`.
+
+## Two engines, one interface
+
+Both are selected with `--engine` and produce identical output layout.
+
+| | `mnova` | `python` (pyspin) |
+|---|---|---|
+| Method | MestReNova QM simulator | pure-Python exact (composite reduction) |
+| Speed | ~1 s/molecule (+~2.5 s startup) | µs–ms for sparse molecules |
+| Parallelism | ~none (single-instance license) | scales across all cores / HPC |
+| Dependency | MNova license, macOS | numpy only; runs anywhere |
+| Scaling limit | linear (local-cluster approx) to ≫20 spins | exact ⇒ wall at ~15 *coupled* spins |
+
+- **`mnova`** — drives MestReNova. Accurate and scales to large coupled systems
+  (it uses a local-cluster approximation), but ~1 s/molecule with negligible
+  multi-instance speedup, and macOS-only.
+- **`python`** (pyspin) — exact simulator with composite-particle reduction for
+  equivalent groups and connected-component decomposition. License-free, parallel
+  across cores, HPC-capable. Validated against MNova (r ≈ 0.993–0.999, peak
+  offset ≈ 0.0008 ppm). Being exact, its cost is set by the largest *coupled
+  fragment*, not total protons — molecules with sparse/local coupling run in
+  milliseconds; a single fully-coupled fragment >~15 spins is the practical wall.
+- **`auto`** — routes each molecule by its largest connected-component spin count:
+  ≤ `--pyspin-max-spins` (default 13) → pyspin, larger → MNova. Prints the routing
   distribution so you can see what fraction of a dataset needs MNova.
-
-- **Low field — 90 MHz:** strongly coupled, non-first-order. This is the model's
-  *input*.
-- **High field — 600.15 MHz:** first-order reference. Useful for validation and
-  as an optional second input.
-
-Output is a normalised intensity array of `16384 = 2¹⁴` points over `0–12 ppm`
-(integral = 1), saved as `.npy`.
 
 ---
 
 ## Architecture
 
 ```mermaid
-flowchart LR
-    subgraph in["Input (from Task 2)"]
-        M["shift + J + degeneracy<br/>matrices / source XML"]
-    end
+flowchart TB
+    M["Task 2 output<br/>shift + J + degeneracy (XML)"]
 
     subgraph pkg["simulation package"]
         XIO["xml_io<br/>matrix ⇄ mnova-spinsim XML"]
-        RUN["mnova_runner<br/>MestReNova CLI"]
-        PIPE["pipeline<br/>patch → simulate → convert"]
-        PLOT["plotting<br/>QC overlays"]
         CLI["cli<br/>run / plot"]
+        PIPE["pipeline<br/>orchestration + routing"]
+        subgraph engines["engines"]
+            RUN["mnova_runner<br/>MestReNova CLI (parallel, retry)"]
+            PY["pyspin<br/>composite + components + FFT broaden"]
+        end
+        PLOT["plotting · benchmarks · tests"]
     end
 
-    QS["mnova_scripts/<br/>spinhanceBatch.qs"]
-    MNOVA[["MestReNova<br/>QM spin simulator"]]
+    QS["mnova_scripts/spinhanceBatch.qs"]
+    MNOVA[["MestReNova"]]
+    NPY["spectra/&lt;field&gt;MHz/*.npy<br/>+ ppm_axis.npy → Task 4"]
 
-    subgraph out["Output (to Task 4)"]
-        NPY["spectra/&lt;field&gt;MHz/*.npy<br/>+ ppm_axis.npy"]
-    end
-
-    M --> XIO --> PIPE
-    CLI --> PIPE
-    PIPE -->|"-sf spinhanceBatch,…"| RUN --> MNOVA
-    QS -. registered script .-> MNOVA
-    MNOVA -->|"*.txt intensities"| PIPE
-    PIPE -->|"normalise, integral=1"| NPY
+    M --> CLI --> PIPE
+    PIPE -->|"engine=mnova / large fragment"| RUN -->|"-sf spinhanceBatch,…"| MNOVA
+    QS -. registered .-> MNOVA
+    MNOVA -->|"*.txt"| PIPE
+    PIPE -->|"engine=python / small fragment"| PY
+    XIO --- RUN
+    XIO --- PY
+    PIPE --> NPY
     NPY --> PLOT
 ```
 
-### Pipeline stages
+### MNova pipeline stages
 
-1. **Patch** (`pipeline.prepare_xmls` → `xml_io.patch_frequency`): for each
-   source XML, write one frequency-patched copy per field into
-   `xmls/<field>MHz/`.
-2. **Simulate** (`pipeline.run_mnova_batch` → `mnova_runner`): launch MestReNova
-   on each field's directory. The registered `spinhanceBatch.qs` opens every
-   XML, runs the simulation, and writes one `<stem>.txt` of intensities into
-   `txt/<field>MHz/`.
-3. **Convert** (`pipeline.txt_to_npy`): load each `.txt`, normalise to unit
-   integral, and save `spectra/<field>MHz/<stem>.npy` plus a shared
-   `ppm_axis.npy`.
+1. **Patch** (`pipeline.prepare_xmls` → `xml_io.patch_frequency`): one
+   frequency-patched XML per field in `xmls/<field>MHz/`.
+2. **Simulate** (`pipeline.run_mnova_parallel` → `mnova_runner`): launch
+   MestReNova on each field's directory; `spinhanceBatch.qs` writes one
+   `<stem>.txt` of intensities into `txt/<field>MHz/`.
+3. **Convert** (`pipeline.txt_to_npy`): normalise to unit integral, save
+   `spectra/<field>MHz/<stem>.npy` + shared `ppm_axis.npy`.
+
+The `python` engine skips MNova/txt entirely: `pyspin.batch` reads each XML
+(`xml_io.xml_to_matrix`) and writes the normalised `.npy` directly, in parallel.
 
 ---
 
@@ -85,124 +92,110 @@ simulation/
 ├── README.md            # this file (human-facing)
 ├── CLAUDE.md            # AI-facing contract: interfaces, invariants, gotchas
 ├── __init__.py          # public API re-exports
-├── xml_io.py            # matrix ⇄ mnova-spinsim XML (pure, no MNova/numpy deps)
-├── mnova_runner.py      # MestReNova CLI invocation
-├── pipeline.py          # patch → simulate → convert orchestration
-├── plotting.py          # QC plot of 90 vs 600 MHz spectra
+├── xml_io.py            # matrix ⇄ mnova-spinsim XML (pure; matrix_to_xml / xml_to_matrix)
+├── mnova_runner.py      # MestReNova CLI: run_mnova_batch / run_mnova_parallel
+├── pipeline.py          # orchestration: run_pipeline (engine mnova/python/auto)
+├── plotting.py          # QC overlay of 90 vs 600 MHz spectra
 ├── cli.py               # `python -m simulation.cli run|plot`
 ├── mnova_scripts/
-│   └── spinhanceBatch.qs   # MNova JS batch script (register this folder)
-├── pyspin/                 # pure-Python exact simulator (engine="python")
-│   ├── simulator.py          # spin-1/2 reference sim + shared FFT broadening
-│   ├── composite.py          # composite-particle reduction (the scalable engine)
+│   └── spinhanceBatch.qs   # MNova JS batch script (register this folder once)
+├── pyspin/                 # pure-Python engine (engine="python")
+│   ├── simulator.py          # spin-½ reference sim + shared FFT broadening
+│   ├── composite.py          # composite-particle reduction + component split
 │   ├── batch.py              # multiprocessing XML→npy driver
 │   └── validate_vs_mnova.py  # accuracy check against MNova
 ├── benchmarks/
-│   └── benchmark_fields.py # throughput benchmark over a geometric field grid
-└── tests/
-    ├── test_xml_io.py           # XML/matrix unit tests (no MNova required)
-    ├── test_benchmark_fields.py # frequency-grid unit tests (no MNova)
-    ├── test_mnova_runner.py     # parallel runner helper tests
-    └── test_composite.py        # composite-vs-explicit equivalence tests
+│   ├── benchmark_fields.py   # throughput over a geometric field grid (MNova)
+│   ├── benchmark_pyspin.py   # pyspin parallel-scaling sweep (sims/s vs workers)
+│   └── benchmark_scaling.py  # per-engine ceiling: grow a fully-coupled system
+├── examples/               # sample spin systems + validation overlays
+└── tests/                  # 32 tests, no MNova required
+    ├── test_xml_io.py            # XML build/parse/patch/round-trip
+    ├── test_mnova_runner.py      # parallel runner helpers (shard/launch cmd)
+    ├── test_benchmark_fields.py  # geometric frequency grid
+    └── test_composite.py         # composite == explicit; components; high-deg
 ```
 
 ---
 
-## One-time MNova setup
+## Install / environment
 
-MestReNova must be told where the batch script lives:
+```bash
+micromamba activate spinhance
+pip install -e .          # optional: gives the `spinhance-sim` command
+```
 
-1. Open MestReNova → **Edit → Preferences → Scripting → Directories**.
-2. Add this folder: `simulation/mnova_scripts`.
+`spinhance-sim run …` ≡ `python -m simulation.cli run …`. Examples below use the
+module form (works from the repo root without installing).
+
+### One-time MNova setup (only for the `mnova`/`auto` engines)
+
+1. MestReNova → **Edit → Preferences → Scripting → Directories**.
+2. Add `simulation/mnova_scripts`.
 3. **Restart** MestReNova.
 
-This is required because `-sf` only resolves function names from registered
-directories, and the file name (`spinhanceBatch.qs`) must equal the function
-name (`spinhanceBatch`). See `CLAUDE.md` for the full list of invocation rules.
+`-sf` only resolves function names from registered directories, and the file
+name (`spinhanceBatch.qs`) must equal the function name. See `CLAUDE.md`.
 
 ---
 
 ## Usage
 
-All commands are run with the `spinhance` env active.
-
-```bash
-micromamba activate spinhance
-```
-
-Optionally install the package so you get a `spinhance-sim` command and can
-import `simulation` from anywhere (run once, from the repo root):
-
-```bash
-pip install -e .
-```
-
-With it installed, `spinhance-sim run …` is equivalent to
-`python -m simulation.cli run …`. The examples below use the module form, which
-works from the repo root without installing.
-
-### Run the pipeline
+### Pure-Python engine (recommended at scale / HPC)
 
 ```bash
 python -m simulation.cli run \
-    --xml_dir data/processed/xmls_source \
-    --out_dir data/processed \
-    --mnova   "/Applications/MestReNova.app/Contents/MacOS/MestReNova" \
-    --fields  90 600 \
-    --workers 8            # parallel MNova instances (default 1 = sequential)
+    --xml_dir data/processed/xmls_source --out_dir data/processed \
+    --fields 90 600 --engine python --workers 8
 ```
 
-#### Pure-Python engine (recommended at scale)
+No MNova or license; parallel across cores (BLAS pinned to one thread/worker).
+
+### Auto router (pyspin where it's fast, MNova where it's needed)
 
 ```bash
 python -m simulation.cli run \
-    --xml_dir data/processed/xmls_source \
-    --out_dir data/processed \
-    --fields 90 600 \
-    --engine python --workers 8     # parallel across CPU cores; no MNova/license
+    --xml_dir data/processed/xmls_source --out_dir data/processed \
+    --fields 90 600 --engine auto --workers 8 --pyspin-max-spins 13 \
+    --mnova "/Applications/MestReNova.app/Contents/MacOS/MestReNova"
 ```
 
-The `pyspin` engine reads each XML, builds the spin Hamiltonian with
-composite-particle reduction (each equivalent group treated by its total spin,
-so a CH₃/tert-butyl never explodes the Hilbert space), block-diagonalises by
-total Iz, and FFT-broadens the transitions. Output is identical in layout to the
-MNova path (`spectra/<field>MHz/<stem>.npy`). It parallelises across molecules
-with `multiprocessing` (BLAS pinned to one thread per worker) and runs anywhere
-Python + numpy do — including HPC clusters where MNova can't.
+Prints e.g. `threshold 13: pyspin 80%, MNova 20%`.
 
-#### Parallelism (MNova engine)
-
-MNova's batch loop is single-threaded, so a single launch uses one core. With
-`--workers N`, the XMLs are round-robin sharded across `N` concurrent MNova
-instances for roughly `N`× throughput, up to your core count. Round-robin
-spreads the costly high-field simulations evenly across workers.
-
-Because MestReNova is single-instance, parallel workers launch with
-`open -na MestReNova --args …` (the default `--launcher open`) to force separate
-processes. If `open` does not pass `-sf` through on your machine (you'll see
-0 outputs), use `--launcher direct`. Verify your machine supports concurrent
-instances with the 30-second test in the benchmark section before scaling up.
-
-### QC plot one molecule
+### MNova engine
 
 ```bash
-python -m simulation.cli plot \
-    --spectra_dir data/processed/spectra \
-    --stem mol_test --show
+python -m simulation.cli run \
+    --xml_dir data/processed/xmls_source --out_dir data/processed \
+    --mnova "/Applications/MestReNova.app/Contents/MacOS/MestReNova" \
+    --fields 90 600 --workers 8 --launcher open
+```
+
+`--workers N` round-robin shards across N MNova instances. MestReNova is
+single-instance, so workers launch via `open -na` (`--launcher open`); if `open`
+doesn't pass `-sf` on your machine (0 outputs), use `--launcher direct`. Failed
+shards (e.g. license-seat starvation) are retried automatically.
+
+### QC plot
+
+```bash
+python -m simulation.cli plot --spectra_dir data/processed/spectra --stem mol_001 --show
 ```
 
 ### Programmatic API
 
 ```python
+from pathlib import Path
 from simulation import matrix_to_xml, save_xml, run_pipeline
+from simulation.xml_io import xml_to_matrix
+from simulation.pyspin.composite import simulate_spectrum_composite
 
-# Build a spin-system XML from matrix parameters
 tree = matrix_to_xml(shifts, couplings, degeneracy, frequency_mhz=90.0)
 save_xml(tree, "mol_001.xml")
 
-# Or run the whole pipeline over a folder of source XMLs
-from pathlib import Path
-run_pipeline(Path("data/processed/xmls_source"), Path("data/processed"))
+ppm, spectrum = simulate_spectrum_composite(shifts, couplings, degeneracy, 90.0)
+
+run_pipeline(Path("xmls_source"), Path("out"), engine="python", workers=8)
 ```
 
 ---
@@ -210,64 +203,50 @@ run_pipeline(Path("data/processed/xmls_source"), Path("data/processed"))
 ## Tests
 
 ```bash
-python -m pytest simulation/tests -v
+python -m pytest simulation/tests -v        # 32 tests, no MNova required
 ```
 
-The tests cover label generation, XML construction, *J*-coupling symmetry,
-save/reload round-trips, frequency patching, field-pair generation, and the
-geometric frequency grid. They do **not** require MestReNova.
-
-## Benchmark
-
-Measure simulator throughput by patching one XML to `n` geometrically-spaced
-frequencies (denser at low field) and simulating them all in a single MNova
-launch. A small calibration run separates startup overhead from marginal
-per-simulation cost.
-
-```bash
-python -m simulation.benchmarks.benchmark_fields \
-    --source_xml "predicted_mnova_1h (10).xml" \
-    --mnova "/Applications/MestReNova.app/Contents/MacOS/MestReNova" \
-    --n 100 --fmin 40 --fmax 1200
-```
-
-The report prints total wall-clock, naive per-sim (`total / n`), estimated MNova
-startup overhead, marginal per-sim time, and throughput (sims/s).
-
-Add `--workers N` to benchmark parallel throughput (the report then shows
-wall-clock throughput and estimated speedup instead of the single-launch
-startup/marginal split). Sweep a few values to find the sweet spot:
-
-```bash
-for W in 1 2 4 6 8; do
-  python -m simulation.benchmarks.benchmark_fields \
-      --source_xml "predicted_mnova_1h (10).xml" \
-      --mnova "/Applications/MestReNova.app/Contents/MacOS/MestReNova" \
-      --n 100 --workers $W
-done
-```
-
-Before scaling up, confirm your machine runs concurrent MNova instances
-(MestReNova is single-instance by default):
-
-```bash
-pkill -i mestrenova
-open -na MestReNova --args -sf spinhanceBatch,/tmp/shardA,/tmp/shardA_out &
-open -na MestReNova --args -sf spinhanceBatch,/tmp/shardB,/tmp/shardB_out &
-# Both output dirs should fill, and Activity Monitor should show two processes.
-```
+Cover: XML build/parse/patch/round-trip, label generation, *J* symmetry,
+field-pair naming, frequency-grid math, parallel-runner helpers, and — most
+importantly — that the composite engine matches the explicit spin-½ simulator
+(corr 1.0), including connected-component decomposition and high-degeneracy
+(isopropyl 6H, methyl, singlet) cases.
 
 ---
 
-## Gotchas (the short list)
+## Benchmarks
 
-- **Do not pass `-nogui`** — MNova hangs on exit (no event loop for
+```bash
+# MNova throughput over a geometric field grid (startup vs per-sim)
+python -m simulation.benchmarks.benchmark_fields --source_xml simulation/examples/R_5_methylcyclohexenone.xml \
+    --mnova "<MestReNova>" --n 100 --fmin 90 --fmax 600        # add --workers N, --per-field
+
+# pyspin parallel scaling (sims/s vs worker count; projects 100k-dataset time)
+python -m simulation.benchmarks.benchmark_pyspin --source_xml simulation/examples/R_5_methylcyclohexenone.xml \
+    --n 500 --fields 90 600 --workers-sweep 1 2 4 6 8
+
+# per-engine ceiling: grow a fully-coupled chain until 2-min cutoff
+python -m simulation.benchmarks.benchmark_scaling --engines pyspin mnova \
+    --mnova "<MestReNova>" --start 10 --max 20 --timeout 120
+```
+
+Measured (fully-coupled chain = worst case): pyspin is exact, so cost ~
+`C(N,N/2)³` — N=14 ≈ 12 s, N=15 ≈ 85 s, N≥16 > 2 min. MNova is flat ~2.5 s to
+N=20 (local-cluster approximation), and pyspin/MNova still agree at N=14
+(r = 0.9947, 40/40 peaks). Real molecules decompose into small fragments, so
+pyspin runs them in milliseconds regardless of total proton count.
+
+---
+
+## Gotchas (MNova engine)
+
+- **Never pass `-nogui`** — MNova hangs on exit (no event loop for
   `Application.quit()`); the window must be visible. Output is still written.
-- **`-sf` syntax:** single dash, function name without parentheses, args
-  comma-separated: `-sf spinhanceBatch,<xmlDir>,<outDir>`.
+- **`-sf` syntax:** single dash, function name without parens, comma-separated
+  args: `-sf spinhanceBatch,<xmlDir>,<outDir>`.
 - **No top-level call** in `spinhanceBatch.qs` — it would auto-run at startup
   before the NMR API exists and crash MNova.
-- Editing the `.qs` while the Script Editor is open: reload it from disk; the
-  editor caches the previously loaded copy.
-
-The authoritative, detailed version of these is in `CLAUDE.md`.
+- Editing the `.qs` while the Script Editor is open: reload it from disk (the
+  editor caches the previously loaded copy).
+- Don't set `--workers` above your license seat count — overshooting stalls each
+  pass until the retry kicks in. The full detail lives in `CLAUDE.md`.

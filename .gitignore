@@ -45,3 +45,6 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# pyspin validation overlay artifacts
+simulation/examples/*.cmp_*.png

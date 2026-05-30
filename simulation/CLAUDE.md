@@ -18,19 +18,24 @@ Git repo, `main` branch, initialized with the following structure:
 spinhance/
 ├── generate/            # Task 1 — molecule screening (teammate)
 ├── mol_to_matrix/       # Task 2 — 3D embedding + J/shift heuristics (teammate)
-├── simulation/          # Task 3 — MNova spin simulation pipeline (LUCAS)
+├── simulation/          # Task 3 — spin simulation (LUCAS); two engines
 │   ├── README.md            # human-facing docs + architecture diagram
 │   ├── CLAUDE.md            # this file (AI-facing contract)
 │   ├── __init__.py          # public API re-exports
-│   ├── xml_io.py            # build/patch mnova-spinsim XML (pure)
-│   ├── mnova_runner.py      # MestReNova CLI invocation
-│   ├── pipeline.py          # patch → simulate → convert orchestration
+│   ├── xml_io.py            # matrix ⇄ mnova-spinsim XML (matrix_to_xml/xml_to_matrix)
+│   ├── mnova_runner.py      # MestReNova CLI (run_mnova_batch/run_mnova_parallel)
+│   ├── pipeline.py          # orchestration: run_pipeline (engine mnova/python/auto)
 │   ├── plotting.py          # QC plot of 90 vs 600 MHz spectra
 │   ├── cli.py               # `python -m simulation.cli run|plot`
-│   ├── mnova_scripts/
-│   │   └── spinhanceBatch.qs   # MNova JS batch script (register this folder)
-│   └── tests/
-│       └── test_xml_io.py      # pytest suite (no MNova required)
+│   ├── mnova_scripts/spinhanceBatch.qs   # MNova JS batch script (register folder)
+│   ├── pyspin/              # pure-Python engine (engine="python")
+│   │   ├── simulator.py        # spin-½ reference + shared FFT broadening
+│   │   ├── composite.py        # composite reduction + component split (scalable)
+│   │   ├── batch.py            # multiprocessing XML→npy driver
+│   │   └── validate_vs_mnova.py
+│   ├── benchmarks/          # benchmark_fields / _pyspin / _scaling
+│   ├── examples/            # sample spin systems + validation overlays
+│   └── tests/               # 32 tests (xml_io, mnova_runner, composite, fields)
 ├── ml_model/            # Task 4 — deep learning model (teammate)
 ├── data/
 │   ├── raw/             # SMILES lists (gitignored if large)
@@ -90,19 +95,30 @@ from simulation import (
     run_mnova_batch, MNOVA_DEFAULT,                                  # mnova_runner
     LOW_FIELD_MHZ, HIGH_FIELD_MHZ, DEFAULT_FIELDS_MHZ, N_POINTS,
 )
+from simulation.xml_io import xml_to_matrix          # XML → {shifts,couplings,degeneracy,meta}
+from simulation.pyspin.composite import simulate_spectrum_composite, largest_component_spins
 
-tree = matrix_to_xml(shifts, couplings, degeneracy, frequency_mhz=90.0)
-save_xml(tree, "output.xml")
-lo, hi = generate_field_pair("source.xml", "out_dir/", stem="mol_001")
-run_pipeline(Path("xmls_source"), Path("data/processed"))  # patch→sim→npy
+# build / parse XML
+tree = matrix_to_xml(shifts, couplings, degeneracy, frequency_mhz=90.0); save_xml(tree, "m.xml")
+m = xml_to_matrix("m.xml")
+
+# pure-Python sim (exact, composite reduction)
+ppm, spec = simulate_spectrum_composite(shifts, couplings, degeneracy, 90.0)
+
+# full pipeline; engine = "mnova" | "python" | "auto"
+run_pipeline(Path("xmls_source"), Path("out"), engine="python", workers=8)
 ```
 
 ### Module responsibilities
-- `xml_io.py` — pure matrix ⇄ XML; no MNova or numpy dependency.
-- `mnova_runner.py` — the ONLY module that invokes MestReNova.
-- `pipeline.py` — orchestration + numpy post-processing (`txt_to_npy`).
+- `xml_io.py` — pure matrix ⇄ XML (build, parse, patch-frequency, field-pair); no MNova/numpy.
+- `mnova_runner.py` — the ONLY module that invokes MestReNova (batch + parallel + retry).
+- `pipeline.py` — orchestration + routing; `run_pipeline(engine=…)`, `_run_auto`, `txt_to_npy`.
+- `pyspin/` — pure-Python engine: `composite.py` (production), `simulator.py` (reference + broadening), `batch.py` (multiprocessing).
 - `plotting.py` — QC overlays (`plot_field_comparison`).
-- `cli.py` — `python -m simulation.cli run|plot`.
+- `cli.py` — `python -m simulation.cli run|plot` (`--engine`, `--workers`, `--launcher`, `--pyspin-max-spins`).
+
+### CLI flags (run)
+`--xml_dir --out_dir --mnova --fields 90 600 --workers N --launcher {open,direct} --engine {mnova,python,auto} --pyspin-max-spins 13`
 
 ### MNova CLI invocation — the rules (solved; do not regress)
 The CLI works **without** `-nogui`:
@@ -196,12 +212,14 @@ component spins ≥ post-reduction cost). Future: implement local-cluster
 approximation in pyspin for full HPC scaling without MNova.
 
 ### Possible future work
-- **Scale:** MNova engine opens every XML in one session; for pyspin, scale by
-  adding workers / HPC nodes (embarrassingly parallel across molecules).
-- **Pure-Python fallback (if MNova ever blocks):** for N≤8 spin-½ systems the
-  Hilbert space is ≤ 2⁸ = 256-d. Build H = Σ δᵢ Izᵢ + Σ Jᵢⱼ (IᵢxIⱼx + IᵢyIⱼy +
-  IᵢzIⱼz), diagonalise, compute transitions + intensities, Lorentzian-broaden.
-  Fully scriptable, bypasses MNova.
+- **Local-cluster approximation in pyspin** (what MNova does): partition the
+  coupling graph into overlapping ≤~10-spin clusters, simulate each exactly, glue
+  inter-cluster couplings first-order. Would give pyspin linear scaling and remove
+  the ~15-coupled-spin wall — full HPC scaling with no MNova dependency anywhere.
+  Run `engine="auto"` on real Task 2 output first to see what fraction of
+  molecules actually exceed the wall before investing.
+- **Task 2 adapter:** if Task 2 emits matrices as `.npy` rather than XML, add a
+  small `matrix.npy → matrix_to_xml → save` shim ahead of `run_pipeline`.
 
 ---
 

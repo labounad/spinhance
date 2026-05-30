@@ -16,7 +16,7 @@ At low field (e.g. 90 MHz), ¹H NMR spectra are often non-first-order: peaks ove
 spinhance/
 ├── generate/          # Task 1 — molecule generation & SMILES filtering
 ├── mol_to_matrix/     # Task 2 — 3D embedding + heuristic J/shift matrix
-├── simulation/        # Task 3 — MNova spin simulation pipeline
+├── simulation/        # Task 3 — spin simulation (MNova + pure-Python engines)
 ├── ml_model/          # Task 4 — deep learning model (spectrum → matrix)
 ├── data/
 │   ├── raw/           # SMILES lists, raw SDF files (gitignored if large)
@@ -85,14 +85,18 @@ This is equivalently an **undirected labeled graph**: nodes carry (δ, n), edges
 ---
 
 ### Task 3 — SIMULATION (`simulation/`)
-**Simulate accurate ¹H NMR spectra at 90 MHz and 600 MHz using MNova.**
+**Simulate accurate ¹H NMR spectra at 90 MHz and 600 MHz.**
 
-**Status: working.** See `simulation/README.md` for the architecture diagram,
-usage, and one-time MNova setup.
+**Status: working.** Two interchangeable engines — MestReNova and a validated
+pure-Python simulator (`pyspin`) — plus an `auto` router. See
+`simulation/README.md` for the architecture diagram, engines, usage, benchmarks,
+and one-time MNova setup.
 
 #### Subtasks
-- [x] Convert shift+J matrix → MNova spin-system XML (`simulation/xml_io.py`)
-- [x] MNova JS batch script to load XMLs, run QM spin simulation, export spectra (`simulation/mnova_scripts/spinhanceBatch.qs`)
+- [x] Convert shift+J matrix ⇄ MNova spin-system XML (`simulation/xml_io.py`)
+- [x] MNova JS batch script + parallel CLI driver (`mnova_scripts/spinhanceBatch.qs`, `mnova_runner.py`)
+- [x] Pure-Python exact engine: composite-particle reduction + connected-component split, multiprocessed; validated vs MNova (r ≈ 0.993–0.999) (`simulation/pyspin/`)
+- [x] `auto` engine routes per molecule by coupled-fragment size (pyspin vs MNova)
 - [x] Simulate at **90 MHz** (low-field, non-first-order) and **600 MHz** (high-field, reference)
 - [x] Post-process: normalize integral to 1, save `.npy` (`simulation/pipeline.py`)
 - [x] Output: `data/processed/spectra/<field>MHz/` — 2¹⁴-point intensity arrays (0–12 ppm)
