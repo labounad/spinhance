@@ -62,14 +62,18 @@ from __future__ import annotations
 import csv
 import gzip
 import json
+import os
 import sys
+from collections import deque
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-_REPO_ROOT     = Path(__file__).resolve().parent.parent
-DEFAULT_INPUT  = _REPO_ROOT / "generate" / "data" / "8spin.csv"
-DEFAULT_OUTPUT = _REPO_ROOT / "generate" / "data" / "8spin.xyz.gz"
+_REPO_ROOT       = Path(__file__).resolve().parent.parent
+DEFAULT_INPUT    = _REPO_ROOT / "generate" / "data" / "8spin.csv"
+DEFAULT_OUTPUT   = _REPO_ROOT / "generate" / "data" / "8spin.xyz.gz"
+DEFAULT_WORKERS  = max(1, (os.cpu_count() or 2) - 1)
 
 
 # ── Per-molecule XYZ block ────────────────────────────────────────────────────
@@ -177,18 +181,35 @@ def molecule_to_xyz(
     return "\n".join(lines) + "\n"
 
 
+# ── Process-pool worker ──────────────────────────────────────────────────────
+
+def _xyz_worker(args: tuple[str, str, str]) -> str | None:
+    """Compute one XYZ block inside a worker process.
+
+    Top-level so it is picklable.  Deferred imports inside ``molecule_to_xyz``
+    handle RDKit initialisation per-process (safe under both fork and spawn).
+    """
+    smiles, chembl_id, inchikey = args
+    return molecule_to_xyz(smiles, chembl_id=chembl_id, inchikey=inchikey)
+
+
 # ── Batch writer ──────────────────────────────────────────────────────────────
 
 def write_xyz_gz(
     input_path:  Path = DEFAULT_INPUT,
     output_path: Path = DEFAULT_OUTPUT,
     *,
+    workers: int  = DEFAULT_WORKERS,
     verbose: bool = True,
 ) -> tuple[int, int]:
     """Stream molecules from *input_path* into a gzip multi-XYZ at *output_path*.
 
-    Each molecule is processed and flushed to disk immediately — memory use is
-    O(1 molecule) regardless of dataset size.
+    XYZ blocks are computed in parallel using *workers* processes.  Results are
+    written to the gzip file in the **same order as the input CSV** so the output
+    is deterministic regardless of worker scheduling.
+
+    A bounded deque of in-flight futures (``workers × 8``) keeps memory flat
+    while still keeping all workers busy.
 
     Parameters
     ----------
@@ -198,6 +219,8 @@ def write_xyz_gz(
     output_path:
         Destination ``.xyz.gz`` file.  Parent directories are created if absent.
         Any existing file is overwritten.
+    workers:
+        Number of worker processes.  Defaults to ``cpu_count - 1``.
     verbose:
         Show a tqdm progress bar and summary when ``True``.
 
@@ -222,29 +245,54 @@ def write_xyz_gz(
     with open(input_path, newline="") as f:
         rows = list(csv.DictReader(f))
 
-    total   = 0
-    written = 0
-    failed  = 0
+    total       = 0
+    written     = 0
+    failed      = 0
+    max_pending = workers * 8   # keep workers fed without unbounded queue
 
-    iterator = (
-        _tqdm(rows, desc="Writing 8spin.xyz.gz", unit=" mol") if _tqdm else rows
-    )
+    pbar = (_tqdm(total=len(rows),
+                  desc=f"Writing 8spin.xyz.gz  [{workers} workers]",
+                  unit=" mol") if _tqdm else None)
 
-    with gzip.open(output_path, "wt", encoding="utf-8", compresslevel=6) as gz:
-        for row in iterator:
+    with (
+        gzip.open(output_path, "wt", encoding="utf-8", compresslevel=6) as gz,
+        ProcessPoolExecutor(max_workers=workers) as pool,
+    ):
+        pending:  deque = deque()
+        row_iter = iter(rows)
+        exhausted = False
+
+        while True:
+            # Fill the pending queue up to max_pending.
+            while not exhausted and len(pending) < max_pending:
+                try:
+                    row = next(row_iter)
+                except StopIteration:
+                    exhausted = True
+                    break
+                smiles    = row.get("smiles", "")
+                chembl_id = row.get("chembl_id", f"mol_{total + len(pending) + 1}")
+                inchikey  = row.get("inchikey", "")
+                pending.append(pool.submit(_xyz_worker, (smiles, chembl_id, inchikey)))
+
+            if not pending:
+                break
+
+            # Consume the oldest future (preserves input order).
+            xyz = pending.popleft().result()
             total += 1
-            smiles    = row.get("smiles", "")
-            chembl_id = row.get("chembl_id", f"mol_{total}")
-            inchikey  = row.get("inchikey", "")
 
-            xyz = molecule_to_xyz(smiles, chembl_id=chembl_id, inchikey=inchikey)
+            if pbar is not None:
+                pbar.update(1)
 
             if xyz is None:
                 failed += 1
-                continue
+            else:
+                gz.write(xyz)
+                written += 1
 
-            gz.write(xyz)
-            written += 1
+    if pbar is not None:
+        pbar.close()
 
     if verbose:
         size_mb = output_path.stat().st_size / 1e6
