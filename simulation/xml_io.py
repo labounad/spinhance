@@ -43,6 +43,7 @@ __all__ = [
     "save_xml",
     "patch_frequency",
     "generate_field_pair",
+    "xml_to_matrix",
 ]
 
 # Default field strengths (MHz). "Low field" is 90 MHz (strongly coupled,
@@ -159,6 +160,62 @@ def matrix_to_xml(
     ET.SubElement(spec, "to").text = str(ppm_to)
 
     return ET.ElementTree(root)
+
+
+def xml_to_matrix(xml_path: str | Path) -> dict:
+    """Parse a ``mnova-spinsim`` XML back into matrix form (inverse of
+    :func:`matrix_to_xml`).
+
+    Returns
+    -------
+    dict with keys:
+        ``shifts``      list[float] — δ in ppm, in group order.
+        ``couplings``   list[list[float]] — symmetric n×n J in Hz.
+        ``degeneracy``  list[int] — protons per group.
+        ``labels``      list[str] — group names.
+        ``frequency_mhz``, ``points``, ``ppm_from``, ``ppm_to`` — spectrum meta
+        (``None`` if absent).
+    """
+    root = ET.parse(str(xml_path)).getroot()
+    groups = root.findall(".//group")
+    labels = [g.get("name") for g in groups]
+    index = {name: i for i, name in enumerate(labels)}
+    n = len(groups)
+
+    shifts = [0.0] * n
+    degeneracy = [1] * n
+    couplings = [[0.0] * n for _ in range(n)]
+
+    for i, g in enumerate(groups):
+        shifts[i] = float(g.find("shift").text)
+        degeneracy[i] = int(g.get("number", "1"))
+        for jc in g.findall("jCoupling"):
+            partner = jc.get("name")
+            if partner in index:
+                couplings[i][index[partner]] = float(jc.text)
+
+    # Symmetrise (XML stores J in both directions, but be robust to asymmetry).
+    for a in range(n):
+        for b in range(a + 1, n):
+            if couplings[a][b] == 0.0 and couplings[b][a] != 0.0:
+                couplings[a][b] = couplings[b][a]
+            else:
+                couplings[b][a] = couplings[a][b]
+
+    def _meta(tag, cast):
+        el = root.find(f".//spectrum/{tag}")
+        return cast(el.text) if el is not None else None
+
+    return {
+        "shifts": shifts,
+        "couplings": couplings,
+        "degeneracy": degeneracy,
+        "labels": labels,
+        "frequency_mhz": _meta("frequency", float),
+        "points": _meta("points", int),
+        "ppm_from": _meta("from", float),
+        "ppm_to": _meta("to", float),
+    }
 
 
 def save_xml(tree: ET.ElementTree, path: str | Path) -> None:

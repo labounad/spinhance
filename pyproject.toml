@@ -24,7 +24,7 @@ spinhance-gen = "generate.cli:main"
 
 [tool.setuptools]
 packages = [
-    "simulation", "simulation.tests", "simulation.benchmarks",
+    "simulation", "simulation.tests", "simulation.benchmarks", "simulation.pyspin",
     "generate",   "generate.tests",
 ]
 

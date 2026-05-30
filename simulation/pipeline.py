@@ -162,18 +162,34 @@ def run_pipeline(
     fields_mhz: list[float] = DEFAULT_FIELDS_MHZ,
     workers: int = 1,
     launcher: str = "open",
+    engine: str = "mnova",
 ) -> None:
-    """Run patch → simulate → convert for every field.
+    """Run simulation for every field, producing normalised ``.npy`` spectra.
 
     Parameters
     ----------
+    engine
+        ``"mnova"`` — patch XMLs → MestReNova → txt → npy (the original path).
+        ``"python"`` — pure-Python pyspin engine, parallel across CPU cores
+        (no MNova/license; recommended for large/HPC runs).
     workers
-        Number of concurrent MNova instances (``1`` = sequential single launch).
+        For ``mnova``: concurrent MNova instances. For ``python``: process count.
     launcher
-        Parallel launch method, ``"open"`` or ``"direct"`` (see mnova_runner).
+        MNova parallel launch method (``mnova`` engine only).
 
-    See module docstring for the output directory layout.
+    Output layout (both engines): ``<out_dir>/spectra/<field>MHz/<stem>.npy``.
     """
+    if engine == "python":
+        from simulation.pyspin.batch import run_pyspin_batch
+        print("=== pyspin (pure-Python) engine ===")
+        run_pyspin_batch(source_xml_dir, out_dir, fields_mhz=list(fields_mhz),
+                         workers=workers)
+        print("\n=== Pipeline complete ===")
+        print(f"Spectra saved to: {out_dir / 'spectra'}")
+        return
+    if engine != "mnova":
+        raise ValueError(f"unknown engine: {engine!r} (use 'mnova' or 'python')")
+
     patched_xml_dir = out_dir / "xmls"
     txt_base = out_dir / "txt"
     npy_base = out_dir / "spectra"
