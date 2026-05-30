@@ -21,12 +21,12 @@ ChEMBL chemreps.txt  (~738 MB)
         │  Heuristic: n_proton_bearing_c ≤ 8  AND  n_ch_protons ≥ 8
         │  Fast O(n) stream; ~10 min on full ChEMBL
         ▼
-candidates_round01.csv  (~1 M rows)
+8spin.csv (intermediate not kept)  (~1 M rows)
         │
         ▼  generate/screen.py  (calls spin_equivalence.py)
         │  Exact 3-D deuterium test; ~100–500 ms/mol
         ▼
-smiles_8group.csv  (~4 K rows — the final dataset)
+8spin.csv  (~4 K rows — the final dataset)
         │
         ▼  generate/viewer.py  (triage GUI)
 ```
@@ -124,8 +124,7 @@ generate/
 | File | Size | Description |
 |------|------|-------------|
 | `chembl/chembl_37_chemreps.txt` | 738 MB | ChEMBL v37 tab-separated chemreps |
-| `data/candidates_round01.csv` | ~25 MB | Heuristic pre-filter output |
-| `data/smiles_8group.csv` | ~120 KB | Final 8-group dataset |
+| `data/8spin.csv` | varies | Final 8-group dataset (output of `run`) |
 
 ---
 

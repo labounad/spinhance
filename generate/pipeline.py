@@ -1,7 +1,7 @@
 """generate/pipeline.py — end-to-end molecule screening pipeline.
 
 Streams the ChEMBL chemreps file and writes qualifying molecules directly to
-``candidates_final.csv`` in a single pass with no intermediate file.
+``8spin.csv`` in a single pass with no intermediate file.
 
 Two filters run in sequence for every molecule:
 
@@ -57,7 +57,7 @@ RDLogger.DisableLog("rdApp.*")
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
 DEFAULT_CHEMBL     = _REPO_ROOT / "generate" / "chembl" / "chembl_37_chemreps.txt"
-DEFAULT_OUTPUT     = _REPO_ROOT / "generate" / "data" / "8spin_final.csv"
+DEFAULT_OUTPUT     = _REPO_ROOT / "generate" / "data" / "8spin.csv"
 DEFAULT_WORKERS    = max(1, (os.cpu_count() or 2) - 1)
 DEFAULT_CHUNK_SIZE = 32
 

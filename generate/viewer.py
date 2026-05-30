@@ -11,7 +11,7 @@ Usage
 ::
 
     python generate/cli.py view
-    python generate/cli.py view --file generate/data/candidates_final.csv --n 200
+    python generate/cli.py view --file generate/data/8spin.csv --n 200
 """
 
 from __future__ import annotations

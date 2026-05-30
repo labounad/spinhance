@@ -19,9 +19,8 @@ Quick start
 -----------
 Run the two-stage pipeline from the command line::
 
-    spinhance-gen filter                    # ChEMBL → candidates_round01.csv
-    spinhance-gen screen                    # round01 → smiles_8group.csv
-    spinhance-gen view --file generate/data/smiles_8group.csv
+    spinhance-gen run                       # ChEMBL → 8spin.csv
+    spinhance-gen view                      # opens 8spin.csv in viewer
 
 Or call the Python API directly::
 
