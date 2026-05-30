@@ -58,6 +58,7 @@ This is equivalently an **undirected labeled graph**: nodes carry (δ, n), edges
 - [x] Identify chemically **and** magnetically equivalent proton groups (homotopic/enantiotopic analysis)
 - [x] Filter to molecules with **exactly 8** hard-equivalent spin groups
 - [x] Output: `data/raw/smiles_8group.csv` (SMILES, InChIKey, n_groups, group_sizes)
+- [ ] Increase dataset size (pubchem or ZINC)
 
 #### Key decisions
 - Magnetic equivalence requires symmetry analysis beyond simple graph isomorphism — use RDKit `GetSymmSSSR` + point-group or topological equivalence
