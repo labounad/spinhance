@@ -44,16 +44,8 @@ python -m mol_to_matrix.pipeline input.csv out_dir --smiles-col smiles --id-col 
 
 Chemical-shift prediction shells out to the standalone **NMRShiftDB2 predictor
 JARs** (Java) plus their CDK dependencies — these live in a separate SVN
-checkout, **outside this repo** (the JARs are large; the database is
-copyrighted-but-open-content).
-
-- Default location: a sibling of the repo, `../nmrshiftdb2`.
-- Override with the `NMRSHIFTDB_HOME` environment variable.
-- Requires a Java runtime (Java 8+) on `PATH`.
-
-```bash
-svn checkout https://svn.code.sf.net/p/nmrshiftdb2/code/ ../nmrshiftdb2
-```
+checkout, **outside this repo** (`../nmrshiftdb2` by default, or set
+`NMRSHIFTDB_HOME`). See **[SETUP.md](SETUP.md)** for one-time setup steps.
 
 Coupling estimation and grouping need only RDKit, so those modules (and their
 tests) run without Java; the shift/matrix steps require the predictor.
