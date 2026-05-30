@@ -14,7 +14,11 @@ import numpy as np
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
-from simulation.pyspin.composite import spin_reps, simulate_spectrum_composite  # noqa: E402
+from simulation.pyspin.composite import (  # noqa: E402
+    spin_reps,
+    simulate_spectrum_composite,
+    _components,
+)
 from simulation.pyspin.simulator import simulate_spectrum  # noqa: E402
 
 
@@ -40,6 +44,37 @@ def test_composite_matches_spin_half_AX3():
     _, comp = simulate_spectrum_composite(shifts, couplings, degeneracy, 90.0)
     assert np.corrcoef(ref, comp)[0, 1] > 0.99999
     assert abs(ref.sum() - comp.sum()) / ref.sum() < 1e-6
+
+
+def test_components_partition():
+    n = 5
+    J = [[0.0] * n for _ in range(n)]
+    J[0][1] = J[1][0] = 7.0   # 0-1 coupled
+    J[2][3] = J[3][2] = 6.0   # 2-3 coupled; 4 isolated
+    assert _components(J, n) == [[0, 1], [2, 3], [4]]
+
+
+def test_high_degeneracy_coupled_iPr():
+    # isopropyl: 6 equivalent methyl H coupled to 1 methine H (the 6H<->1H case)
+    shifts = [0.95, 1.95]
+    couplings = [[0.0, 6.8], [6.8, 0.0]]
+    degeneracy = [6, 1]
+    _, ref = simulate_spectrum(shifts, couplings, degeneracy, 90.0)   # 7 spins explicit
+    _, comp = simulate_spectrum_composite(shifts, couplings, degeneracy, 90.0)
+    assert np.corrcoef(ref, comp)[0, 1] > 0.99999
+
+
+def test_decomposition_equivalence_with_singlet():
+    # coupled methyl+CH PLUS an isolated singlet group: decomposition must equal
+    # the explicit spin-1/2 simulation of the whole (uncoupled parts just add).
+    shifts = [1.0, 3.6, 7.2]
+    n = 3
+    J = [[0.0] * n for _ in range(n)]
+    J[0][1] = J[1][0] = 7.0          # group2 (index2) isolated singlet
+    degeneracy = [3, 1, 3]
+    _, ref = simulate_spectrum(shifts, J, degeneracy, 90.0)
+    _, comp = simulate_spectrum_composite(shifts, J, degeneracy, 90.0)
+    assert np.corrcoef(ref, comp)[0, 1] > 0.99999
 
 
 def test_composite_matches_spin_half_multi_group():

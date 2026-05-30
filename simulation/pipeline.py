@@ -163,6 +163,7 @@ def run_pipeline(
     workers: int = 1,
     launcher: str = "open",
     engine: str = "mnova",
+    pyspin_max_spins: int = 13,
 ) -> None:
     """Run simulation for every field, producing normalised ``.npy`` spectra.
 
@@ -172,13 +173,22 @@ def run_pipeline(
         ``"mnova"`` — patch XMLs → MestReNova → txt → npy (the original path).
         ``"python"`` — pure-Python pyspin engine, parallel across CPU cores
         (no MNova/license; recommended for large/HPC runs).
+        ``"auto"`` — route each molecule by its largest connected-component spin
+        count: ≤ ``pyspin_max_spins`` → pyspin, else MNova (pyspin walls on big
+        coupled fragments; MNova's clustering scales linearly there).
     workers
         For ``mnova``: concurrent MNova instances. For ``python``: process count.
     launcher
         MNova parallel launch method (``mnova`` engine only).
+    pyspin_max_spins
+        ``auto`` routing threshold (largest coupled-fragment spin count).
 
-    Output layout (both engines): ``<out_dir>/spectra/<field>MHz/<stem>.npy``.
+    Output layout (all engines): ``<out_dir>/spectra/<field>MHz/<stem>.npy``.
     """
+    if engine == "auto":
+        _run_auto(source_xml_dir, out_dir, mnova_exe, list(fields_mhz),
+                  workers, launcher, pyspin_max_spins)
+        return
     if engine == "python":
         from simulation.pyspin.batch import run_pyspin_batch
         print("=== pyspin (pure-Python) engine ===")
@@ -188,7 +198,7 @@ def run_pipeline(
         print(f"Spectra saved to: {out_dir / 'spectra'}")
         return
     if engine != "mnova":
-        raise ValueError(f"unknown engine: {engine!r} (use 'mnova' or 'python')")
+        raise ValueError(f"unknown engine: {engine!r} (use 'mnova', 'python', 'auto')")
 
     patched_xml_dir = out_dir / "xmls"
     txt_base = out_dir / "txt"
@@ -209,3 +219,58 @@ def run_pipeline(
 
     print("\n=== Pipeline complete ===")
     print(f"Spectra saved to: {npy_base}")
+
+
+def _run_auto(source_xml_dir, out_dir, mnova_exe, fields_mhz, workers, launcher,
+              pyspin_max_spins):
+    """Route each molecule by largest coupled-fragment size: pyspin vs MNova."""
+    import shutil
+
+    from simulation.pyspin.composite import largest_component_spins
+    from simulation.xml_io import xml_to_matrix
+
+    source_xml_dir = Path(source_xml_dir)
+    out_dir = Path(out_dir)
+    xmls = sorted(source_xml_dir.glob("*.xml"))
+    if not xmls:
+        raise FileNotFoundError(f"No XML files found in {source_xml_dir}")
+
+    py_dir = out_dir / "_route_pyspin"
+    mn_dir = out_dir / "_route_mnova"
+    for d in (py_dir, mn_dir):
+        shutil.rmtree(d, ignore_errors=True)
+        d.mkdir(parents=True)
+
+    sizes = []
+    n_py = n_mn = 0
+    for xml in xmls:
+        m = xml_to_matrix(xml)
+        size = largest_component_spins(m["couplings"], m["degeneracy"])
+        sizes.append(size)
+        dest = py_dir if size <= pyspin_max_spins else mn_dir
+        shutil.copy2(xml, dest / xml.name)
+        if size <= pyspin_max_spins:
+            n_py += 1
+        else:
+            n_mn += 1
+
+    import numpy as np
+    sizes = np.array(sizes)
+    print("=== engine=auto routing ===")
+    print(f"  {len(xmls)} molecules; largest coupled-fragment spins: "
+          f"min {sizes.min()}, median {int(np.median(sizes))}, max {sizes.max()}")
+    print(f"  threshold {pyspin_max_spins}: pyspin {n_py} "
+          f"({100*n_py/len(xmls):.1f}%), MNova {n_mn} "
+          f"({100*n_mn/len(xmls):.1f}%)")
+
+    if n_py:
+        from simulation.pyspin.batch import run_pyspin_batch
+        print("\n--- pyspin subset ---")
+        run_pyspin_batch(py_dir, out_dir, fields_mhz=fields_mhz, workers=workers)
+    if n_mn:
+        print("\n--- MNova subset ---")
+        run_pipeline(mn_dir, out_dir, mnova_exe=mnova_exe, fields_mhz=fields_mhz,
+                     workers=workers, launcher=launcher, engine="mnova")
+
+    print("\n=== Pipeline complete (auto) ===")
+    print(f"Spectra saved to: {out_dir / 'spectra'}")

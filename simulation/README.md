@@ -13,7 +13,13 @@ Two interchangeable simulation engines (`--engine`):
 - **`python`** (`pyspin`) — pure-Python exact simulator with composite-particle
   reduction for equivalent groups. License-free, parallel across all CPU cores,
   runs on HPC. Validated against MNova (r = 0.9993, peak offset 0.0008 ppm).
-  **Recommended for large/HPC dataset generation.**
+  Exact, so cost grows exponentially with the largest *coupled fragment* size
+  (~15 spins is the practical wall); molecules with sparse/local coupling
+  decompose into small fragments and run in milliseconds regardless of total H.
+- **`auto`** — routes each molecule by its largest connected-component spin
+  count: ≤ `--pyspin-max-spins` (default 13) → pyspin; larger → MNova (whose
+  local-cluster method scales ~linearly with system size). Reports the routing
+  distribution so you can see what fraction of a dataset needs MNova.
 
 - **Low field — 90 MHz:** strongly coupled, non-first-order. This is the model's
   *input*.

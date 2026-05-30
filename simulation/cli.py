@@ -47,8 +47,12 @@ def _add_run(sub: argparse._SubParsersAction) -> None:
                    help="Concurrent MNova instances (default 1 = sequential)")
     p.add_argument("--launcher", choices=["open", "direct"], default="open",
                    help="MNova parallel launch method on macOS (default: open)")
-    p.add_argument("--engine", choices=["mnova", "python"], default="mnova",
-                   help="Simulation engine: 'mnova' or pure-Python 'python'")
+    p.add_argument("--engine", choices=["mnova", "python", "auto"], default="mnova",
+                   help="Engine: 'mnova', pure-Python 'python', or 'auto' (route "
+                        "per molecule by coupled-fragment size)")
+    p.add_argument("--pyspin-max-spins", type=int, default=13,
+                   help="auto-routing threshold: largest coupled-fragment spins "
+                        "that still go to pyspin (default 13)")
 
 
 def _add_plot(sub: argparse._SubParsersAction) -> None:
@@ -87,6 +91,7 @@ def main(argv: list[str] | None = None) -> int:
             workers=args.workers,
             launcher=args.launcher,
             engine=args.engine,
+            pyspin_max_spins=args.pyspin_max_spins,
         )
         return 0
 

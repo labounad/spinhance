@@ -42,7 +42,18 @@ except Exception:                     # numpy fallback
     def _eigh(H):
         return np.linalg.eigh(H)
 
-__all__ = ["spin_reps", "simulate_spectrum_composite"]
+__all__ = ["spin_reps", "simulate_spectrum_composite", "largest_component_spins"]
+
+
+def largest_component_spins(couplings, degeneracy) -> int:
+    """Largest connected-component size in *spins* (degeneracy summed).
+
+    This is what bounds the exact-simulation cost: pyspin's Hilbert space for a
+    molecule is set by its biggest coupled fragment, not its total proton count.
+    Used by the ``auto`` engine router to decide pyspin vs MNova per molecule.
+    """
+    comps = _components(couplings, len(degeneracy))
+    return max(sum(int(degeneracy[g]) for g in comp) for comp in comps)
 
 
 def spin_reps(d: int) -> list[tuple[float, int]]:
@@ -68,6 +79,30 @@ def _ops(S: float):
         mi = m[i]
         aplus[i] = math.sqrt(max(0.0, S * (S + 1) - mi * (mi + 1)))
     return m, aplus
+
+
+def _components(couplings, G):
+    """Connected components of the coupling graph (edge where J != 0).
+
+    Each component is an independent spin system; their spectra add.
+    """
+    seen = [False] * G
+    comps = []
+    for start in range(G):
+        if seen[start]:
+            continue
+        stack = [start]
+        seen[start] = True
+        comp = []
+        while stack:
+            g = stack.pop()
+            comp.append(g)
+            for h in range(G):
+                if not seen[h] and couplings[g][h] != 0.0:
+                    seen[h] = True
+                    stack.append(h)
+        comps.append(sorted(comp))
+    return comps
 
 
 def _simulate_combination(S_list, nu_hz, Jgg, intensity_threshold):
@@ -183,18 +218,35 @@ def simulate_spectrum_composite(
     returns (ppm_axis, intensity) normalised to unit integral.
     """
     G = len(shifts)
-    nu_hz = [shifts[g] * field_mhz for g in range(G)]
-    reps = [spin_reps(int(degeneracy[g])) for g in range(G)]
-
+    # Decompose the coupling graph into independent components: uncoupled
+    # subsystems' spectra simply add, so we never build a Hamiltonian larger
+    # than one connected fragment (isolated singlets become trivial 1-group sims).
     all_freqs, all_amps = [], []
-    for combo in product(*reps):
-        S_list = [c[0] for c in combo]
-        weight = 1
-        for c in combo:
-            weight *= c[1]
-        f, a = _simulate_combination(S_list, nu_hz, couplings, intensity_threshold)
-        if len(f):
-            all_freqs.append(f); all_amps.append(a * weight)
+    for comp in _components(couplings, G):
+        sub_nu = [shifts[g] * field_mhz for g in comp]
+        sub_J = [[couplings[a][b] for b in comp] for a in comp]
+        sub_reps = [spin_reps(int(degeneracy[g])) for g in comp]
+        comp_freqs, comp_amps = [], []
+        for combo in product(*sub_reps):
+            S_list = [c[0] for c in combo]
+            weight = 1
+            for c in combo:
+                weight *= c[1]
+            f, a = _simulate_combination(S_list, sub_nu, sub_J, intensity_threshold)
+            if len(f):
+                comp_freqs.append(f); comp_amps.append(a * weight)
+        if not comp_freqs:
+            continue
+        cf = np.concatenate(comp_freqs); ca = np.concatenate(comp_amps)
+        # Each component is simulated in its own Hilbert space, so its raw
+        # intensity scale differs between components. Renormalise so the
+        # component integrates to its proton count (NMR areas ∝ #protons), which
+        # makes inter-component areas correct after the final normalisation.
+        comp_protons = sum(int(degeneracy[g]) for g in comp)
+        raw = ca.sum()
+        if raw > 0:
+            ca = ca * (comp_protons / raw)
+        all_freqs.append(cf); all_amps.append(ca)
 
     freqs = np.concatenate(all_freqs) if all_freqs else np.array([])
     amps = np.concatenate(all_amps) if all_amps else np.array([])

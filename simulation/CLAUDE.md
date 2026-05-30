@@ -182,6 +182,19 @@ parallel across cores, HPC-capable.
 Perf wins were: FFT broadening (the real bottleneck, not eigh) and composite
 reduction (makes high-degeneracy groups tractable).
 
+### Engine scaling & the `auto` router
+Benchmarked (fully-coupled chain, worst case): pyspin is exact so cost ~ C(N,N/2)³
+— N=13 ~1.6s, N=14 ~12s, N=15 ~85s, N≥16 >2min. MNova is FLAT ~2.4-2.9s up to
+N=20 (2^20): it uses overlapping local spin-cluster decomposition with first-order
+gluing (near-exact on sparse graphs, linear scaling). pyspin vs MNova still agree
+at N=14 (r=0.9947, 40/40 peaks), so MNova's approximation is excellent.
+Implication: pyspin wins for sparse/decomposable molecules (the norm); MNova wins
+for one large coupled fragment. `engine="auto"` (`_run_auto` in pipeline.py) routes
+per molecule by `largest_component_spins` (≤ pyspin_max_spins=13 → pyspin, else
+MNova) and prints the routing distribution. Metric is conservative (total
+component spins ≥ post-reduction cost). Future: implement local-cluster
+approximation in pyspin for full HPC scaling without MNova.
+
 ### Possible future work
 - **Scale:** MNova engine opens every XML in one session; for pyspin, scale by
   adding workers / HPC nodes (embarrassingly parallel across molecules).
