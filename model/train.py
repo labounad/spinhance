@@ -264,6 +264,8 @@ def fit(records, assignment, cfg: TrainConfig, model=None):
     will_run_stage2 = cfg.stage1_epochs < cfg.epochs
     best, bad = float("inf"), 0
     for epoch in range(cfg.epochs):
+        if epoch == cfg.stage1_epochs and will_run_stage2:
+            bad = 0     # fresh patience window for Stage 2 (objective changed)
         loader = plain if epoch < cfg.stage1_epochs else bucketed
         tr = train_epoch(model, loader, opt, sched, scaler, cfg, std, epoch,
                          device, amp_ctx, balance=balance)

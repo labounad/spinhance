@@ -26,19 +26,29 @@ def _conv(in_c, out_c, k=3, s=1):
     return nn.Conv1d(in_c, out_c, k, stride=s, padding=k // 2, bias=False)
 
 
+def _norm(c):
+    """GroupNorm (not BatchNorm): independent of batch composition, so the
+    Stage-2 bucketed sampler (homogeneous batches) and small batches don't
+    distort normalization statistics. Picks the largest #groups dividing c."""
+    g = min(32, c)
+    while c % g:
+        g -= 1
+    return nn.GroupNorm(g, c)
+
+
 class BasicBlock1D(nn.Module):
     def __init__(self, in_c, out_c, stride=1):
         super().__init__()
         self.conv1 = _conv(in_c, out_c, 3, stride)
-        self.bn1 = nn.BatchNorm1d(out_c)
+        self.bn1 = _norm(out_c)
         self.conv2 = _conv(out_c, out_c, 3, 1)
-        self.bn2 = nn.BatchNorm1d(out_c)
+        self.bn2 = _norm(out_c)
         self.act = nn.ReLU(inplace=True)
         self.down = None
         if stride != 1 or in_c != out_c:
             self.down = nn.Sequential(
                 nn.Conv1d(in_c, out_c, 1, stride=stride, bias=False),
-                nn.BatchNorm1d(out_c))
+                _norm(out_c))
 
     def forward(self, x):
         idn = x if self.down is None else self.down(x)
@@ -54,7 +64,7 @@ class ResNet1DEncoder(nn.Module):
         self.stem = nn.Sequential(
             nn.Conv1d(1, stem_channels, stem_kernel, stride=stem_stride,
                       padding=stem_kernel // 2, bias=False),
-            nn.BatchNorm1d(stem_channels), nn.ReLU(inplace=True),
+            _norm(stem_channels), nn.ReLU(inplace=True),
             nn.MaxPool1d(3, stride=2, padding=1))
         stages = []
         in_c = stem_channels
