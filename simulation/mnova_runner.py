@@ -241,15 +241,30 @@ def run_mnova_parallel(
         # work continues in the background, so we poll output counts. For
         # "direct", processes stay alive, so we can also break when all exit.
         use_proc_exit = (launcher == "direct")
-        total_timeout = max(120.0, (expected / workers) * timeout_per_file * 2)
-        # Use a single monotonic clock for both the deadline and elapsed time.
+        total_timeout = max(120.0, expected * timeout_per_file)
+        # Abort if NO new output appears for this long (catches a stuck launcher
+        # — e.g. `open --args` not forwarding -sf — instead of hanging).
+        stall_timeout = max(60.0, timeout_per_file * 4)
+
+        # Single monotonic clock for deadline, elapsed, and stall tracking.
         t0 = time.monotonic()
         deadline = t0 + total_timeout
+        last_count = -1
+        last_progress = t0
         while time.monotonic() < deadline:
             produced = sum(len(list(d.glob("*.txt"))) for d in shard_out_dirs)
+            if produced != last_count:
+                print(f"    progress: {produced}/{expected} "
+                      f"(+{produced - max(0, last_count)})")
+                last_count = produced
+                last_progress = time.monotonic()
             if produced >= expected:
                 break
             if use_proc_exit and all(p.poll() is not None for p in procs):
+                break
+            if time.monotonic() - last_progress > stall_timeout:
+                print(f"    *** no new outputs for {stall_timeout:.0f}s — aborting "
+                      "(launcher likely not running sims). ***")
                 break
             time.sleep(poll_interval)
         elapsed = time.monotonic() - t0
