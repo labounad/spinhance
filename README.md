@@ -75,9 +75,23 @@ This is equivalently an **undirected labeled graph**: nodes carry (δ, n), edges
 - [x] Apply literature tables for geminal (²*J*), vinyl, aryl, benzylic, allylic, long-range (⁴*J*) couplings (`geminal.py`, `olefinic.py`, `aromatic.py`, `long_range.py`)
 - [x] Merge all coupling types into one J dict, no pruning (`coupling.py`)
 - [x] Assemble symmetric 8×8 *J*-matrix + δ-diagonal + degeneracy vector (`matrix.py`, `groups.py`)
-- [x] Output: `data/processed/matrices/` — one `.npy` (packed 8×9) + `.json` per molecule (`pipeline.py`)
+- [x] Output (production): `mol_to_matrix/data/spin_systems.json` — a single JSON array of spin-system records (see contract below)
 
-See `mol_to_matrix/README.md` for module layout and the external NMRShiftDB predictor requirement.
+See `mol_to_matrix/README.md` and `mol_to_matrix/data/README.md` for module layout, the record schema, and the external NMRShiftDB predictor requirement.
+
+#### Task 2 → Task 3 contract (`spin_systems.json`)
+The shared interface is a single JSON **array**; each element is one molecule:
+
+```json
+{"chembl_id": "CHEMBL6622", "smiles": "...", "inchikey": "...",
+ "labels": ["A", "B", "C"],
+ "spin_groups": [[1.06, 3], [2.02, 1], [7.20, 2]],
+ "couplings": [["A", "B", 6.6], ["B", "C", 7.8]]}
+```
+
+`spin_groups[i]` = `[shift ppm, #protons]` describes `labels[i]`; `couplings` are
+non-zero inter-group *J* in Hz (sign retained); absent pairs mean J = 0.
+Task 3 consumes this directly (`simulation/graph_io.py`).
 
 #### Key references
 - Karplus (1959) — vicinal *³J* vs dihedral
@@ -95,18 +109,17 @@ pure-Python simulator (`pyspin`) — plus an `auto` router. See
 and one-time MNova setup.
 
 #### Subtasks
-- [x] Convert shift+J matrix ⇄ MNova spin-system XML (`simulation/xml_io.py`)
-- [x] MNova JS batch script + parallel CLI driver (`mnova_scripts/spinhanceBatch.qs`, `mnova_runner.py`)
-- [x] Pure-Python exact engine: composite-particle reduction + connected-component split, multiprocessed; validated vs MNova (r ≈ 0.993–0.999) (`simulation/pyspin/`)
+- [x] Consume Task 2 `spin_systems.json` directly (`simulation/graph_io.py`); also build/parse MNova XML (`xml_io.py`)
+- [x] **pyspin** — pure-Python exact engine: composite-particle reduction + connected-component split, multiprocessed; **local-cluster approximation** for large fragments (linear scaling, no wall); validated vs MNova (r ≈ 0.993–0.999) (`simulation/pyspin/`)
+- [x] **MNova** engine — JS batch script + parallel/retry CLI driver (`mnova_scripts/spinhanceBatch.qs`, `mnova_runner.py`)
 - [x] `auto` engine routes per molecule by coupled-fragment size (pyspin vs MNova)
 - [x] Simulate at **90 MHz** (low-field, non-first-order) and **600 MHz** (high-field, reference)
-- [x] Post-process: normalize integral to 1, save `.npy` (`simulation/pipeline.py`)
-- [x] Output: `data/processed/spectra/<field>MHz/` — 2¹⁴-point intensity arrays (0–12 ppm)
+- [x] Post-process: normalize integral to 1, save `.npy` + `index.csv` id manifest (`simulation/pipeline.py`)
+- [x] Output: `data/processed/spectra/<field>MHz/mol_<i>.npy` — 2¹⁴-point intensity arrays (0–12 ppm)
 
 #### Notes
-- MNova spin simulator handles strongly-coupled spin systems exactly
-- All team members need an active MNova license
-- Entry point: `python -m simulation.cli run` (see `simulation/README.md`)
+- **No MNova license required** for the default `pyspin` engine — it's pure-Python, parallel across cores, and runs on HPC. MNova is optional (used only by the `mnova`/`auto` engines).
+- Production entry point: `python -m simulation.cli run --graphs mol_to_matrix/data/spin_systems.json --engine python` (see `simulation/README.md`)
 
 ---
 
@@ -159,23 +172,25 @@ Update this table once responsibilities are assigned.
 ## Data Flow
 
 ```
-USPTO / pubchem SMILES
+USPTO / PubChem / ChEMBL SMILES
         │
         ▼
-  [generate/]  ──→  smiles_8group.csv
+  [generate/]      ──→  smiles_8group.csv
         │
         ▼
-  [mol_to_matrix/]  ──→  matrices/*.npy
+  [mol_to_matrix/] ──→  spin_systems.json   (JSON array of spin-system graphs)
         │
         ▼
-  [simulation/]  ──→  spectra/{90MHz,600MHz}/*.npy
+  [simulation/]    ──→  spectra/{90MHz,600MHz}/mol_<i>.npy  +  index.csv
         │
         ▼
-  [ml_model/]  ──→  trained model  ──→  predicted matrix from spectrum
+  [ml_model/]      ──→  trained model  ──→  predicted matrix from spectrum
 ```
 
 ---
 
-## Reference XML
+## Data contract reference
 
-`predicted_mnova_1h (10).xml` in the repo root shows the MNova spin-system XML format used as input to Task 3.
+- **Task 2 → Task 3:** `mol_to_matrix/data/spin_systems.json` (schema above; parsed by `simulation/graph_io.py`).
+- **Spectra → Task 4:** `spectra/<field>MHz/mol_<i>.npy` (16384-point, ∫=1) + `spectra/index.csv` (index → ChEMBL id), shared `ppm_axis.npy` per field.
+- **MNova XML format:** `predicted_mnova_1h (10).xml` (repo root) shows the `mnova-spinsim` XML used internally by the MNova engine.
