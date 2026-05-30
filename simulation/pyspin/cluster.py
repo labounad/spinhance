@@ -35,10 +35,11 @@ from itertools import product
 import numpy as np
 
 from simulation.pyspin.composite import system_transitions
-from simulation.pyspin.simulator import lorentzian_broaden
+from simulation.pyspin.simulator import peaks_to_spectrum
 
 __all__ = ["partition_clusters", "simulate_spectrum_clustered",
-           "simulate_spectrum_pyspin"]
+           "simulate_spectrum_pyspin", "clustered_transitions",
+           "transitions_pyspin"]
 
 
 def simulate_spectrum_pyspin(shifts, couplings, degeneracy, field_mhz,
@@ -101,23 +102,10 @@ def _bath_options(d: int):
     return [(k - d / 2.0, math.comb(d, k)) for k in range(d + 1)]
 
 
-def simulate_spectrum_clustered(
-    shifts,
-    couplings,
-    degeneracy,
-    field_mhz,
-    max_cluster=9,
-    points=16384,
-    ppm_from=0.0,
-    ppm_to=12.0,
-    linewidth_hz=1.0,
-    intensity_threshold=1e-6,
-):
-    """Clustered (first-order-between-clusters) 1H simulation.
-
-    Same signature/return as the exact engines, plus ``max_cluster`` (the
-    largest cluster simulated exactly). Returns (ppm_axis, intensity), ∫ = 1.
-    """
+def clustered_transitions(shifts, couplings, degeneracy, field_mhz,
+                          max_cluster=9, intensity_threshold=1e-6):
+    """Molecule's approximate line list as ``(centers_ppm, amps)`` via the
+    local-cluster method (exact within clusters, first-order Iz bath between)."""
     G = len(shifts)
     clusters = partition_clusters(couplings, degeneracy, max_cluster)
 
@@ -162,13 +150,42 @@ def simulate_spectrum_clustered(
 
     freqs = np.concatenate(all_f) if all_f else np.array([])
     amps = np.concatenate(all_a) if all_a else np.array([])
+    return freqs / field_mhz, amps
 
+
+def simulate_spectrum_clustered(
+    shifts,
+    couplings,
+    degeneracy,
+    field_mhz,
+    max_cluster=9,
+    points=16384,
+    ppm_from=0.0,
+    ppm_to=12.0,
+    linewidth_hz=1.0,
+    intensity_threshold=1e-6,
+):
+    """Clustered (first-order-between-clusters) 1H simulation.
+
+    Returns (ppm_axis, intensity), ∫ = 1.
+    """
+    centers, amps = clustered_transitions(shifts, couplings, degeneracy, field_mhz,
+                                          max_cluster, intensity_threshold)
     ppm = np.linspace(ppm_from, ppm_to, points)
-    centers = freqs / field_mhz
-    hwhm = (linewidth_hz / 2.0) / field_mhz
-    spec = lorentzian_broaden(centers, amps, points, ppm_from, ppm_to, hwhm)
-    dppm = (ppm_to - ppm_from) / points
-    total = spec.sum() * dppm
-    if total > 0:
-        spec = spec / total
+    spec = peaks_to_spectrum(centers, amps, points=points, ppm_from=ppm_from,
+                             ppm_to=ppm_to, linewidth_hz=linewidth_hz,
+                             field_mhz=field_mhz, normalize=True)
     return ppm, spec
+
+
+def transitions_pyspin(shifts, couplings, degeneracy, field_mhz,
+                       exact_max_spins=12, max_cluster=9, intensity_threshold=1e-6):
+    """Line list ``(centers_ppm, amps)`` via the wall-free dispatcher:
+    exact composite for small coupled fragments, else clustered."""
+    from simulation.pyspin.composite import (composite_transitions,
+                                             largest_component_spins)
+    if largest_component_spins(couplings, degeneracy) <= exact_max_spins:
+        return composite_transitions(shifts, couplings, degeneracy, field_mhz,
+                                     intensity_threshold)
+    return clustered_transitions(shifts, couplings, degeneracy, field_mhz,
+                                 max_cluster, intensity_threshold)

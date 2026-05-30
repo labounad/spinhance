@@ -32,7 +32,8 @@ from itertools import combinations
 
 import numpy as np
 
-__all__ = ["simulate_spectrum", "expand_groups"]
+__all__ = ["simulate_spectrum", "expand_groups", "build_stick",
+           "lorentzian_convolve", "lorentzian_broaden", "peaks_to_spectrum"]
 
 
 def expand_groups(shifts, couplings, degeneracy):
@@ -164,27 +165,59 @@ def simulate_spectrum(
     return ppm, spec
 
 
-def lorentzian_broaden(centers, amps, points, ppm_from, ppm_to, hwhm):
-    """Bin transitions to a stick spectrum and FFT-convolve with a Lorentzian.
+def build_stick(centers, amps, points, ppm_from, ppm_to):
+    """Bin (center_ppm, amp) transitions onto the grid as a stick spectrum.
 
-    O(n_transitions) binning + O(points log points) convolution — independent
-    of the (often huge) number of transitions. Shared by both pyspin engines.
+    Linear-interpolation binning splits each line between its two nearest grid
+    points (removes sub-bin snapping). O(n_transitions).
     """
-    spec = np.zeros(points)
+    stick = np.zeros(points)
     if len(centers) == 0:
-        return spec
+        return stick
     dppm = (ppm_to - ppm_from) / points
-    # Linear-interpolation binning: split each line between its two nearest bins.
     pos = (np.asarray(centers) - ppm_from) / dppm
     inrange = (pos >= 0) & (pos <= points - 1)
     pos = pos[inrange]
     w = np.asarray(amps)[inrange]
     i0 = np.floor(pos).astype(int)
     frac = pos - i0
-    stick = (np.bincount(i0, weights=w * (1 - frac), minlength=points)
-             + np.bincount(i0 + 1, weights=w * frac, minlength=points + 1)[:points])
-    # Lorentzian kernel centred on the grid; circular FFT convolution.
+    return (np.bincount(i0, weights=w * (1 - frac), minlength=points)
+            + np.bincount(i0 + 1, weights=w * frac, minlength=points + 1)[:points])
+
+
+def lorentzian_convolve(stick, points, ppm_from, ppm_to, hwhm):
+    """FFT-convolve a stick spectrum with a Lorentzian of half-width ``hwhm`` (ppm).
+
+    O(points log points), independent of the number of lines.
+    """
+    dppm = (ppm_to - ppm_from) / points
     x = (np.arange(points) - points // 2) * dppm
     kern = 1.0 / (1.0 + (x / hwhm) ** 2)
     return np.fft.irfft(np.fft.rfft(stick) * np.fft.rfft(np.fft.ifftshift(kern)),
                         n=points)
+
+
+def lorentzian_broaden(centers, amps, points, ppm_from, ppm_to, hwhm):
+    """Stick-bin transitions then Lorentzian-convolve (shared by both engines)."""
+    if len(centers) == 0:
+        return np.zeros(points)
+    return lorentzian_convolve(build_stick(centers, amps, points, ppm_from, ppm_to),
+                               points, ppm_from, ppm_to, hwhm)
+
+
+def peaks_to_spectrum(centers_ppm, amps, points=16384, ppm_from=0.0, ppm_to=12.0,
+                      linewidth_hz=1.0, field_mhz=90.0, normalize=True):
+    """Reconstruct a dense spectrum from a peak list (convolve on the fly).
+
+    The inverse of storing only line positions + intensities: bin to the grid,
+    Lorentzian-broaden with the stored linewidth, and (by default) renormalise
+    to unit integral — matching the spectra produced directly by the engines.
+    """
+    hwhm = (linewidth_hz / 2.0) / field_mhz
+    spec = lorentzian_broaden(np.asarray(centers_ppm), np.asarray(amps),
+                              points, ppm_from, ppm_to, hwhm)
+    if normalize:
+        total = spec.sum() * ((ppm_to - ppm_from) / points)
+        if total > 0:
+            spec = spec / total
+    return spec

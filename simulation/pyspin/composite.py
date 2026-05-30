@@ -31,7 +31,7 @@ from itertools import product
 
 import numpy as np
 
-from simulation.pyspin.simulator import lorentzian_broaden
+from simulation.pyspin.simulator import peaks_to_spectrum
 
 try:                                  # BLAS-backed when available
     from scipy.linalg import eigh as _eigh_impl
@@ -43,7 +43,7 @@ except Exception:                     # numpy fallback
         return np.linalg.eigh(H)
 
 __all__ = ["spin_reps", "simulate_spectrum_composite", "largest_component_spins",
-           "system_transitions"]
+           "system_transitions", "composite_transitions"]
 
 
 def system_transitions(shifts, couplings, degeneracy, field_mhz,
@@ -226,6 +226,36 @@ def _simulate_combination(S_list, nu_hz, Jgg, intensity_threshold):
     return np.array([]), np.array([])
 
 
+def composite_transitions(shifts, couplings, degeneracy, field_mhz,
+                          intensity_threshold=1e-6):
+    """Molecule's exact line list as ``(centers_ppm, amps)`` via composite
+    reduction + connected-component decomposition.
+
+    Per-component intensities are renormalised to proton count so inter-component
+    areas are correct. This is the raw peak list — broaden it (or store it) to
+    get a spectrum.
+    """
+    G = len(shifts)
+    all_freqs, all_amps = [], []
+    for comp in _components(couplings, G):
+        sub_shifts = [shifts[g] for g in comp]
+        sub_J = [[couplings[a][b] for b in comp] for a in comp]
+        sub_deg = [degeneracy[g] for g in comp]
+        cf, ca = system_transitions(sub_shifts, sub_J, sub_deg, field_mhz,
+                                    intensity_threshold)
+        if not len(cf):
+            continue
+        comp_protons = sum(int(degeneracy[g]) for g in comp)
+        raw = ca.sum()
+        if raw > 0:
+            ca = ca * (comp_protons / raw)
+        all_freqs.append(cf); all_amps.append(ca)
+
+    freqs = np.concatenate(all_freqs) if all_freqs else np.array([])
+    amps = np.concatenate(all_amps) if all_amps else np.array([])
+    return freqs / field_mhz, amps
+
+
 def simulate_spectrum_composite(
     shifts,
     couplings,
@@ -239,42 +269,12 @@ def simulate_spectrum_composite(
 ):
     """Simulate a 1H spectrum using composite-particle reduction.
 
-    Same signature/return as pyspin.simulator.simulate_spectrum:
-    returns (ppm_axis, intensity) normalised to unit integral.
+    Returns (ppm_axis, intensity) normalised to unit integral.
     """
-    G = len(shifts)
-    # Decompose the coupling graph into independent components: uncoupled
-    # subsystems' spectra simply add, so we never build a Hamiltonian larger
-    # than one connected fragment (isolated singlets become trivial 1-group sims).
-    all_freqs, all_amps = [], []
-    for comp in _components(couplings, G):
-        sub_shifts = [shifts[g] for g in comp]
-        sub_J = [[couplings[a][b] for b in comp] for a in comp]
-        sub_deg = [degeneracy[g] for g in comp]
-        cf, ca = system_transitions(sub_shifts, sub_J, sub_deg, field_mhz,
-                                    intensity_threshold)
-        if not len(cf):
-            continue
-        # Each component is simulated in its own Hilbert space, so its raw
-        # intensity scale differs between components. Renormalise so the
-        # component integrates to its proton count (NMR areas ∝ #protons), which
-        # makes inter-component areas correct after the final normalisation.
-        comp_protons = sum(int(degeneracy[g]) for g in comp)
-        raw = ca.sum()
-        if raw > 0:
-            ca = ca * (comp_protons / raw)
-        all_freqs.append(cf); all_amps.append(ca)
-
-    freqs = np.concatenate(all_freqs) if all_freqs else np.array([])
-    amps = np.concatenate(all_amps) if all_amps else np.array([])
-
+    centers, amps = composite_transitions(shifts, couplings, degeneracy,
+                                          field_mhz, intensity_threshold)
     ppm = np.linspace(ppm_from, ppm_to, points)
-    centers = freqs / field_mhz
-    hwhm = (linewidth_hz / 2.0) / field_mhz
-    spec = lorentzian_broaden(centers, amps, points, ppm_from, ppm_to, hwhm)
-
-    dppm = (ppm_to - ppm_from) / points
-    total = spec.sum() * dppm
-    if total > 0:
-        spec = spec / total
+    spec = peaks_to_spectrum(centers, amps, points=points, ppm_from=ppm_from,
+                             ppm_to=ppm_to, linewidth_hz=linewidth_hz,
+                             field_mhz=field_mhz, normalize=True)
     return ppm, spec

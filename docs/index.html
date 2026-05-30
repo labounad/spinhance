@@ -59,8 +59,10 @@
   /* spectrum is a FIXED background layer; everything else scrolls over/past it */
   #spectrum{position:fixed;inset:0;width:100vw;height:100vh;display:block;z-index:0;pointer-events:none}
   .hero{position:relative;height:220vh;z-index:1}
-  .hero-stage{min-height:100vh;display:flex;flex-direction:column;justify-content:space-between;
-    position:relative;padding:84px 24px 4.5vh;text-align:center}
+  /* sticky stage: stays pinned (text/bar locked) while the field sweeps to 600 MHz,
+     then releases and scrolls up normally for the remaining hero height */
+  .hero-stage{position:sticky;top:0;height:100vh;display:flex;flex-direction:column;
+    justify-content:space-between;padding:84px 24px 4.5vh;text-align:center;overflow:hidden}
   .hero-grad{position:absolute;inset:0;pointer-events:none;
     background:linear-gradient(180deg,var(--bg) 0%,color-mix(in srgb,var(--bg) 40%,transparent) 20%,transparent 42%)}
   .hero-copy{position:relative;z-index:1}

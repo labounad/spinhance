@@ -28,7 +28,21 @@ Task 3). Run it with `--graphs mol_to_matrix/data/spin_systems.json`.
 - **High field — 600.15 MHz:** first-order reference / optional second input.
 
 Every spectrum is a normalised intensity array of `16384 = 2¹⁴` points over
-`0–12 ppm` (∫ = 1), saved as `.npy`.
+`0–12 ppm` (∫ = 1).
+
+**Three storage representations** (`spectrum_io.py`), increasingly sparse — read
+any with `spectrum_io.load_spectrum(path)` → dense array, so consumers don't care
+which was stored:
+
+| representation | file | contents | when |
+|---|---|---|---|
+| dense | `mol_<i>.npy` | full 16384-pt array | default |
+| sparse | `mol_<i>.npz` | `(idx, val)` of points > cutoff·max, ∫=1 | `export --sparsify` |
+| peaks | `mol_<i>.npz` | line list `(centers, amps)` + linewidth/field | `run --format peaks` |
+
+The **peaks** form stores only the transitions and applies the Lorentzian
+lineshape on load (convolve-on-the-fly) — the most fundamental form, and it lets
+you re-broaden at any linewidth/resolution later.
 
 ## Two engines, one interface
 
@@ -118,6 +132,7 @@ simulation/
 ├── mnova_runner.py      # MestReNova CLI: run_mnova_batch / run_mnova_parallel
 ├── pipeline.py          # orchestration: run_pipeline (engine mnova/python/auto)
 ├── plotting.py          # QC overlay of 90 vs 600 MHz spectra
+├── spectrum_io.py       # dense / sparse / peaks representations + load_spectrum
 ├── export.py            # pack spectra/ → one .tar.gz (sparsify + gzip)
 ├── cli.py               # `python -m simulation.cli run|plot|export`
 ├── mnova_scripts/

@@ -130,7 +130,8 @@ sample (10/10 sims).
 - `pipeline.py` — orchestration + routing; `run_pipeline(engine=…)`, `_run_auto`, `txt_to_npy`.
 - `pyspin/` — pure-Python engine: `composite.py` (production), `simulator.py` (reference + broadening), `batch.py` (multiprocessing).
 - `plotting.py` — QC overlays (`plot_field_comparison`).
-- `export.py` — pack a `spectra/` dir into one `.tar.gz`; optional sparsify (drop points ≤ cutoff·max, default 0.001, renormalise to ∫=1, store idx+val npz) + gzip, two tqdm bars. `load_spectrum` reconstructs dense/sparse.
+- `spectrum_io.py` — three representations + unified `load_spectrum(path)→dense`: **dense** (`mol_<i>.npy`), **sparse** (`.npz` idx/val, drop ≤cutoff·max, renorm ∫=1), **peaks** (`.npz` centers/amps + linewidth/field; lineshape convolved on load). Broadening split in `simulator.py` into `build_stick`+`lorentzian_convolve`+`peaks_to_spectrum`; engines expose `composite_transitions`/`clustered_transitions`/`transitions_pyspin` (line lists). `run --format peaks` (graphs+python) stores peaks; `export --sparsify` does dense→sparse.
+- `export.py` — pack a `spectra/` dir into one `.tar.gz` (two tqdm bars: compress, zip); passes `.npz` through, sparsifies dense `.npy` if asked.
 - `cli.py` — `python -m simulation.cli run|plot|export` (`--engine`, `--workers`, `--launcher`, `--pyspin-max-spins`; export: `--spectra_dir --out --no-sparsify --cutoff --no-renormalize`).
 
 ### CLI flags (run)

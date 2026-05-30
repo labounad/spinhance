@@ -144,19 +144,25 @@ def run_pyspin_batch(
 # ── Graph input (Task 2 JSONL → npy), pyspin engine ──────────────────────────
 
 def _graph_worker(task):
-    """Top-level (picklable) worker: one (graph, field) -> npy task."""
-    graph, field, out_npy, points, ppm_from, ppm_to, linewidth = task
+    """Top-level (picklable) worker: one (graph, field) -> spectrum file task."""
+    graph, field, out_path, points, ppm_from, ppm_to, linewidth, fmt = task
     try:
         from simulation.graph_io import record_to_arrays
+        from simulation.spectrum_io import save_dense, save_peaks
         _labels, shifts, couplings, degeneracy = record_to_arrays(graph)
-        _, spec = simulate_spectrum_pyspin(
-            shifts, couplings, degeneracy, field,
-            points=points, ppm_from=ppm_from, ppm_to=ppm_to, linewidth_hz=linewidth)
-        Path(out_npy).parent.mkdir(parents=True, exist_ok=True)
-        np.save(out_npy, spec.astype(np.float32))
-        return (out_npy, True, "")
+        if fmt == "peaks":
+            from simulation.pyspin.cluster import transitions_pyspin
+            centers, amps = transitions_pyspin(shifts, couplings, degeneracy, field)
+            save_peaks(out_path, centers, amps, linewidth_hz=linewidth,
+                       field_mhz=field, points=points, ppm_from=ppm_from, ppm_to=ppm_to)
+        else:
+            _, spec = simulate_spectrum_pyspin(
+                shifts, couplings, degeneracy, field,
+                points=points, ppm_from=ppm_from, ppm_to=ppm_to, linewidth_hz=linewidth)
+            save_dense(out_path, spec)
+        return (out_path, True, "")
     except Exception as e:  # noqa: BLE001
-        return (out_npy, False, repr(e))
+        return (out_path, False, repr(e))
 
 
 def run_pyspin_batch_graphs(
@@ -168,18 +174,21 @@ def run_pyspin_batch_graphs(
     ppm_from: float = 0.0,
     ppm_to: float = 12.0,
     linewidth_hz: float = 1.0,
+    fmt: str = "dense",
 ) -> dict:
-    """Simulate every spin-graph in a Task-2 JSONL file with the pyspin engine.
+    """Simulate every spin-graph in a Task-2 JSON(L) file with the pyspin engine.
 
-    Output: ``<out_dir>/spectra/<field>MHz/mol_<i>.npy`` (index = JSONL line) plus
-    a shared ``ppm_axis.npy`` per field and an ``index.csv`` mapping the spectrum
-    index to the molecule id (SMILES). Parallel across (molecule, field) tasks.
+    ``fmt`` selects the stored representation: ``"dense"`` (``mol_<i>.npy``) or
+    ``"peaks"`` (``mol_<i>.npz`` line list, lineshape applied on load). Output:
+    ``<out_dir>/spectra/<field>MHz/mol_<i>.{npy,npz}`` (index = record line) +
+    shared ``ppm_axis.npy`` per field + ``index.csv`` (index → molecule id).
     """
     import csv
 
     from simulation.graph_io import molecule_id, read_spin_systems
 
     out_dir = Path(out_dir)
+    ext = "npz" if fmt == "peaks" else "npy"
     graphs = list(read_spin_systems(jsonl_path))   # [(idx, record), ...]
     if not graphs:
         raise ValueError(f"No spin systems found in {jsonl_path}")
@@ -193,8 +202,8 @@ def run_pyspin_batch_graphs(
         fdir.mkdir(parents=True, exist_ok=True)
         np.save(fdir / "ppm_axis.npy", ppm_axis)
         for idx, graph in graphs:
-            tasks.append((graph, float(field), str(fdir / f"mol_{idx:06d}.npy"),
-                          points, ppm_from, ppm_to, linewidth_hz))
+            tasks.append((graph, float(field), str(fdir / f"mol_{idx:06d}.{ext}"),
+                          points, ppm_from, ppm_to, linewidth_hz, fmt))
 
     # id manifest: index → molecule identifier
     spectra_root.mkdir(parents=True, exist_ok=True)

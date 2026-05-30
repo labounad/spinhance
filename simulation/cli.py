@@ -57,6 +57,9 @@ def _add_run(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--pyspin-max-spins", type=int, default=13,
                    help="auto-routing threshold: largest coupled-fragment spins "
                         "that still go to pyspin (default 13)")
+    p.add_argument("--format", choices=["dense", "peaks"], default="dense",
+                   help="Stored representation for --graphs + engine python: "
+                        "'dense' .npy or 'peaks' .npz line list (convolved on load)")
 
 
 def _add_plot(sub: argparse._SubParsersAction) -> None:
@@ -108,7 +111,8 @@ def main(argv: list[str] | None = None) -> int:
             if args.engine == "python":
                 from simulation.pyspin.batch import run_pyspin_batch_graphs
                 run_pyspin_batch_graphs(args.graphs, args.out_dir,
-                                        fields_mhz=args.fields, workers=args.workers)
+                                        fields_mhz=args.fields, workers=args.workers,
+                                        fmt=args.format)
                 print(f"\nSpectra saved to: {args.out_dir / 'spectra'}")
                 return 0
             # mnova / auto: materialize XMLs from graphs, then run normally

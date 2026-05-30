@@ -18,52 +18,28 @@ indices), ``val`` (their intensities, renormalised so ∫=1), ``n`` (grid length
 
 from __future__ import annotations
 
-import gzip
 import io
-import shutil
+import gzip
 import tarfile
 from pathlib import Path
 
 import numpy as np
+
+# Re-export the canonical representation helpers (kept here for back-compat).
+from simulation.spectrum_io import sparsify, load_spectrum  # noqa: F401
 
 try:
     from tqdm import tqdm as _tqdm
 except Exception:
     _tqdm = None
 
-__all__ = ["sparsify", "export_spectra", "load_spectrum"]
+__all__ = ["export_spectra", "sparsify", "load_spectrum"]
 
 
 def _bar(iterable, total, desc):
     if _tqdm is None:
         return iterable
     return _tqdm(iterable, total=total, desc=desc, unit="file")
-
-
-def sparsify(y: np.ndarray, cutoff: float = 0.001, renormalize: bool = True):
-    """Drop points ≤ ``cutoff`` × max; return ``(idx int32, val float32)``.
-
-    With ``renormalize``, the kept values are rescaled so the spectrum still
-    integrates to 1 over the (unchanged) ppm grid.
-    """
-    y = np.asarray(y, dtype=np.float64)
-    thr = cutoff * y.max() if y.size else 0.0
-    idx = np.nonzero(y > thr)[0]
-    val = y[idx]
-    if renormalize and val.sum() > 0:
-        val = val * (y.sum() / val.sum())   # preserve ∫ = 1 (dppm cancels)
-    return idx.astype(np.int32), val.astype(np.float32)
-
-
-def load_spectrum(path):
-    """Load a dense ``.npy`` or sparse ``.npz`` spectrum into a dense array."""
-    path = Path(path)
-    if path.suffix == ".npz":
-        d = np.load(path)
-        y = np.zeros(int(d["n"]), dtype=np.float32)
-        y[d["idx"]] = d["val"]
-        return y
-    return np.load(path)
 
 
 def _sparse_bytes(y: np.ndarray, cutoff: float, renormalize: bool) -> bytes:
@@ -95,20 +71,23 @@ def export_spectra(spectra_dir, out, sparsify_data: bool = True,
     if tmp_tar.suffix != ".tar":
         tmp_tar = tmp_tar.with_suffix(".tar")
 
-    mol_files = sorted(spectra_dir.rglob("mol_*.npy"))
+    mol_files = sorted(spectra_dir.rglob("mol_*.npy")) + sorted(spectra_dir.rglob("mol_*.npz"))
     if not mol_files:
-        raise FileNotFoundError(f"No spectra (mol_*.npy) under {spectra_dir}")
+        raise FileNotFoundError(f"No spectra (mol_*.np[yz]) under {spectra_dir}")
     aux = sorted(spectra_dir.rglob("ppm_axis.npy")) + sorted(spectra_dir.glob("index.csv"))
 
     manifest = (
         "SpinHance spectra export\n"
-        f"sparsified: {sparsify_data}  cutoff: {cutoff} x max  renormalized: {renormalize}\n"
-        "Dense spectra are mol_<i>.npy; sparse are mol_<i>.npz with arrays "
-        "idx/val/n/cutoff. Reconstruct: y = zeros(n); y[idx] = val. "
-        "ppm_axis.npy (per field) and index.csv (index -> chembl_id) are dense.\n"
+        f"dense->sparse on export: {sparsify_data}  cutoff: {cutoff} x max  "
+        f"renormalized: {renormalize}\n"
+        "Read any spectrum with simulation.spectrum_io.load_spectrum(path):\n"
+        "  - mol_<i>.npy  = dense intensity array\n"
+        "  - mol_<i>.npz with idx/val/n      = sparse (y=zeros(n); y[idx]=val)\n"
+        "  - mol_<i>.npz with centers/amps/.. = peak list (convolved on load)\n"
+        "ppm_axis.npy (per field) and index.csv (index -> chembl_id) are plain.\n"
     )
 
-    # ── Stage 1: build uncompressed tar (sparsify per spectrum) ───────────────
+    # ── Stage 1: build uncompressed tar ───────────────────────────────────────
     try:
         with tarfile.open(tmp_tar, "w") as tar:
             _add_bytes(tar, "MANIFEST.txt", manifest.encode())
@@ -117,9 +96,11 @@ def export_spectra(spectra_dir, out, sparsify_data: bool = True,
             for f in _bar(mol_files, len(mol_files),
                           "compressing" if sparsify_data else "packing"):
                 arc = str(f.relative_to(spectra_dir))
-                if sparsify_data:
+                if f.suffix == ".npz":
+                    tar.add(f, arcname=arc)            # already sparse / peaks
+                elif sparsify_data:
                     data = _sparse_bytes(np.load(f), cutoff, renormalize)
-                    _add_bytes(tar, arc[:-4] + ".npz", data)   # .npy → .npz
+                    _add_bytes(tar, arc[:-4] + ".npz", data)   # dense .npy → sparse
                 else:
                     tar.add(f, arcname=arc)
 
