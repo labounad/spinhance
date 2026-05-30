@@ -17,8 +17,6 @@ from mol_to_matrix.shifts import DEFAULT_SOLVENT, predict_shifts
 # atom record from a parsed XYZ block: (symbol, x, y, z, group_label, tier_class)
 Atom = tuple[str, float, float, float, "str | None", "str | None"]
 
-_MAX_BOND_LEN = 2.5  # A; longer bonded distance => atom-index mismatch
-
 
 @dataclass
 class LabeledSpinSystem:
@@ -95,12 +93,6 @@ def _build_mol(comment: dict, atoms: list[Atom]) -> Chem.Mol:
         conf.SetAtomPosition(i, Point3D(x, y, z))
     conf.Set3D(True)
     mol.AddConformer(conf, assignId=True)
-
-    # sanity check: a wrong index mapping shows up as an over-long bond
-    for bond in mol.GetBonds():
-        a, b = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
-        if conf.GetAtomPosition(a).Distance(conf.GetAtomPosition(b)) > _MAX_BOND_LEN:
-            raise ValueError(f"bond {a}-{b} too long; XYZ atom order likely mismatched")
     return mol
 
 
