@@ -2,7 +2,7 @@
 """
 precompute_field_sweep.py
 =========================
-Generate the compact JSON dataset that powers the SpinHance website's
+Generate the compact JSON dataset that powers the Spinhance website's
 scroll-driven "field sweep" hero animation.
 
 For a curated subset of molecules from mol_to_matrix/data/spin_systems.json we

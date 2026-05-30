@@ -1,6 +1,6 @@
-# SpinHance — project site (`docs/`)
+# Spinhance — project site (`docs/`)
 
-A static, single-page site for the SpinHance hackathon project, served via **GitHub Pages from `/docs`**.
+A static, single-page site for the Spinhance hackathon project, served via **GitHub Pages from `/docs`**.
 
 The hero is a **scroll-driven "field sweep"**: a real ¹H spin system is simulated across a
 geometric sweep of spectrometer fields (90 → 600 MHz) and the bold trace morphs from

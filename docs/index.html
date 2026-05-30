@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>SpinHance — reading coupling constants out of low-field ¹H NMR</title>
-<meta name="description" content="SpinHance: a deep-learning pipeline that recovers ¹H chemical shifts and J-coupling constants from low-field, second-order NMR spectra — so any spectrum can be reconstructed at any field." />
+<title>Spinhance — reading coupling constants out of low-field ¹H NMR</title>
+<meta name="description" content="Spinhance: a deep-learning pipeline that recovers ¹H chemical shifts and J-coupling constants from low-field, second-order NMR spectra — so any spectrum can be reconstructed at any field." />
 <style>
   :root{
     --bg:#fafafa; --bg-soft:#f0f1f3; --panel:#ffffff; --panel-2:#f5f6f8;
@@ -155,7 +155,7 @@
 <body>
 <nav>
   <div class="nav-in">
-    <div class="brand"><span class="dot"></span>SpinHance</div>
+    <div class="brand"><span class="dot"></span>Spinhance</div>
     <div class="nav-links">
       <a href="#overview">Overview</a>
       <a href="#pipeline">Pipeline</a>
@@ -194,7 +194,7 @@
     <h2>Cheap spectrometers see overlapping peaks. We recover the real parameters.</h2>
     <p class="lead">A 90&nbsp;MHz benchtop ¹H NMR spectrum is rarely first-order: chemical-shift
       differences are comparable to coupling constants, so multiplets overlap and naive peak-picking
-      fails. <b>SpinHance</b> trains a neural network to invert a normalized low-field spectrum back to
+      fails. <b>Spinhance</b> trains a neural network to invert a normalized low-field spectrum back to
       the underlying spin system — chemical shifts δ (ppm), scalar couplings <i>J</i> (Hz), and proton
       degeneracies. Once you have those field-independent parameters, the spectrum can be re-simulated
       <i>exactly</i> at any field strength.</p>
@@ -324,7 +324,7 @@
 
 <footer>
   <div class="wrap footer-in">
-    <div>SpinHance · low-field ¹H NMR → spin-system parameters</div>
+    <div>Spinhance · low-field ¹H NMR → spin-system parameters</div>
     <div>Hero spectra simulated in-house · a different molecule on every reload</div>
   </div>
 </footer>

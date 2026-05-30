@@ -1,4 +1,4 @@
-/* SpinHance — interactive 3D molecule view for "The representation".
+/* Spinhance — interactive 3D molecule view for "The representation".
    Renders the hero molecule's precomputed 3D structure (force-field XYZ coords
    from generate/data/8spin.xyz, shipped in field_sweep.json) with 3Dmol.js.
    Slowly auto-rotates by default; sleek toggle to stop. */

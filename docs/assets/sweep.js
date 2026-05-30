@@ -1,4 +1,4 @@
-/* SpinHance — scroll-driven field-sweep hero
+/* Spinhance — scroll-driven field-sweep hero
    Loads docs/data/field_sweep.json (a STICK spectrum per molecule per field) and
    broadens the sticks into smooth Lorentzians on a high-res grid, client-side, so
    resolution is independent of stored data size. The bold current-field trace is
