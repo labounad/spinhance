@@ -21,17 +21,18 @@ Both are selected with `--engine` and produce identical output layout.
 | Speed | ~1 s/molecule (+~2.5 s startup) | µs–ms for sparse molecules |
 | Parallelism | ~none (single-instance license) | scales across all cores / HPC |
 | Dependency | MNova license, macOS | numpy only; runs anywhere |
-| Scaling limit | linear (local-cluster approx) to ≫20 spins | exact ⇒ wall at ~15 *coupled* spins |
+| Scaling limit | linear (local-cluster approx) | exact ≤~12 coupled spins, then auto local-cluster ⇒ linear |
 
 - **`mnova`** — drives MestReNova. Accurate and scales to large coupled systems
   (it uses a local-cluster approximation), but ~1 s/molecule with negligible
   multi-instance speedup, and macOS-only.
-- **`python`** (pyspin) — exact simulator with composite-particle reduction for
-  equivalent groups and connected-component decomposition. License-free, parallel
-  across cores, HPC-capable. Validated against MNova (r ≈ 0.993–0.999, peak
-  offset ≈ 0.0008 ppm). Being exact, its cost is set by the largest *coupled
-  fragment*, not total protons — molecules with sparse/local coupling run in
-  milliseconds; a single fully-coupled fragment >~15 spins is the practical wall.
+- **`python`** (pyspin) — composite-particle reduction for equivalent groups +
+  connected-component decomposition. License-free, parallel across cores,
+  HPC-capable. Validated against MNova (r ≈ 0.993–0.999, peak offset ≈ 0.0008
+  ppm). Exact for coupled fragments ≤ ~12 spins; **larger fragments fall back
+  automatically to a local-cluster approximation** (`pyspin.cluster`, the same
+  trick MNova uses — exact within ~9-spin clusters, first-order between them),
+  so there's no hard wall. Linear scaling: a 100-spin chain simulates in ~0.2 s.
 - **`auto`** — routes each molecule by its largest connected-component spin count:
   ≤ `--pyspin-max-spins` (default 13) → pyspin, larger → MNova. Prints the routing
   distribution so you can see what fraction of a dataset needs MNova.
@@ -102,6 +103,7 @@ simulation/
 ├── pyspin/                 # pure-Python engine (engine="python")
 │   ├── simulator.py          # spin-½ reference sim + shared FFT broadening
 │   ├── composite.py          # composite-particle reduction + component split
+│   ├── cluster.py            # local-cluster approximation (wall-free dispatcher)
 │   ├── batch.py              # multiprocessing XML→npy driver
 │   └── validate_vs_mnova.py  # accuracy check against MNova
 ├── benchmarks/
@@ -109,11 +111,12 @@ simulation/
 │   ├── benchmark_pyspin.py   # pyspin parallel-scaling sweep (sims/s vs workers)
 │   └── benchmark_scaling.py  # per-engine ceiling: grow a fully-coupled system
 ├── examples/               # sample spin systems + validation overlays
-└── tests/                  # 32 tests, no MNova required
+└── tests/                  # 38 tests, no MNova required
     ├── test_xml_io.py            # XML build/parse/patch/round-trip
     ├── test_mnova_runner.py      # parallel runner helpers (shard/launch cmd)
     ├── test_benchmark_fields.py  # geometric frequency grid
-    └── test_composite.py         # composite == explicit; components; high-deg
+    ├── test_composite.py         # composite == explicit; components; high-deg
+    └── test_cluster.py           # clustered ≈ exact; partition; wall-free
 ```
 
 ---
@@ -230,11 +233,12 @@ python -m simulation.benchmarks.benchmark_scaling --engines pyspin mnova \
     --mnova "<MestReNova>" --start 10 --max 20 --timeout 120
 ```
 
-Measured (fully-coupled chain = worst case): pyspin is exact, so cost ~
-`C(N,N/2)³` — N=14 ≈ 12 s, N=15 ≈ 85 s, N≥16 > 2 min. MNova is flat ~2.5 s to
-N=20 (local-cluster approximation), and pyspin/MNova still agree at N=14
-(r = 0.9947, 40/40 peaks). Real molecules decompose into small fragments, so
-pyspin runs them in milliseconds regardless of total proton count.
+Measured (fully-coupled chain = worst case): the **exact** engine costs ~
+`C(N,N/2)³` — N=14 ≈ 12 s, N=15 ≈ 85 s, N≥16 > 2 min (this is why the dispatcher
+hands large fragments to clustering at ~12 spins). The **clustered** engine is
+linear: N=14 ≈ 0.007 s (corr 0.992 vs exact), N=100 ≈ 0.23 s. MNova is flat
+~2.5 s to N=20 and agrees with exact pyspin at N=14 (r = 0.9947). Real molecules
+decompose into small fragments and run in milliseconds either way.
 
 ---
 
