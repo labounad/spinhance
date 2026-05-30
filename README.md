@@ -69,13 +69,15 @@ This is equivalently an **undirected labeled graph**: nodes carry (δ, n), edges
 **Generate physically plausible shift+J matrices from 3D-embedded molecules.**
 
 #### Subtasks
-- [ ] Embed molecules to 3D with ETKDG (RDKit) + MMFF94 minimization
-- [ ] Assign ¹H chemical shifts via heuristics (ring-current corrections, α/β substituent tables, or a pre-trained predictor like NMRShiftDB lookup)
-- [ ] Compute dihedral angles between each proton pair for Karplus-based ³*J* estimation
-- [ ] Apply literature tables for geminal (²*J*), vinyl, aryl, benzylic, allylic, long-range (⁴*J*) couplings
-- [ ] Zero out negligible couplings (|*J*| < 0.3 Hz threshold)
-- [ ] Assemble symmetric 8×8 *J*-matrix + δ-diagonal + degeneracy vector
-- [ ] Output: `data/processed/matrices/` — one `.npy` or `.json` per molecule
+- [x] Embed molecules to 3D with ETKDG (RDKit) + MMFF94 minimization (`shifts.make_test_mol_3d`)
+- [x] Assign ¹H chemical shifts via a pre-trained predictor (NMRShiftDB HOSE-code lookup) (`shifts.py`)
+- [x] Compute dihedral angles between each proton pair for Karplus-based ³*J* estimation (`vicinal.py`)
+- [x] Apply literature tables for geminal (²*J*), vinyl, aryl, benzylic, allylic, long-range (⁴*J*) couplings (`geminal.py`, `olefinic.py`, `aromatic.py`, `long_range.py`)
+- [x] Zero out negligible couplings (|*J*| < 0.3 Hz threshold) (`coupling.py`)
+- [x] Assemble symmetric 8×8 *J*-matrix + δ-diagonal + degeneracy vector (`matrix.py`, `groups.py`)
+- [x] Output: `data/processed/matrices/` — one `.npy` (packed 8×9) + `.json` per molecule (`pipeline.py`)
+
+See `mol_to_matrix/README.md` for module layout and the external NMRShiftDB predictor requirement.
 
 #### Key references
 - Karplus (1959) — vicinal *³J* vs dihedral
