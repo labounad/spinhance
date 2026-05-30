@@ -43,6 +43,10 @@ def _add_run(sub: argparse._SubParsersAction) -> None:
                    help="Path to the MestReNova executable")
     p.add_argument("--fields", type=float, nargs="+", default=list(DEFAULT_FIELDS_MHZ),
                    help="Spectrometer frequencies in MHz (default: 90.0 600.15)")
+    p.add_argument("--workers", type=int, default=1,
+                   help="Concurrent MNova instances (default 1 = sequential)")
+    p.add_argument("--launcher", choices=["open", "direct"], default="open",
+                   help="Parallel launch method on macOS (default: open)")
 
 
 def _add_plot(sub: argparse._SubParsersAction) -> None:
@@ -77,6 +81,8 @@ def main(argv: list[str] | None = None) -> int:
             out_dir=args.out_dir,
             mnova_exe=args.mnova,
             fields_mhz=args.fields,
+            workers=args.workers,
+            launcher=args.launcher,
         )
         return 0
 

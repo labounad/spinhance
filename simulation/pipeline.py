@@ -29,7 +29,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .mnova_runner import MNOVA_DEFAULT, run_mnova_batch
+from .mnova_runner import MNOVA_DEFAULT, run_mnova_parallel
 from .xml_io import (
     HIGH_FIELD_MHZ,
     LOW_FIELD_MHZ,
@@ -160,8 +160,17 @@ def run_pipeline(
     out_dir: Path,
     mnova_exe: Path = MNOVA_DEFAULT,
     fields_mhz: list[float] = DEFAULT_FIELDS_MHZ,
+    workers: int = 1,
+    launcher: str = "open",
 ) -> None:
     """Run patch → simulate → convert for every field.
+
+    Parameters
+    ----------
+    workers
+        Number of concurrent MNova instances (``1`` = sequential single launch).
+    launcher
+        Parallel launch method, ``"open"`` or ``"direct"`` (see mnova_runner).
 
     See module docstring for the output directory layout.
     """
@@ -176,7 +185,8 @@ def run_pipeline(
         label = f"{field:.0f}MHz"
         print(f"\n=== Step 2: MNova simulation @ {label} ===")
         txt_dir = txt_base / label
-        run_mnova_batch(mnova_exe, xml_dir, txt_dir)
+        run_mnova_parallel(mnova_exe, xml_dir, txt_dir,
+                           workers=workers, launcher=launcher)
 
         print(f"\n=== Step 3: Convert txt → npy @ {label} ===")
         txt_to_npy(txt_dir, npy_base / label)

@@ -156,6 +156,17 @@ Application.quit();                  // global mainWindow.close() is the fallbac
 - `dir.setFilter()` / `dir.setNameFilters()` — not methods on Dir
 - `Application.waitAllThreadsFinished()` — does not exist
 
+### Parallelism (single-instance gotcha)
+MNova's batch loop is single-threaded (one core). `pipeline.run_pipeline(...,
+workers=N)` and `mnova_runner.run_mnova_parallel(...)` round-robin shard the XMLs
+across N concurrent instances. MestReNova is **single-instance**: a plain second
+launch hands off to the running process, so parallel workers launch with
+`open -na MestReNova --args -sf …` (`launcher="open"`, default) to force separate
+processes; completion is detected by polling output `.txt` counts. Fallback
+`launcher="direct"` runs the binary directly (only if concurrent direct launches
+don't hand off). Measured single-process cost: ~0.68 s/sim (8-spin), startup
+~4.5 s cold. Benchmark with `--workers` to find the core sweet spot.
+
 ### Possible future work
 - **Scale:** every XML is opened in one MNova session; if memory grows over many
   thousand molecules, relaunch MNova every N files (chunking in `pipeline.py`).

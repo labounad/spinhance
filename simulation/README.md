@@ -125,8 +125,22 @@ python -m simulation.cli run \
     --xml_dir data/processed/xmls_source \
     --out_dir data/processed \
     --mnova   "/Applications/MestReNova.app/Contents/MacOS/MestReNova" \
-    --fields  90 600
+    --fields  90 600 \
+    --workers 8            # parallel MNova instances (default 1 = sequential)
 ```
+
+#### Parallelism
+
+MNova's batch loop is single-threaded, so a single launch uses one core. With
+`--workers N`, the XMLs are round-robin sharded across `N` concurrent MNova
+instances for roughly `N`× throughput, up to your core count. Round-robin
+spreads the costly high-field simulations evenly across workers.
+
+Because MestReNova is single-instance, parallel workers launch with
+`open -na MestReNova --args …` (the default `--launcher open`) to force separate
+processes. If `open` does not pass `-sf` through on your machine (you'll see
+0 outputs), use `--launcher direct`. Verify your machine supports concurrent
+instances with the 30-second test in the benchmark section before scaling up.
 
 ### QC plot one molecule
 
@@ -178,6 +192,29 @@ python -m simulation.benchmarks.benchmark_fields \
 
 The report prints total wall-clock, naive per-sim (`total / n`), estimated MNova
 startup overhead, marginal per-sim time, and throughput (sims/s).
+
+Add `--workers N` to benchmark parallel throughput (the report then shows
+wall-clock throughput and estimated speedup instead of the single-launch
+startup/marginal split). Sweep a few values to find the sweet spot:
+
+```bash
+for W in 1 2 4 6 8; do
+  python -m simulation.benchmarks.benchmark_fields \
+      --source_xml "predicted_mnova_1h (10).xml" \
+      --mnova "/Applications/MestReNova.app/Contents/MacOS/MestReNova" \
+      --n 100 --workers $W
+done
+```
+
+Before scaling up, confirm your machine runs concurrent MNova instances
+(MestReNova is single-instance by default):
+
+```bash
+pkill -i mestrenova
+open -na MestReNova --args -sf spinhanceBatch,/tmp/shardA,/tmp/shardA_out &
+open -na MestReNova --args -sf spinhanceBatch,/tmp/shardB,/tmp/shardB_out &
+# Both output dirs should fill, and Activity Monitor should show two processes.
+```
 
 ---
 
