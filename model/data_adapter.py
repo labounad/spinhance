@@ -70,8 +70,10 @@ def load_records(spin_systems_json, spectra_root, fields=(90, 600),
     return records
 
 
-def renderable_mask(records, max_spins=12):
-    """Boolean list: molecules small enough for the explicit differentiable
-    renderer (Stage-2 spectral loss). Larger ones use the stored spectra for
-    Stage 1 but are skipped by the in-graph renderer until a composite port."""
-    return [r["n_spins"] <= max_spins for r in records]
+def renderable_mask(records, max_block=2048):
+    """Boolean list: molecules whose largest Mz-block (the composite renderer's
+    actual eigh size) is <= ``max_block``. With manifold reduction this covers
+    ~100% of the preliminary set (vs ~89% for the old explicit 2^N renderer);
+    the threshold just caps per-step Stage-2 cost. Uses composite_diff.max_block_dim."""
+    from model.composite_diff import max_block_dim
+    return [max_block_dim(r["degeneracy"]) <= max_block for r in records]

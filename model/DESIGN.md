@@ -84,9 +84,28 @@ as total-spin manifolds and never builds those permutation-degenerate states, so
 porting composite (which we want for speed anyway) structurally avoids most of
 them; the regularized backward is cheap insurance for residual accidental ones.
 
-Files: `diff_renderer_ref.py` (NumPy oracle, verified: forward corr 0.9999 vs
-pyspin, gradient ~1e-6 vs FD), `diff_renderer_torch.py` (production twin +
-`autograd.gradcheck` self-test), `test_diff_renderer.py` (verification).
+**Composite reduction (IMPLEMENTED).** The production differentiable renderer uses
+**total-spin manifold reduction + Mz block-diagonalisation**, not explicit 2^N
+expansion: each equivalent-spin group reduces to its total-spin manifolds and we
+diagonalise the small Mz blocks. Connected-component splitting is intentionally
+dropped — predicted couplings are continuous at train time, so it can't fire and
+would be non-differentiable across J=0; manifold reduction needs no zeros and is
+fully differentiable. Measured on the 1072-mol set, the largest block to
+diagonalise is ≤256 for 91%, ≤1024 for 99%, ≤4256 for 100% — vs explicit's
+up-to-2²²≈4.2M (which excluded 11% of molecules). So **essentially the whole
+dataset is now Stage-2 renderable.** Broadening is memory-flat (bin + FFT-convolve),
+not a dense (transitions×points) array. `data_adapter.renderable_mask` now uses
+`composite_diff.max_block_dim`, not total spins.
+
+Files:
+- `composite_diff.py` — NumPy oracle (forward corr 0.99999 vs pyspin incl. a
+  14-spin t-Bu system; gradient ~1e-6 vs FD incl. degenerate A3X) + shared
+  torch-free `build_static_plan`/`static_blocks`/`max_block_dim`. `test_composite_diff.py`.
+- `diff_renderer_torch.py` — production twin: torch block assembly + `RegularizedEigh`
+  + FFT broadening; mirrors the oracle; `python -m model.diff_renderer_torch` runs
+  parity-vs-oracle + `autograd.gradcheck`.
+- `diff_renderer_ref.py` — original *explicit* oracle, kept for tiny-system
+  cross-checks and the eigh-spike record; `test_diff_renderer.py`.
 
 ### 6. Loss strategy — **staged: matrix anchor → spectral consistency**
 - **Stage 1:** matrix loss only (Decision 4) for a stable, identifiable baseline.

@@ -32,9 +32,9 @@ def main():
     dx = (ax[-1] - ax[0]) / (len(ax) - 1)
     print(f"spectrum shape {s0.shape}, dtype {s0.dtype}, integral {s0.sum()*dx:.4f}")
 
-    rmask = renderable_mask(recs, max_spins=12)
-    print(f"renderable (<=12 spins) for Stage-2: {sum(rmask)}/{len(recs)} "
-          f"({100*sum(rmask)/len(recs):.0f}%)")
+    rmask = renderable_mask(recs, max_block=2048)
+    print(f"Stage-2 renderable (composite, max Mz-block <=2048): "
+          f"{sum(rmask)}/{len(recs)} ({100*sum(rmask)/len(recs):.0f}%)")
 
     # target encoding never KeyErrors (vocab covers all degeneracies)
     vocab = DegeneracyVocab()
