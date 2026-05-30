@@ -159,6 +159,30 @@ model to generalize beyond primitive/local patterns to genuinely novel regions
 of spin-system space. More involved to build and tune; introduce once the
 baseline works.
 
+## Implementation status & file map
+
+Build order from DESIGN; ✅ = built, 🔬 = numeric core verified in numpy here,
+⏳ = torch code, runs/verifies in your env (no torch in the prototyping sandbox).
+
+| File | Role | Status |
+|---|---|---|
+| `diff_renderer_ref.py` / `test_diff_renderer.py` | numpy renderer oracle | ✅ 🔬 (fwd corr 0.9999 vs pyspin, grad ~1e-6 vs FD) |
+| `diff_renderer_torch.py` | torch renderer + `RegularizedEigh` | ✅ ⏳ (`-m ml_model.diff_renderer_torch` = gradcheck) |
+| `splits.py` / `test_splits.py` | scaffold split + matrix dedup (Dec 8) | ✅ 🔬 (zero leakage, ratios ~0.69/0.21/0.10) |
+| `targets.py` / `test_targets.py` | target encode/standardize/augment (Dec 3,4) | ✅ 🔬 |
+| `dataset.py` | torch Dataset + bucketed sampler (Dec 7) | ✅ ⏳ (`-m ml_model.dataset` smoke) |
+| `model.py` | ResNet-1D + 4 heads (Dec 1,2) | ✅ ⏳ (`-m ml_model.model` shape check) |
+| `schedules.py` | curriculum + LR (Dec 7) | ✅ 🔬 |
+| `losses.py` | matrix + spectral loss (Dec 4,6) | ✅ ⏳ (W1/curriculum cores 🔬) |
+| `metrics.py` / `test_train_infra.py` | decode + eval metrics | ✅ 🔬 |
+| `train.py` | config + loop + stage handoff | ✅ ⏳ (`-m ml_model.train --smoke`) |
+
+**To train when data is ready:** build `records` (mol_id, shifts, couplings,
+degeneracy, smiles/scaffold, and a `spec90` array or `spec90_path`), then
+`assignment,_ = splits.make_splits(records)` and `train.fit(records, assignment,
+TrainConfig(...))`. First run the `-m ...` self-tests in your env to confirm the
+torch pieces (esp. the renderer gradcheck) pass on your hardware.
+
 ## Open items / v2 upgrades
 - Swap explicit expansion → composite reduction in `diff_renderer_torch.py` for
   scale.
