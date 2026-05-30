@@ -30,15 +30,17 @@ from simulation.graph_io import record_to_arrays, molecule_id  # noqa: E402
 from simulation.pyspin.composite import (  # noqa: E402
     simulate_spectrum_composite,
     largest_component_spins,
+    system_transitions,
+    _components,
 )
 
 # ── config ────────────────────────────────────────────────────────────────────
 LOW_MHZ, HIGH_MHZ = 90.0, 600.0
 N_FIELDS = 16            # geometric frames between low and high field
 PPM_FROM, PPM_TO = 0.0, 12.0
-SIM_POINTS = 32768       # 2**15 native resolution, simulated over the TIGHT window
-DISP_POINTS = 2048       # stored points across the (narrow) per-molecule window
-LINEWIDTH_HZ = 1.3       # crisp lines for high-field resolution
+SIM_POINTS = 32768       # 2**15 — simulated AND STORED over the TIGHT window
+DISP_POINTS = SIM_POINTS # store every simulated point (no downsampling) -> smooth peaks
+LINEWIDTH_HZ = 1.1       # crisp lines for high-field resolution
 N_MOLECULES = 30         # how many molecules to ship
 MAX_FRAGMENT_SPINS = 11  # skip very large coupled fragments (slow / huge)
 SIGNAL_FRAC = 2e-3       # signal-extent threshold (fraction of peak) for windowing
@@ -61,6 +63,53 @@ def maxpool_downsample(y, target):
     if usable < n:  # fold any remainder into the last bin
         head[-1] = max(head[-1], y[usable:].max())
     return head
+
+
+def molecule_sticks(shifts, couplings, deg, field, win_lo, win_hi):
+    """Merged STICK spectrum (centers_ppm, amps) for the whole molecule at `field`.
+
+    Replicates simulate_spectrum_composite's per-component proton renormalization,
+    but returns the discrete transitions instead of a broadened curve. The website
+    broadens these into smooth Lorentzians live (resolution-independent, tiny data).
+    """
+    G = len(shifts)
+    cfs, cas = [], []
+    for comp in _components(couplings, G):
+        sub_shifts = [shifts[g] for g in comp]
+        sub_J = [[couplings[a][b] for b in comp] for a in comp]
+        sub_deg = [deg[g] for g in comp]
+        cf, ca = system_transitions(sub_shifts, sub_J, sub_deg, field)
+        if not len(cf):
+            continue
+        comp_protons = sum(int(deg[g]) for g in comp)
+        raw = ca.sum()
+        if raw > 0:
+            ca = ca * (comp_protons / raw)
+        cfs.append(cf); cas.append(ca)
+    if not cfs:
+        return np.array([]), np.array([])
+    centers = np.concatenate(cfs) / field          # Hz -> ppm
+    amps = np.concatenate(cas)
+    margin = 0.04 * (win_hi - win_lo)
+    keep = (centers >= win_lo - margin) & (centers <= win_hi + margin) & (amps > 0)
+    centers, amps = centers[keep], amps[keep]
+    if not len(centers):
+        return centers, amps
+    order = np.argsort(centers)
+    centers, amps = centers[order], amps[order]
+    tol = 0.25 / field                              # merge lines within ~0.25 Hz
+    mc, ma = [centers[0]], [amps[0]]
+    for c, a in zip(centers[1:], amps[1:]):
+        if c - mc[-1] < tol:
+            tot = ma[-1] + a
+            mc[-1] = (mc[-1] * ma[-1] + c * a) / tot
+            ma[-1] = tot
+        else:
+            mc.append(c); ma.append(a)
+    mc, ma = np.array(mc), np.array(ma)
+    thr = ma.max() * 5e-4                            # drop negligible lines
+    k = ma > thr
+    return mc[k], ma[k]
 
 
 def signal_window(shifts, couplings, deg):
@@ -145,25 +194,21 @@ def main():
 
     fields = geometric_fields(LOW_MHZ, HIGH_MHZ, N_FIELDS)
     molecules = []
+    max_sticks = 0
     for rank, (score, rec, shifts, couplings, deg) in enumerate(chosen):
         win_lo, win_hi = signal_window(shifts, couplings, deg)
         frames = []
         for f in fields:
-            # simulate at high native resolution OVER THE TIGHT WINDOW so every
-            # stored point lands where the protons are (max resolution per byte).
-            _, spec = simulate_spectrum_composite(
-                shifts, couplings, deg, f,
-                points=SIM_POINTS, ppm_from=win_lo, ppm_to=win_hi,
-                linewidth_hz=LINEWIDTH_HZ,
-            )
-            ds = maxpool_downsample(spec, DISP_POINTS)
-            # PER-FRAME normalization: each field's tallest peak -> full scale, so
-            # peak HEIGHTS stay ~constant across the sweep and the eye tracks the
-            # change in resolution / splitting rather than overall amplitude.
-            m = float(ds.max())
-            q = np.clip(np.round(ds / m * 65535.0), 0, 65535).astype("<u2") if m > 0 \
-                else np.zeros(DISP_POINTS, dtype="<u2")
-            frames.append(base64.b64encode(q.tobytes()).decode("ascii"))
+            mc, ma = molecule_sticks(shifts, couplings, deg, f, win_lo, win_hi)
+            max_sticks = max(max_sticks, len(mc))
+            # amplitudes -> uint16 normalized to this frame's largest line
+            amax = float(ma.max()) if len(ma) else 1.0
+            cen = np.asarray(mc, dtype="<f4")
+            amp = np.clip(np.round(ma / amax * 65535.0), 0, 65535).astype("<u2")
+            frames.append({
+                "c": base64.b64encode(cen.tobytes()).decode("ascii"),   # ppm float32
+                "a": base64.b64encode(amp.tobytes()).decode("ascii"),   # uint16 / 65535
+            })
 
         molecules.append({
             "id": molecule_id(rec),
@@ -175,10 +220,11 @@ def main():
             "couplings": [[round(float(couplings[i][j]), 1) for j in range(len(shifts))]
                           for i in range(len(shifts))],
             "win": [win_lo, win_hi],     # ppm display window (data-driven)
-            "frames": frames,            # base64 uint16 LE, len DISP_POINTS each
+            "frames": frames,            # per field: {c: centers ppm, a: amps} (base64)
         })
         print(f"  [{rank+1:2d}] {rec.get('chembl_id'):12s} score={score:6.1f} "
-              f"win=[{win_lo:.2f},{win_hi:.2f}] smiles={rec.get('smiles')[:36]}")
+              f"win=[{win_lo:.2f},{win_hi:.2f}] smiles={rec.get('smiles')[:34]}")
+    print(f"max sticks/frame = {max_sticks}")
 
     payload = {
         "meta": {
@@ -186,12 +232,11 @@ def main():
             "high_mhz": HIGH_MHZ,
             "fields_mhz": fields,
             "n_fields": N_FIELDS,
-            "disp_points": DISP_POINTS,
             "ppm_from": PPM_FROM,
             "ppm_to": PPM_TO,
             "linewidth_hz": LINEWIDTH_HZ,
-            "windowed": True,
-            "encoding": "base64-uint16le-per-frame-normalized (points span molecule.win)",
+            "format": "sticks",
+            "encoding": "per frame {c: base64 float32 centers ppm, a: base64 uint16 amps/65535}; broaden client-side",
             "source": "pyspin composite simulator over mol_to_matrix/data/spin_systems.json",
         },
         "molecules": molecules,

@@ -13,7 +13,7 @@ molecule is chosen on every reload. Dark / light theme toggle in the nav (persis
 |---|---|
 | `index.html` | the whole site (inline CSS) |
 | `assets/sweep.js` | canvas animation + scroll/theme logic + data decode |
-| `data/field_sweep.json` | precomputed spectra (base64 uint16, per-molecule normalized) |
+| `data/field_sweep.json` | precomputed **stick** spectra per molecule/field (base64 float32 centers + uint16 amps); broadened into smooth Lorentzians client-side |
 | `build_field_sweep.py` | regenerates `data/field_sweep.json` from the pyspin simulator |
 | `.nojekyll` | tells Pages to serve files as-is (no Jekyll) |
 

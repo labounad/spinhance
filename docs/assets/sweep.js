@@ -1,7 +1,8 @@
 /* SpinHance — scroll-driven field-sweep hero
-   Reads docs/data/field_sweep.json (base64 uint16 spectra per molecule across a
-   geometric 90->600 MHz sweep) and renders a bold spectral trace + a faint fan
-   of all fields onto a canvas, with the spectrometer field driven by scroll. */
+   Loads docs/data/field_sweep.json (a STICK spectrum per molecule per field) and
+   broadens the sticks into smooth Lorentzians on a high-res grid, client-side, so
+   resolution is independent of stored data size. The bold current-field trace is
+   driven by scroll; a faint static "fan" of all fields sits behind it. */
 (() => {
   "use strict";
 
@@ -18,22 +19,18 @@
     localStorage.setItem("spinhance-theme", next);
     syncBtn();
     colors = readColors();
-    draw();
+    renderFan(); draw();
   });
 
   const cssVar = (n) => getComputedStyle(root).getPropertyValue(n).trim();
   const readColors = () => ({
-    trace: cssVar("--trace"),
-    fan: cssVar("--fan"),
-    grid: cssVar("--grid"),
-    faint: cssVar("--ink-faint"),
-    accent: cssVar("--accent"),
-    accent2: cssVar("--accent-2"),
+    trace: cssVar("--trace"), fan: cssVar("--fan"), grid: cssVar("--grid"),
+    faint: cssVar("--ink-faint"), accent: cssVar("--accent"),
     dark: root.getAttribute("data-theme") === "dark",
   });
   let colors = readColors();
 
-  /* ---------- canvas ---------- */
+  /* ---------- elements ---------- */
   const canvas = document.getElementById("spectrum");
   const ctx = canvas.getContext("2d");
   const hero = document.getElementById("top");
@@ -42,139 +39,140 @@
   const molTag = document.getElementById("molTag");
   const scrollHint = document.getElementById("scrollHint");
 
+  const GRID = 4096;          // broadening resolution (independent of pixels)
+  const BASE = 0.80, AMP = 0.62;  // baseline at 80% height; peaks rise 62% of height
+
   let W = 0, H = 0, dpr = 1;
+  const fan = document.createElement("canvas");
+  const fctx = fan.getContext("2d");
+
   function resize() {
     dpr = Math.min(window.devicePixelRatio || 1, 2);
     W = canvas.clientWidth; H = canvas.clientHeight;
-    canvas.width = Math.round(W * dpr);
-    canvas.height = Math.round(H * dpr);
+    for (const c of [canvas, fan]) { c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    fctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
   /* ---------- data ---------- */
-  let meta = null, mol = null, frames = [];   // frames: Float32Array[] (0..1)
-  let winLo = 0, winHi = 12, iLo = 0, iHi = 1; // display ppm window + index range
+  let meta = null, mol = null, curves = [], winLo = 0, winHi = 1;
 
-  function decodeFrame(b64) {
-    const bin = atob(b64);
-    const n = bin.length / 2;
-    const out = new Float32Array(n);
-    for (let i = 0; i < n; i++) {
-      const v = bin.charCodeAt(2 * i) | (bin.charCodeAt(2 * i + 1) << 8);
-      out[i] = v / 65535;
+  const b64f32 = (s) => { const b = atob(s), n = b.length / 4, u = new Uint8Array(b.length);
+    for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return new Float32Array(u.buffer, 0, n); };
+  const b64u16 = (s) => { const b = atob(s), n = b.length / 2, out = new Float32Array(n);
+    for (let i = 0; i < n; i++) out[i] = (b.charCodeAt(2*i) | (b.charCodeAt(2*i+1) << 8)) / 65535; return out; };
+
+  /* broaden one frame's sticks into a normalized Lorentzian curve on the grid */
+  function broaden(centers, amps, hwhm) {
+    const y = new Float32Array(GRID);
+    const dppm = (winHi - winLo) / (GRID - 1);
+    const cutoff = Math.max(30 * hwhm, dppm * 3);
+    for (let i = 0; i < centers.length; i++) {
+      const c = centers[i], a = amps[i];
+      let k0 = Math.floor((c - cutoff - winLo) / dppm), k1 = Math.ceil((c + cutoff - winLo) / dppm);
+      if (k0 < 0) k0 = 0; if (k1 > GRID - 1) k1 = GRID - 1;
+      for (let k = k0; k <= k1; k++) {
+        const d = (winLo + k * dppm - c) / hwhm;
+        y[k] += a / (1 + d * d);
+      }
     }
-    return out;
+    let m = 0; for (let k = 0; k < GRID; k++) if (y[k] > m) m = y[k];
+    if (m > 0) for (let k = 0; k < GRID; k++) y[k] /= m;
+    return y;
   }
 
   function chooseMolecule(data) {
     meta = data.meta;
     mol = data.molecules[Math.floor(Math.random() * data.molecules.length)];
-    frames = mol.frames.map(decodeFrame);
-    // each stored frame's points span exactly the molecule's data-driven window
     [winLo, winHi] = mol.win;
-    iLo = 0; iHi = meta.disp_points - 1;
-    molTag.innerHTML = `<b>${mol.chembl_id || mol.id || "molecule"}</b> · <span class="mono">${(mol.smiles || "").slice(0, 40)}</span>`;
-    buildMatrix(data);
+    curves = mol.frames.map((fr, idx) => {
+      const hwhm = (meta.linewidth_hz / 2) / meta.fields_mhz[idx];
+      return broaden(b64f32(fr.c), b64u16(fr.a), hwhm);
+    });
+    molTag.innerHTML = `<b>${mol.chembl_id || mol.id || "molecule"}</b> &nbsp;<span class="mono">${(mol.smiles || "").slice(0, 42)}</span>`;
+    buildMatrix();
   }
 
-  /* map a sample index -> x (NMR: high ppm on the left) */
-  function xOf(i) {
-    const ppm = winLo + (i / (meta.disp_points - 1)) * (winHi - winLo);
-    return ((winHi - ppm) / (winHi - winLo)) * W;
-  }
-
-  /* ---------- scroll progress ---------- */
-  function progress() {
-    const r = hero.getBoundingClientRect();
-    const total = hero.offsetHeight - window.innerHeight;
-    return total > 0 ? Math.min(1, Math.max(0, -r.top / total)) : 0;
-  }
-
-  /* ---------- draw ---------- */
-  function tracePath(arr, amp, baseY) {
-    ctx.beginPath();
-    let started = false;
-    for (let i = iLo; i <= iHi; i++) {
-      const x = xOf(i), y = baseY - arr[i] * amp;
-      if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+  function curvePath(c, g, amp, baseY) {
+    // k=0 -> ppm=winLo (low ppm) -> right side; reversed axis = high ppm on left
+    g.beginPath();
+    for (let k = 0; k < GRID; k++) {
+      const x = (1 - k / (GRID - 1)) * W;     // winLo(low ppm) at right, winHi(high ppm) at left
+      const y = baseY - c[k] * amp;
+      k === 0 ? g.moveTo(x, y) : g.lineTo(x, y);
     }
-    ctx.stroke();
+    g.stroke();
   }
 
-  function drawAxis(baseY) {
-    ctx.strokeStyle = colors.grid; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(0, baseY); ctx.lineTo(W, baseY); ctx.stroke();
-    ctx.fillStyle = colors.faint;
-    ctx.font = "12px ui-monospace,Menlo,monospace";
-    ctx.textAlign = "center";
-    const step = (winHi - winLo) > 6 ? 2 : (winHi - winLo) > 3 ? 1 : 0.5;
-    const first = Math.ceil(winLo / step) * step;
-    for (let p = first; p <= winHi + 1e-6; p += step) {
+  function drawAxis(g, baseY) {
+    g.strokeStyle = colors.grid; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(0, baseY); g.lineTo(W, baseY); g.stroke();
+    g.fillStyle = colors.faint; g.font = "12px ui-monospace,Menlo,monospace"; g.textAlign = "center";
+    const sp = (winHi - winLo) > 4 ? 1 : (winHi - winLo) > 2 ? 0.5 : 0.25;
+    const first = Math.ceil(winLo / sp) * sp;
+    for (let p = first; p <= winHi + 1e-6; p += sp) {
       const x = ((winHi - p) / (winHi - winLo)) * W;
-      ctx.beginPath(); ctx.moveTo(x, baseY); ctx.lineTo(x, baseY + 6);
-      ctx.strokeStyle = colors.grid; ctx.stroke();
-      ctx.fillText(p.toFixed(step < 1 ? 1 : 0), x, baseY + 22);
+      g.beginPath(); g.moveTo(x, baseY); g.lineTo(x, baseY + 6); g.strokeStyle = colors.grid; g.stroke();
+      g.fillText(p.toFixed(sp < 1 ? (sp < 0.5 ? 2 : 1) : 0), x, baseY + 21);
     }
-    ctx.textAlign = "left";
-    ctx.fillText("δ  (ppm)", 14, baseY + 22);
+    g.textAlign = "left"; g.fillText("δ (ppm)", 12, baseY + 21);
+  }
+
+  /* fan + axis are static per molecule/size/theme -> render once to offscreen */
+  function renderFan() {
+    if (!meta) return;
+    const baseY = H * BASE, amp = H * AMP;
+    fctx.clearRect(0, 0, W, H);
+    drawAxis(fctx, baseY);
+    fctx.strokeStyle = colors.fan; fctx.lineWidth = 1.1; fctx.lineJoin = "round";
+    for (const c of curves) curvePath(c, fctx, amp, baseY);
+  }
+
+  function progress() {
+    const total = hero.offsetHeight - window.innerHeight;
+    return total > 0 ? Math.min(1, Math.max(0, window.scrollY / total)) : 0;
   }
 
   function draw() {
     if (!meta) return;
+    const baseY = H * BASE, amp = H * AMP;
     ctx.clearRect(0, 0, W, H);
-    const baseY = H * 0.86, amp = H * 0.62;
+    ctx.drawImage(fan, 0, 0, W, H);
 
-    drawAxis(baseY);
-
-    // faint fan: every precomputed field
-    ctx.strokeStyle = colors.fan; ctx.lineWidth = 1.1;
-    for (let f = 0; f < frames.length; f++) tracePath(frames[f], amp, baseY);
-
-    // current field (interpolated between the two nearest frames)
     const p = progress();
-    const fpos = p * (frames.length - 1);
-    const lo = Math.floor(fpos), hi = Math.min(frames.length - 1, lo + 1), t = fpos - lo;
-    const a = frames[lo], b = frames[hi];
-    const cur = new Float32Array(meta.disp_points);
-    for (let i = iLo; i <= iHi; i++) cur[i] = a[i] * (1 - t) + b[i] * t;
+    const fpos = p * (curves.length - 1);
+    const lo = Math.floor(fpos), hi = Math.min(curves.length - 1, lo + 1), t = fpos - lo;
+    const a = curves[lo], b = curves[hi];
+    const cur = new Float32Array(GRID);
+    for (let k = 0; k < GRID; k++) cur[k] = a[k] * (1 - t) + b[k] * t;
 
-    ctx.strokeStyle = colors.trace;
-    ctx.lineWidth = 2.7; ctx.lineJoin = "round"; ctx.lineCap = "round";
-    ctx.shadowColor = colors.accent; ctx.shadowBlur = colors.dark ? 22 : 8;
-    tracePath(cur, amp, baseY);
+    ctx.strokeStyle = colors.trace; ctx.lineWidth = 2.6; ctx.lineJoin = "round"; ctx.lineCap = "round";
+    ctx.shadowColor = colors.accent; ctx.shadowBlur = colors.dark ? 20 : 6;
+    curvePath(cur, ctx, amp, baseY);
     ctx.shadowBlur = 0;
 
-    // readouts
     const fields = meta.fields_mhz;
-    const mhz = fields[lo] * (1 - t) + fields[hi] * t;
-    fieldVal.textContent = Math.round(mhz);
+    fieldVal.textContent = Math.round(fields[lo] * (1 - t) + fields[hi] * t);
     barFill.style.width = (p * 100).toFixed(1) + "%";
-    scrollHint.style.opacity = p > 0.02 ? "0" : "";
+    scrollHint.style.opacity = p > 0.015 ? "0" : "";
   }
 
-  /* ---------- shift+J matrix table for the hero molecule ---------- */
-  function buildMatrix(data) {
+  /* ---------- shift+J matrix for the hero molecule ---------- */
+  function buildMatrix() {
     const host = document.getElementById("matrixHost");
     if (!host || !mol) return;
-    const n = mol.n_groups;
-    const J = mol.couplings || [];
-    const labels = "ABCDEFGH".slice(0, n).split("");
+    const n = mol.n_groups, J = mol.couplings || [], labels = "ABCDEFGH".slice(0, n).split("");
     let html = "<table class='mx'><tr><th></th>";
-    labels.forEach(l => html += `<th>${l}</th>`);
-    html += "<th>n</th></tr>";
+    labels.forEach(l => html += `<th>${l}</th>`); html += "<th>n</th></tr>";
     for (let i = 0; i < n; i++) {
       html += `<tr><th>${labels[i]}</th>`;
       for (let j = 0; j < n; j++) {
         if (i === j) html += `<td class="diag">${mol.shifts[i].toFixed(2)}</td>`;
-        else {
-          const v = J[i] ? J[i][j] : 0;
-          html += `<td>${v ? v.toFixed(1) : "·"}</td>`;
-        }
+        else { const v = J[i] ? J[i][j] : 0; html += `<td>${v ? v.toFixed(1) : "·"}</td>`; }
       }
       html += `<td class="deg">${mol.degeneracy[i]}</td></tr>`;
     }
-    html += "</table>";
-    host.innerHTML = html;
+    host.innerHTML = html + "</table>";
     const note = document.getElementById("repNote");
     if (note) note.innerHTML =
       `Diagonal = chemical shifts δ (ppm) of <b>${mol.chembl_id}</b>; right column = proton degeneracy <i>n</i>. ` +
@@ -183,20 +181,12 @@
 
   /* ---------- boot ---------- */
   let ticking = false;
-  function onScroll() { if (!ticking) { ticking = true; requestAnimationFrame(() => { draw(); ticking = false; }); } }
+  const onScroll = () => { if (!ticking) { ticking = true; requestAnimationFrame(() => { draw(); ticking = false; }); } };
 
-  fetch("data/field_sweep.json")
-    .then(r => r.json())
-    .then(data => {
-      document.getElementById("statMol").textContent = data.molecules.length >= 30 ? "1,072" : data.molecules.length;
-      resize();
-      chooseMolecule(data);
-      draw();
-      window.addEventListener("scroll", onScroll, { passive: true });
-      window.addEventListener("resize", () => { resize(); draw(); });
-    })
-    .catch(err => {
-      console.error("field_sweep.json failed to load", err);
-      molTag.textContent = "spectra failed to load";
-    });
+  fetch("data/field_sweep.json").then(r => r.json()).then(data => {
+    document.getElementById("statMol").textContent = "1,072";
+    resize(); chooseMolecule(data); renderFan(); draw();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", () => { resize(); renderFan(); draw(); });
+  }).catch(err => { console.error("field_sweep.json failed", err); molTag.textContent = "spectra failed to load"; });
 })();
