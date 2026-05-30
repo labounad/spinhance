@@ -60,17 +60,20 @@ class SpectrumMatrixDataset(Dataset):
 
     def __getitem__(self, i):
         r = self.records[i]
-        spec = _load_spectrum(r, self.spectrum_field)
+        clean = _load_spectrum(r, self.spectrum_field)
+        inp = clean
         if self.augment:
             # per-sample rng so DataLoader workers are reproducible
             rng = np.random.default_rng((self.seed, i, torch.initial_seed() % (2**31)))
-            spec = augment_spectrum(spec, self.ppm_from, self.ppm_to, rng=rng,
-                                    **self.aug_kwargs)
+            inp = augment_spectrum(clean, self.ppm_from, self.ppm_to, rng=rng,
+                                   **self.aug_kwargs)
         t = self.std.transform(
             encode_target(r["shifts"], r["couplings"], r["degeneracy"], self.vocab))
         deg_ordered = self.vocab.from_index(t["deg_class"])
         return {
-            "spectrum": torch.from_numpy(np.ascontiguousarray(spec)),       # (P,)
+            "spectrum": torch.from_numpy(np.ascontiguousarray(inp)),        # (P,) encoder input
+            # CLEAN spectrum = Stage-2 self-consistency reference (renderer is noise-free)
+            "spectrum_ref": torch.from_numpy(np.ascontiguousarray(clean)),  # (P,)
             "shifts": torch.from_numpy(t["shifts"]),                        # (G,)
             "j_mag": torch.from_numpy(t["j_mag"]),                          # (28,)
             "j_presence": torch.from_numpy(t["j_presence"]),                # (28,)
@@ -84,6 +87,7 @@ def collate_fn(batch):
     keys = {b["bucket_key"] for b in batch}
     out = {
         "spectrum": torch.stack([b["spectrum"] for b in batch]),
+        "spectrum_ref": torch.stack([b["spectrum_ref"] for b in batch]),
         "shifts": torch.stack([b["shifts"] for b in batch]),
         "j_mag": torch.stack([b["j_mag"] for b in batch]),
         "j_presence": torch.stack([b["j_presence"] for b in batch]),

@@ -128,7 +128,7 @@ def _spectral_term(pred_phys, batch, cfg, device):
     deg_list = [int(x) for x in deg.tolist()]
     struct = renderer._structure(deg_list, device, pred_phys["shifts"].dtype)
     sub = {"shifts": pred_phys["shifts"][sel], "couplings": pred_phys["couplings"][sel]}
-    ref = batch["spectrum"][sel]
+    ref = batch["spectrum_ref"][sel]      # CLEAN spectrum (renderer is noise-free)
     loss, w1 = spectral_loss(
         sub, ref, batch["degeneracy"][sel], cfg.field_low, renderer, struct=struct,
         points=cfg.points, ppm_from=cfg.ppm_from, ppm_to=cfg.ppm_to,
@@ -215,7 +215,7 @@ def _amp_context(cfg, device):
     return (lambda: torch.autocast(device_type="cuda", dtype=dt)), scaler
 
 
-def fit(records, assignment, cfg: TrainConfig):
+def fit(records, assignment, cfg: TrainConfig, model=None):
     torch.manual_seed(cfg.seed)
     device = cfg.device
     ds, std, vocab = build_datasets(records, assignment, cfg)
@@ -229,7 +229,7 @@ def fit(records, assignment, cfg: TrainConfig):
     val_dl = DataLoader(ds["val"], batch_size=cfg.batch_size, shuffle=False,
                         collate_fn=collate_fn)
 
-    model = SpinHanceModel(n_groups=8, n_deg_classes=len(vocab)).to(device)
+    model = (model or SpinHanceModel(n_groups=8, n_deg_classes=len(vocab))).to(device)
     opt = torch.optim.AdamW(model.parameters(), lr=cfg.lr,
                             weight_decay=cfg.weight_decay)
     steps_per_epoch = max(1, len(plain))

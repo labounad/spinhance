@@ -196,15 +196,17 @@ Build order from DESIGN; ✅ = built, 🔬 = numeric core verified in numpy here
 | `metrics.py` / `test_train_infra.py` | decode + eval metrics | ✅ 🔬 |
 | `train.py` | config + loop + stage handoff | ✅ ⏳ (`-m model.train --smoke`) |
 
-**To train when data is ready:** build `records` (mol_id, shifts, couplings,
-degeneracy, smiles/scaffold, and a `spec90` array or `spec90_path`), then
-`assignment,_ = splits.make_splits(records)` and `train.fit(records, assignment,
-TrainConfig(...))`. First run the `-m ...` self-tests in your env to confirm the
-torch pieces (esp. the renderer gradcheck) pass on your hardware.
+**To train (preliminary 1072-mol set):** use `model/run_experiment.py`
+(`data_adapter.load_records` → `splits.make_splits` → `train.fit`).
+- validate the data path (torch-free): `python -m model.run_experiment --dry-run`
+- Stage-1: `python -m model.run_experiment --small --epochs 60 --batch 64`
+- Stage-2: add `--stage2 --stage1-epochs 40 --ramp-epochs 10`
+First run the `-m model.<...>` self-tests in your env (esp.
+`-m model.diff_renderer_torch` gradcheck). Stage-2 uses the CLEAN spectrum
+(`spectrum_ref`) as the self-consistency target, not the augmented encoder input.
 
 ## Open items / v2 upgrades
-- Swap explicit expansion → composite reduction in `diff_renderer_torch.py` for
-  scale.
+- Restrict the degeneracy vocab to observed {1,2,3,6,9} (3 classes never occur).
 - Set-prediction + Hungarian loss if canonical-ordering label noise plateaus.
 - Transformer / hybrid encoder if long-range coupling structure is missed.
 - Learned-uncertainty loss weighting if manual weights prove fiddly.
