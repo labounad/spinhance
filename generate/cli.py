@@ -61,14 +61,31 @@ _DEFAULT_CHUNK    = 32
 def _cmd_run(args: argparse.Namespace) -> int:
     from generate.pipeline import run_pipeline  # noqa: PLC0415 — intentional lazy import
     _, kept = run_pipeline(
-        chembl_path   = Path(args.chembl),
-        output_path   = Path(args.output),
-        xyz_path      = None if args.no_xyz else Path(args.xyz_output),
-        target_groups = args.n_groups,
-        workers       = args.workers,
-        chunk_size    = args.chunk_size,
+        source_path     = Path(args.chembl),
+        output_path     = Path(args.output),
+        source          = args.source,
+        xyz_path        = None if args.no_xyz else Path(args.xyz_output),
+        target_groups   = args.n_groups,
+        max_heavy_atoms = args.max_heavy_atoms,
+        num_shards      = args.num_shards,
+        shard_index     = args.shard_index,
+        workers         = args.workers,
+        chunk_size      = args.chunk_size,
     )
     return 0 if kept >= 0 else 1
+
+
+def _cmd_merge(args: argparse.Namespace) -> int:
+    from generate.merge_shards import merge_shards  # noqa: PLC0415
+    rows, n_xyz = merge_shards(
+        Path(args.shard_dir),
+        Path(args.output),
+        None if args.no_xyz else Path(args.xyz_output),
+    )
+    print(f"merged {rows:,} rows -> {args.output}")
+    if not args.no_xyz:
+        print(f"merged {n_xyz} shard XYZ files -> {args.xyz_output}")
+    return 0
 
 
 def _cmd_xyz(args: argparse.Namespace) -> int:
@@ -126,8 +143,16 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p_run.add_argument(
+        "--source", default="chembl", metavar="SRC",
+        choices=("chembl", "pubchem", "zinc", "smiles"),
+        help="Input database format: chembl | pubchem | zinc | smiles  "
+             "(default: chembl).  Selects how --chembl is parsed.",
+    )
+    p_run.add_argument(
         "--chembl", default=str(_DEFAULT_CHEMBL), metavar="PATH",
-        help=f"ChEMBL chemreps .txt file  (default: {_DEFAULT_CHEMBL.name})",
+        help=f"Input compound file; .gz handled transparently.  For "
+             f"--source pubchem this is CID-SMILES.gz  "
+             f"(default: {_DEFAULT_CHEMBL.name})",
     )
     p_run.add_argument(
         "--output", default=str(_DEFAULT_OUTPUT), metavar="PATH",
@@ -145,6 +170,23 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument(
         "--n-groups", type=int, default=N_SPIN_GROUPS, metavar="N",
         help=f"Target spin-group count  (default: {N_SPIN_GROUPS})",
+    )
+    p_run.add_argument(
+        "--max-heavy-atoms", type=int, default=50, metavar="N",
+        dest="max_heavy_atoms",
+        help="Skip molecules with more than N heavy atoms before embedding; "
+             "0 disables  (default: 50, ~600-700 Da).",
+    )
+    p_run.add_argument(
+        "--num-shards", type=int, default=None, metavar="N",
+        dest="num_shards",
+        help="Split the input into N shards; process only --shard-index.  "
+             "For Slurm arrays (default: no sharding).",
+    )
+    p_run.add_argument(
+        "--shard-index", type=int, default=0, metavar="K",
+        dest="shard_index",
+        help="Which shard (0..N-1) this task processes  (default: 0).",
     )
     p_run.add_argument(
         "--workers", type=int, default=_DEFAULT_WORKERS, metavar="N",
@@ -211,6 +253,34 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"Worker processes  (default: {_DEFAULT_WORKERS})",
     )
     p_xyz.set_defaults(func=_cmd_xyz)
+
+    # ── merge ─────────────────────────────────────────────────────────────────
+    p_merge = sub.add_parser(
+        "merge",
+        help="Combine Slurm-array shard outputs into one CSV + XYZ.",
+        description=(
+            "Merges part_*.csv and part_*.xyz.gz produced by a sharded run "
+            "(--num-shards) into single-file outputs."
+        ),
+    )
+    p_merge.add_argument(
+        "shard_dir", metavar="SHARD_DIR",
+        help="Directory containing part_*.csv / part_*.xyz.gz.",
+    )
+    p_merge.add_argument(
+        "--output", default=str(_DEFAULT_OUTPUT), metavar="PATH",
+        help=f"Merged CSV  (default: {_DEFAULT_OUTPUT.name})",
+    )
+    p_merge.add_argument(
+        "--xyz-output", default=str(_DEFAULT_XYZ), metavar="PATH",
+        dest="xyz_output",
+        help=f"Merged .xyz.gz  (default: {_DEFAULT_XYZ.name})",
+    )
+    p_merge.add_argument(
+        "--no-xyz", action="store_true",
+        help="Merge only the CSV shards.",
+    )
+    p_merge.set_defaults(func=_cmd_merge)
 
     return parser
 

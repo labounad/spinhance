@@ -36,6 +36,54 @@ All subcommands accept `--help` for full option listings.
 
 ---
 
+## Compound sources
+
+`run --source` selects the input format; the screening itself is identical
+across sources.
+
+| `--source` | File | Notes |
+|---|---|---|
+| `chembl` *(default)* | `chembl_XX_chemreps.txt` | TSV with header; InChIKey read from the file |
+| `pubchem` | `CID-SMILES.gz` | `<CID>\t<SMILES>`, ~120 M rows; `source_id` = `CID<n>` |
+| `zinc` | `*.smi` tranches | `<SMILES> <ZINC_id>` |
+| `smiles` | any `.smi`/`.txt` | first token SMILES, optional id |
+
+`.gz` inputs are read transparently.  For sources without an InChIKey column
+(PubChem, ZINC) it is computed only for the molecules that pass — never for the
+whole database.  A heavy-atom cap (`--max-heavy-atoms`, default 50) skips
+peptides/polymers/macrocycles before the slow 3-D embedding.
+
+```bash
+# Screen all of PubChem locally (slow — see HPC sharding below for scale)
+python generate/cli.py run --source pubchem --chembl CID-SMILES.gz \
+  --output 8spin_pubchem.csv --xyz-output 8spin_pubchem.xyz.gz
+```
+
+PubChem's `CID-SMILES.gz` (~1.5 GB) is at
+`https://ftp.ncbi.nlm.nih.gov/pubchem/Compound/Extras/CID-SMILES.gz`.
+
+### Screening at scale (HPC Slurm array)
+
+For a whole-database screen, split the input across array tasks
+(`index % num_shards == shard_index`); each task writes its own
+`part_<id>.csv` / `part_<id>.xyz.gz`, then `merge` combines them.
+
+```bash
+# Submit the array (num_shards = array size, set via --array in the script)
+sbatch --export=ALL,INPUT=$HOME/pubchem/CID-SMILES.gz,SRC=pubchem \
+    generate/slurm/screen_array.slurm
+
+# After it finishes, merge the shards into one dataset
+python generate/cli.py merge data/screen/shards \
+    --output data/screen/8spin_pubchem.csv \
+    --xyz-output data/screen/8spin_pubchem.xyz.gz
+```
+
+The screen is embed-bound (the 3-D step dwarfs parsing), so 16 cores/task keeps
+each shard near 100 % CPU utilisation.
+
+---
+
 ## Pipeline
 
 ```
