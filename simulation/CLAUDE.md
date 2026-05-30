@@ -130,7 +130,8 @@ sample (10/10 sims).
 - `pipeline.py` — orchestration + routing; `run_pipeline(engine=…)`, `_run_auto`, `txt_to_npy`.
 - `pyspin/` — pure-Python engine: `composite.py` (production), `simulator.py` (reference + broadening), `batch.py` (multiprocessing).
 - `plotting.py` — QC overlays (`plot_field_comparison`).
-- `cli.py` — `python -m simulation.cli run|plot` (`--engine`, `--workers`, `--launcher`, `--pyspin-max-spins`).
+- `export.py` — pack a `spectra/` dir into one `.tar.gz`; optional sparsify (drop points ≤ cutoff·max, default 0.001, renormalise to ∫=1, store idx+val npz) + gzip, two tqdm bars. `load_spectrum` reconstructs dense/sparse.
+- `cli.py` — `python -m simulation.cli run|plot|export` (`--engine`, `--workers`, `--launcher`, `--pyspin-max-spins`; export: `--spectra_dir --out --no-sparsify --cutoff --no-renormalize`).
 
 ### CLI flags (run)
 `--xml_dir --out_dir --mnova --fields 90 600 --workers N --launcher {open,direct} --engine {mnova,python,auto} --pyspin-max-spins 13`

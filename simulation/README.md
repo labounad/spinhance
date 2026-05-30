@@ -118,7 +118,8 @@ simulation/
 ├── mnova_runner.py      # MestReNova CLI: run_mnova_batch / run_mnova_parallel
 ├── pipeline.py          # orchestration: run_pipeline (engine mnova/python/auto)
 ├── plotting.py          # QC overlay of 90 vs 600 MHz spectra
-├── cli.py               # `python -m simulation.cli run|plot`
+├── export.py            # pack spectra/ → one .tar.gz (sparsify + gzip)
+├── cli.py               # `python -m simulation.cli run|plot|export`
 ├── mnova_scripts/
 │   └── spinhanceBatch.qs   # MNova JS batch script (register this folder once)
 ├── pyspin/                 # pure-Python engine (engine="python")
@@ -222,6 +223,20 @@ shards (e.g. license-seat starvation) are retried automatically.
 ```bash
 python -m simulation.cli plot --spectra_dir data/processed/spectra --stem mol_001 --show
 ```
+
+### Export a dataset to one tarball
+
+```bash
+python -m simulation.cli export --spectra_dir simulation/data/spectra \
+    --out simulation/data/spectra.tar.gz        # sparsified (default), cutoff 0.001
+# options: --no-sparsify (store dense), --cutoff 0.001, --no-renormalize
+```
+
+Sparsify drops points ≤ `cutoff × max` per spectrum (the long Lorentzian tails;
+~86% of points at 0.001, keeping 98.6% of the integral) and stores
+`(int32 indices, float32 values)`, renormalised so ∫=1. Two progress bars:
+*compressing* (per spectrum) then *zipping* (gzip). Reconstruct a sparse
+`mol_<i>.npz` with `simulation.export.load_spectrum` → `y = zeros(n); y[idx] = val`.
 
 ### Programmatic API
 
