@@ -42,7 +42,32 @@ except Exception:                     # numpy fallback
     def _eigh(H):
         return np.linalg.eigh(H)
 
-__all__ = ["spin_reps", "simulate_spectrum_composite", "largest_component_spins"]
+__all__ = ["spin_reps", "simulate_spectrum_composite", "largest_component_spins",
+           "system_transitions"]
+
+
+def system_transitions(shifts, couplings, degeneracy, field_mhz,
+                       intensity_threshold=1e-6):
+    """Raw (freqs_Hz, amps) for ONE spin system via composite reduction.
+
+    No component decomposition, no normalisation, no broadening — just the
+    multiplicity-weighted transitions summed over per-group total-spin
+    combinations. Shared by the exact engine and the clustered approximation.
+    """
+    nu_hz = [shifts[g] * field_mhz for g in range(len(shifts))]
+    reps = [spin_reps(int(degeneracy[g])) for g in range(len(shifts))]
+    fs, ams = [], []
+    for combo in product(*reps):
+        S_list = [c[0] for c in combo]
+        weight = 1
+        for c in combo:
+            weight *= c[1]
+        f, a = _simulate_combination(S_list, nu_hz, couplings, intensity_threshold)
+        if len(f):
+            fs.append(f); ams.append(a * weight)
+    if fs:
+        return np.concatenate(fs), np.concatenate(ams)
+    return np.array([]), np.array([])
 
 
 def largest_component_spins(couplings, degeneracy) -> int:
@@ -223,21 +248,13 @@ def simulate_spectrum_composite(
     # than one connected fragment (isolated singlets become trivial 1-group sims).
     all_freqs, all_amps = [], []
     for comp in _components(couplings, G):
-        sub_nu = [shifts[g] * field_mhz for g in comp]
+        sub_shifts = [shifts[g] for g in comp]
         sub_J = [[couplings[a][b] for b in comp] for a in comp]
-        sub_reps = [spin_reps(int(degeneracy[g])) for g in comp]
-        comp_freqs, comp_amps = [], []
-        for combo in product(*sub_reps):
-            S_list = [c[0] for c in combo]
-            weight = 1
-            for c in combo:
-                weight *= c[1]
-            f, a = _simulate_combination(S_list, sub_nu, sub_J, intensity_threshold)
-            if len(f):
-                comp_freqs.append(f); comp_amps.append(a * weight)
-        if not comp_freqs:
+        sub_deg = [degeneracy[g] for g in comp]
+        cf, ca = system_transitions(sub_shifts, sub_J, sub_deg, field_mhz,
+                                    intensity_threshold)
+        if not len(cf):
             continue
-        cf = np.concatenate(comp_freqs); ca = np.concatenate(comp_amps)
         # Each component is simulated in its own Hilbert space, so its raw
         # intensity scale differs between components. Renormalise so the
         # component integrates to its proton count (NMR areas ∝ #protons), which

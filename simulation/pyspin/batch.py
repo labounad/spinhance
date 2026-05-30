@@ -25,7 +25,7 @@ from pathlib import Path
 
 import numpy as np
 
-from simulation.pyspin.composite import simulate_spectrum_composite
+from simulation.pyspin.cluster import simulate_spectrum_pyspin
 from simulation.xml_io import xml_to_matrix
 
 __all__ = ["simulate_xml_to_npy", "run_pyspin_batch"]
@@ -40,9 +40,13 @@ def simulate_xml_to_npy(
     ppm_to: float = 12.0,
     linewidth_hz: float = 1.0,
 ) -> Path:
-    """Parse one XML, simulate at ``field_mhz``, save a normalised ``.npy``."""
+    """Parse one XML, simulate at ``field_mhz``, save a normalised ``.npy``.
+
+    Uses the wall-free dispatcher: exact composite for small coupled fragments,
+    clustered approximation for large ones — so no molecule can stall the batch.
+    """
     m = xml_to_matrix(xml_path)
-    _, spec = simulate_spectrum_composite(
+    _, spec = simulate_spectrum_pyspin(
         m["shifts"], m["couplings"], m["degeneracy"], field_mhz,
         points=points, ppm_from=ppm_from, ppm_to=ppm_to, linewidth_hz=linewidth_hz,
     )

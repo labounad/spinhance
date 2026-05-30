@@ -30,7 +30,8 @@ spinhance/
 │   ├── mnova_scripts/spinhanceBatch.qs   # MNova JS batch script (register folder)
 │   ├── pyspin/              # pure-Python engine (engine="python")
 │   │   ├── simulator.py        # spin-½ reference + shared FFT broadening
-│   │   ├── composite.py        # composite reduction + component split (scalable)
+│   │   ├── composite.py        # composite reduction + component split (exact)
+│   │   ├── cluster.py          # local-cluster approx + wall-free dispatcher
 │   │   ├── batch.py            # multiprocessing XML→npy driver
 │   │   └── validate_vs_mnova.py
 │   ├── benchmarks/          # benchmark_fields / _pyspin / _scaling
@@ -204,20 +205,30 @@ Benchmarked (fully-coupled chain, worst case): pyspin is exact so cost ~ C(N,N/2
 N=20 (2^20): it uses overlapping local spin-cluster decomposition with first-order
 gluing (near-exact on sparse graphs, linear scaling). pyspin vs MNova still agree
 at N=14 (r=0.9947, 40/40 peaks), so MNova's approximation is excellent.
-Implication: pyspin wins for sparse/decomposable molecules (the norm); MNova wins
-for one large coupled fragment. `engine="auto"` (`_run_auto` in pipeline.py) routes
-per molecule by `largest_component_spins` (≤ pyspin_max_spins=13 → pyspin, else
-MNova) and prints the routing distribution. Metric is conservative (total
-component spins ≥ post-reduction cost). Future: implement local-cluster
-approximation in pyspin for full HPC scaling without MNova.
+Implication: pyspin's EXACT engine wins for sparse/decomposable molecules; one
+large coupled fragment used to need MNova. `engine="auto"` (`_run_auto`) still
+routes per molecule by `largest_component_spins` (≤ pyspin_max_spins=13 → pyspin,
+else MNova) and prints the distribution.
+
+### pyspin.cluster — local-cluster approximation (wall removed)
+`pyspin/cluster.py` implements MNova's trick: `partition_clusters` cuts the
+weakest bonds (Kruskal-style, size-capped union-find) so each cluster ≤
+max_cluster spins; each cluster is simulated EXACTLY (composite) while cut bonds
+are treated first-order — the far-side spins act as a classical Iz bath that
+shifts the cluster's resonances by J·m per bath total-Iz value m (binomial
+multiplicity), reproducing ordinary multiplet splitting. Reduces to exact when no
+bond is cut. Validated vs exact: corr 1.0 (no cut), 0.992 (N=14 chain), and runs
+a 100-spin chain in ~0.2 s (linear). `simulate_spectrum_pyspin(... exact_max_spins
+=12, max_cluster=9)` dispatches exact-vs-clustered by largest component; `batch.py`
+uses it, so the `python` engine is now WALL-FREE (no molecule can stall a batch).
+It IS an approximation (first-order between clusters) — excellent on sparse
+graphs, like MNova.
 
 ### Possible future work
-- **Local-cluster approximation in pyspin** (what MNova does): partition the
-  coupling graph into overlapping ≤~10-spin clusters, simulate each exactly, glue
-  inter-cluster couplings first-order. Would give pyspin linear scaling and remove
-  the ~15-coupled-spin wall — full HPC scaling with no MNova dependency anywhere.
-  Run `engine="auto"` on real Task 2 output first to see what fraction of
-  molecules actually exceed the wall before investing.
+- **Cluster-approximation accuracy tuning:** current cut is first-order (Iz·Iz
+  only). Could keep next-nearest strong bonds, use overlapping clusters, or raise
+  max_cluster for borderline cases. Validate against MNova on real large-fragment
+  molecules and pick max_cluster from the accuracy/speed trade-off.
 - **Task 2 adapter:** if Task 2 emits matrices as `.npy` rather than XML, add a
   small `matrix.npy → matrix_to_xml → save` shim ahead of `run_pipeline`.
 
