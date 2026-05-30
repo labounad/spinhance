@@ -27,6 +27,20 @@ from simulation.pyspin.composite import simulate_spectrum_composite  # noqa: E40
 SAMPLE = REPO_ROOT / "mol_to_matrix" / "data" / "spin_systems.json"
 
 
+def _sample_ready() -> bool:
+    """True only if the sample exists AND is real data (not a git-LFS pointer)."""
+    if not SAMPLE.exists():
+        return False
+    try:
+        return not SAMPLE.read_text(errors="ignore").lstrip().startswith(
+            "version https://git-lfs")
+    except Exception:
+        return False
+
+
+SAMPLE_READY = _sample_ready()
+
+
 def _record():
     return {
         "chembl_id": "CHEMBL_X",
@@ -97,7 +111,7 @@ def test_jsonarray_roundtrip(tmp_path):
 
 # ── Against the real Task 2 sample ────────────────────────────────────────────
 
-@pytest.mark.skipif(not SAMPLE.exists(), reason="spin_systems.json sample absent")
+@pytest.mark.skipif(not SAMPLE_READY, reason="spin_systems.json absent or unresolved git-LFS pointer")
 def test_real_sample_parses_and_simulates():
     recs = list(read_spin_systems(SAMPLE))
     assert len(recs) >= 1
@@ -109,7 +123,7 @@ def test_real_sample_parses_and_simulates():
         assert abs(sp.sum() * (12 / len(sp)) - 1.0) < 1e-6
 
 
-@pytest.mark.skipif(not SAMPLE.exists(), reason="spin_systems.json sample absent")
+@pytest.mark.skipif(not SAMPLE_READY, reason="spin_systems.json absent or unresolved git-LFS pointer")
 def test_real_sample_record_xml_equivalence(tmp_path):
     # record → XML → parse must reproduce the record's arrays (MNova path parity)
     _, rec = next(read_spin_systems(SAMPLE))

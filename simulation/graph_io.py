@@ -144,6 +144,10 @@ def read_spin_systems(path: str | Path):
     """
     path = Path(path)
     text = path.read_text().lstrip()
+    if text.startswith("version https://git-lfs"):
+        raise ValueError(
+            f"{path} is an unresolved git-LFS pointer, not the data. "
+            "Run `git lfs pull` (or `git lfs checkout`) to materialise it.")
     if text.startswith("["):
         for i, rec in enumerate(json.loads(text)):
             yield i, rec

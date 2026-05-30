@@ -28,7 +28,19 @@ import numpy as np
 from simulation.pyspin.cluster import simulate_spectrum_pyspin
 from simulation.xml_io import xml_to_matrix
 
+try:                                  # optional pretty progress bar
+    from tqdm import tqdm as _tqdm
+except Exception:                     # tqdm not installed → no-op passthrough
+    _tqdm = None
+
 __all__ = ["simulate_xml_to_npy", "run_pyspin_batch", "run_pyspin_batch_graphs"]
+
+
+def _progress(iterable, total, desc):
+    """Wrap an iterable in a tqdm bar if tqdm is available, else pass through."""
+    if _tqdm is None:
+        return iterable
+    return _tqdm(iterable, total=total, desc=desc, unit="sim")
 
 
 def simulate_xml_to_npy(
@@ -112,12 +124,13 @@ def run_pyspin_batch(
           f"= {len(tasks)} sims on {workers} workers")
 
     if workers == 1:
-        results = [_worker(t) for t in tasks]
+        results = [_worker(t) for t in _progress(tasks, len(tasks), "simulating")]
     else:
         # 'spawn' children re-import this module → inherit the 1-thread BLAS env.
         ctx = mp.get_context("spawn")
         with ctx.Pool(processes=workers) as pool:
-            results = pool.map(_worker, tasks, chunksize=4)
+            results = list(_progress(pool.imap_unordered(_worker, tasks, chunksize=4),
+                                     len(tasks), "simulating"))
 
     failures = [(o, err) for o, ok, err in results if not ok]
     succeeded = len(results) - len(failures)
@@ -195,11 +208,12 @@ def run_pyspin_batch_graphs(
           f"= {len(tasks)} sims on {workers} workers")
 
     if workers == 1:
-        results = [_graph_worker(t) for t in tasks]
+        results = [_graph_worker(t) for t in _progress(tasks, len(tasks), "simulating")]
     else:
         ctx = mp.get_context("spawn")
         with ctx.Pool(processes=workers) as pool:
-            results = pool.map(_graph_worker, tasks, chunksize=4)
+            results = list(_progress(pool.imap_unordered(_graph_worker, tasks, chunksize=4),
+                                     len(tasks), "simulating"))
 
     failures = [(o, err) for o, ok, err in results if not ok]
     succeeded = len(results) - len(failures)
