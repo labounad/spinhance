@@ -89,9 +89,24 @@
       const hwhm = (meta.linewidth_hz / 2) / meta.fields_mhz[idx];
       return broaden(b64f32(fr.c), b64u16(fr.a), hwhm);
     });
-    molTag.innerHTML = `<b>${mol.chembl_id || mol.id || "molecule"}</b> &nbsp;<span class="mono">${(mol.smiles || "").slice(0, 42)}</span>`;
+    molTag.innerHTML = `<b>${mol.chembl_id || mol.id || "molecule"}</b> &nbsp;` +
+      `<span class="mono smi" id="smilesCopy" title="Click to copy SMILES">${mol.smiles || ""}</span>` +
+      `<span class="copied" id="copiedMsg" style="opacity:0">✓ copied</span>`;
     buildMatrix();
+    // hand the molecule to the 3D viewer module
+    window.__heroMol = { smiles: mol.smiles, id: mol.chembl_id || mol.id };
+    window.dispatchEvent(new CustomEvent("spinhance:molecule"));
   }
+
+  // click SMILES -> copy to clipboard
+  molTag.addEventListener("click", (e) => {
+    const t = e.target.closest(".smi");
+    if (!t || !mol) return;
+    navigator.clipboard.writeText(mol.smiles || "").then(() => {
+      const m = document.getElementById("copiedMsg");
+      if (m) { m.style.opacity = "1"; clearTimeout(molTag._ct); molTag._ct = setTimeout(() => m.style.opacity = "0", 1300); }
+    }).catch(() => {});
+  });
 
   function curvePath(c, g, amp, baseY) {
     // k=0 -> ppm=winLo (low ppm) -> right side; reversed axis = high ppm on left

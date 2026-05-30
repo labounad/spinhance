@@ -25,9 +25,9 @@
     --grid:rgba(150,180,230,.07);
   }
   *{box-sizing:border-box}
-  html{scroll-behavior:smooth}
+  html{scroll-behavior:smooth;overscroll-behavior-y:none}
   body{
-    margin:0; background:var(--bg); color:var(--ink);
+    margin:0; background:var(--bg); color:var(--ink); overscroll-behavior-y:none;
     font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
     -webkit-font-smoothing:antialiased; transition:background .4s ease,color .4s ease;
   }
@@ -66,8 +66,11 @@
   .hero-copy h1{font-size:clamp(32px,5vw,60px);font-weight:800;white-space:normal}
   @media(min-width:820px){.hero-copy h1{white-space:nowrap}}
   .hero-copy p{max-width:540px;margin:14px auto 0;color:var(--ink-soft);font-size:clamp(14px,1.5vw,16.5px)}
-  .mol-tag{margin:16px auto 0;font-size:13px;color:var(--ink-soft)}
+  .mol-tag{margin:16px auto 0;font-size:13px;color:var(--ink-soft);pointer-events:auto}
   .mol-tag b{color:var(--ink)}
+  .mol-tag .smi{cursor:pointer;border-bottom:1px dashed var(--line-strong);transition:color .2s}
+  .mol-tag .smi:hover{color:var(--accent)}
+  .mol-tag .copied{color:var(--accent-2);margin-left:8px;font-weight:600}
   .gauge{position:absolute;left:0;right:0;bottom:3.5vh;display:flex;flex-direction:column;align-items:center;gap:9px;pointer-events:none}
   .field-read{font-weight:800;letter-spacing:-.03em;font-size:clamp(26px,3.6vw,40px);
     font-variant-numeric:tabular-nums;color:var(--ink)}
@@ -100,6 +103,22 @@
 
   .grid2{display:grid;grid-template-columns:1.1fr .9fr;gap:40px;align-items:center;margin-top:36px}
   @media(max-width:820px){.grid2{grid-template-columns:1fr}}
+  .rep-pair{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:34px;align-items:stretch}
+  @media(max-width:820px){.rep-pair{grid-template-columns:1fr}}
+  .viewer-card{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:16px;
+    box-shadow:var(--shadow);overflow:hidden;min-height:380px}
+  #mol3d{position:absolute;inset:0;width:100%;height:100%}
+  #mol3d canvas{border-radius:16px}
+  .viewer-load{position:absolute;inset:0;display:grid;place-items:center;color:var(--ink-faint);font-size:13px;pointer-events:none}
+  .v-label{position:absolute;left:14px;top:12px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint);z-index:2}
+  .spin-toggle{position:absolute;right:12px;top:11px;z-index:3;display:flex;align-items:center;gap:8px;
+    font-size:12px;color:var(--ink-soft);user-select:none;cursor:pointer}
+  .switch{position:relative;width:38px;height:21px;border-radius:99px;background:var(--line-strong);transition:background .2s}
+  .switch::after{content:"";position:absolute;top:2px;left:2px;width:17px;height:17px;border-radius:50%;
+    background:#fff;transition:transform .22s ease;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+  .spin-toggle input{position:absolute;opacity:0;pointer-events:none}
+  .spin-toggle input:checked + .switch{background:linear-gradient(90deg,var(--accent),var(--accent-2))}
+  .spin-toggle input:checked + .switch::after{transform:translateX(17px)}
   .matrix{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:var(--shadow);overflow:auto}
   table.mx{border-collapse:collapse;font:12px/1 "SF Mono",ui-monospace,Menlo,monospace;width:100%}
   table.mx td,table.mx th{padding:6px 7px;text-align:center;border:1px solid var(--line);color:var(--ink-soft);white-space:nowrap}
@@ -232,16 +251,20 @@
   <div class="wrap">
     <div class="kicker">The representation</div>
     <h2>Every molecule is one labeled graph.</h2>
-    <div class="grid2">
-      <div>
-        <p class="muted">Nodes carry a chemical shift δ (ppm) and a degeneracy <i>n</i> (protons per
-          group); edges carry a coupling <i>J</i> (Hz). Stored as a symmetric 8×8 matrix with shifts on
-          the diagonal and an 8×1 degeneracy vector — equivalent under permutation of the labels (S₈).
-          Everything in the hero is generated from records exactly like this one.</p>
-        <p class="muted" id="repNote">Showing the molecule currently in the hero animation.</p>
+    <p class="lead">Nodes carry a chemical shift δ (ppm) and a degeneracy <i>n</i> (protons per group);
+      edges carry a coupling <i>J</i> (Hz). Stored as a symmetric 8×8 matrix with shifts on the diagonal
+      and an 8×1 degeneracy vector — equivalent under permutation of the labels (S₈). The structure on
+      the left and the matrix on the right are two views of the <i>same</i> molecule now in the hero.</p>
+    <div class="rep-pair">
+      <div class="viewer-card">
+        <span class="v-label">3D structure</span>
+        <label class="spin-toggle"><input type="checkbox" id="spinToggle" checked><span class="switch"></span>rotate</label>
+        <div id="mol3d"></div>
+        <div class="viewer-load" id="mol3dLoad">building 3D structure…</div>
       </div>
       <div class="matrix" id="matrixHost"></div>
     </div>
+    <p class="muted" id="repNote" style="margin-top:22px">Showing the molecule currently in the hero animation.</p>
   </div>
 </section>
 
@@ -306,6 +329,8 @@
   </div>
 </footer>
 
+<script src="https://cdn.jsdelivr.net/npm/3dmol@2.4.2/build/3Dmol-min.js"></script>
 <script src="assets/sweep.js"></script>
+<script type="module" src="assets/mol3d.js"></script>
 </body>
 </html>
