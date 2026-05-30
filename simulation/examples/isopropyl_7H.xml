@@ -1,0 +1,6 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<mnova-spinsim><spin-system><summary>
+		A	B
+	A	1.020000
+	B	6.800000	2.550000
+	</summary><population>1</population><group name="A" spinByTwo="1" lineWidth="1.0" number="6"><shift>1.020000</shift><qConst>0</qConst><jCoupling name="B">6.800000</jCoupling><dCoupling name="B">0</dCoupling></group><group name="B" spinByTwo="1" lineWidth="1.0" number="1"><shift>2.550000</shift><qConst>0</qConst><jCoupling name="A">6.800000</jCoupling><dCoupling name="A">0</dCoupling></group></spin-system><spectrum><frequency>90.0</frequency><points>16384</points><from>0.0</from><to>12.0</to></spectrum></mnova-spinsim>
