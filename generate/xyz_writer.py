@@ -103,9 +103,15 @@ def molecule_to_xyz(
     None
         Returned when SMILES parsing fails, 3-D embedding fails, or RDKit raises
         an unexpected error.  The caller should count and skip these.
+
+    Notes
+    -----
+    This is the standalone path: it embeds and classifies *smiles* from
+    scratch.  Callers that already hold a classified molecule (e.g. the fused
+    screening pipeline) should call :func:`build_xyz_block` directly to avoid
+    a redundant 3-D embedding.
     """
     from rdkit import Chem, RDLogger            # noqa: PLC0415
-    from rdkit.Chem.inchi import MolToInchi     # noqa: PLC0415
     RDLogger.DisableLog("rdApp.*")
     from generate.spin_equivalence import classify_spin_groups  # noqa: PLC0415
 
@@ -117,6 +123,43 @@ def molecule_to_xyz(
         mol_h, groups = classify_spin_groups(mol)
     except Exception:
         return None
+
+    return build_xyz_block(
+        mol_h, groups, smiles=smiles, chembl_id=chembl_id, inchikey=inchikey,
+    )
+
+
+def build_xyz_block(
+    mol_h,
+    groups,
+    *,
+    smiles:    str,
+    chembl_id: str = "",
+    inchikey:  str = "",
+) -> str | None:
+    """Render an annotated XYZ block from an already-classified molecule.
+
+    Splits the pure string-building work out of :func:`molecule_to_xyz` so the
+    fused screening pipeline can reuse the ``(mol_h, groups)`` it already
+    computed for the spin-group count, rather than embedding a second time.
+
+    Parameters
+    ----------
+    mol_h:
+        Molecule with explicit H and a 3-D conformer — the first element
+        returned by :func:`~generate.spin_equivalence.classify_spin_groups`.
+    groups:
+        The ``list[SpinGroup]`` returned alongside *mol_h*.
+    smiles, chembl_id, inchikey:
+        Metadata embedded in the JSON comment line.
+
+    Returns
+    -------
+    str | None
+        The XYZ block (trailing newline included), or ``None`` if *mol_h*
+        carries no conformer (embedding failed upstream).
+    """
+    from rdkit.Chem.inchi import MolToInchi     # noqa: PLC0415
 
     if mol_h.GetNumConformers() == 0:
         return None

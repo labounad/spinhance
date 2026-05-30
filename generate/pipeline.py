@@ -39,10 +39,12 @@ Running
 from __future__ import annotations
 
 import csv
+import gzip
 import os
 import sys
 from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor
 from concurrent.futures import wait as _fut_wait
+from contextlib import nullcontext
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -58,6 +60,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 
 DEFAULT_CHEMBL     = _REPO_ROOT / "generate" / "chembl" / "chembl_37_chemreps.txt"
 DEFAULT_OUTPUT     = _REPO_ROOT / "generate" / "data" / "8spin.csv"
+DEFAULT_XYZ_OUTPUT = _REPO_ROOT / "generate" / "data" / "8spin.xyz.gz"
 DEFAULT_WORKERS    = max(1, (os.cpu_count() or 2) - 1)
 DEFAULT_CHUNK_SIZE = 32
 
@@ -67,12 +70,21 @@ DEFAULT_CHUNK_SIZE = 32
 def _screen_chunk(
     chunk: list[tuple[str, str, str]],
     target_groups: int,
-) -> list[tuple[str, str, str, int, str]]:
-    """Apply the 3-D deuterium test to a batch of heuristic-passing molecules.
+    want_xyz: bool = False,
+) -> list[tuple[tuple[str, str, str, int, str], str | None]]:
+    """Classify a batch of heuristic-passing molecules in a single 3-D pass.
 
     This function runs inside worker processes.  Imports are deferred to the
     function body so it is picklable under both ``fork`` and ``spawn``
     multiprocessing start methods.
+
+    The molecule is embedded and classified **once** via
+    :func:`~generate.spin_equivalence.classify_spin_groups`.  The spin-group
+    count and per-group sizes (formerly recomputed by ``analyze_spin_systems``)
+    are derived from the returned ``SpinGroup`` list, and — when *want_xyz* is
+    set — the annotated XYZ block is rendered from the same classified molecule.
+    This fuses the old ``run`` and ``xyz`` phases, eliminating the second 3-D
+    embedding that ``xyz`` previously performed for every kept molecule.
 
     Parameters
     ----------
@@ -81,32 +93,56 @@ def _screen_chunk(
         already passed the heuristic pre-filter in the main process.
     target_groups:
         Number of magnetically distinct spin groups to select for.
+    want_xyz:
+        When ``True``, also render the annotated XYZ block for each kept
+        molecule (the InChI computation it requires is skipped otherwise).
 
     Returns
     -------
-    list of ``(chembl_id, smiles, inchikey, n_groups, group_sizes_str)``
+    list of ``((chembl_id, smiles, inchikey, n_groups, group_sizes_str), xyz)``
         One entry per molecule that has exactly *target_groups* spin groups.
         *group_sizes_str* is a semicolon-separated string of per-group proton
-        counts sorted descending (e.g. ``"3;3;1;1;1;1;1;1"``).
+        counts sorted descending (e.g. ``"3;3;1;1;1;1;1;1"``).  *xyz* is the
+        XYZ block string when *want_xyz* is set and embedding succeeded, else
+        ``None``.
     """
     # Deferred imports — safe across fork and spawn.
     from rdkit import Chem, RDLogger  # noqa: PLC0415
     RDLogger.DisableLog("rdApp.*")
-    from generate.spin_equivalence import analyze_spin_systems  # noqa: PLC0415
+    from generate.spin_equivalence import classify_spin_groups  # noqa: PLC0415
+    if want_xyz:
+        from generate.xyz_writer import build_xyz_block  # noqa: PLC0415
 
-    results: list[tuple[str, str, str, int, str]] = []
+    results: list[tuple[tuple[str, str, str, int, str], str | None]] = []
 
     for chembl_id, smiles, inchikey in chunk:
         mol = Chem.MolFromSmiles(smiles)
         if mol is None:
             continue
 
-        n_groups, group_sizes = analyze_spin_systems(mol)
-        if n_groups == target_groups:
-            results.append((
-                chembl_id, smiles, inchikey,
-                n_groups, ";".join(map(str, group_sizes)),
-            ))
+        try:
+            mol_h, groups = classify_spin_groups(mol)
+        except Exception:
+            continue
+
+        # n_groups and per-group sizes are exactly what analyze_spin_systems
+        # returned: one entry per SpinGroup, sized by its proton count.
+        if len(groups) != target_groups:
+            continue
+
+        group_sizes = sorted((len(g.h_indices) for g in groups), reverse=True)
+        row = (
+            chembl_id, smiles, inchikey,
+            len(groups), ";".join(map(str, group_sizes)),
+        )
+        xyz = (
+            build_xyz_block(
+                mol_h, groups,
+                smiles=smiles, chembl_id=chembl_id, inchikey=inchikey,
+            )
+            if want_xyz else None
+        )
+        results.append((row, xyz))
 
     return results
 
@@ -130,12 +166,21 @@ def run_pipeline(
     chembl_path: Path = DEFAULT_CHEMBL,
     output_path: Path = DEFAULT_OUTPUT,
     *,
+    xyz_path: Path | None = DEFAULT_XYZ_OUTPUT,
     target_groups: int  = N_SPIN_GROUPS,
     workers: int        = DEFAULT_WORKERS,
     chunk_size: int     = DEFAULT_CHUNK_SIZE,
     verbose: bool       = True,
 ) -> tuple[int, int]:
     """Stream ChEMBL and write molecules with exactly *target_groups* spin groups.
+
+    When *xyz_path* is given (the default), the annotated 3-D XYZ block for each
+    kept molecule is written in the **same pass**, fusing the old ``run`` and
+    ``xyz`` phases.  Because both outputs come from a single
+    :func:`~generate.spin_equivalence.classify_spin_groups` call per molecule —
+    using the same fixed-seed embedding the standalone ``xyz`` command would
+    use — the fused ``8spin.xyz.gz`` is identical (modulo block order) to
+    running ``run`` then ``xyz``, but skips re-embedding every kept molecule.
 
     Parameters
     ----------
@@ -145,6 +190,10 @@ def run_pipeline(
         Destination CSV.  Parent directories are created if absent.
         Columns: ``chembl_id``, ``smiles``, ``inchikey``,
         ``n_groups``, ``group_sizes``.
+    xyz_path:
+        Destination gzip multi-XYZ file, or ``None`` to skip XYZ generation
+        (CSV only — the old ``run`` behaviour).  Parent directories are
+        created if absent.
     target_groups:
         Number of magnetically distinct ¹H spin groups to select for.
         Defaults to :data:`~generate.config.N_SPIN_GROUPS`.
@@ -165,7 +214,10 @@ def run_pipeline(
     kept : int
         Molecules written to *output_path*.
     """
+    want_xyz = xyz_path is not None
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    if want_xyz:
+        xyz_path.parent.mkdir(parents=True, exist_ok=True)
 
     pbar = None
     if verbose:
@@ -188,6 +240,7 @@ def run_pipeline(
     heur_pass    = 0
     parse_failed = 0
     kept         = 0
+    xyz_written  = 0
 
     # Cap pending futures to avoid an unbounded backlog.
     max_pending = workers * 4
@@ -195,6 +248,8 @@ def run_pipeline(
     with (
         open(chembl_path) as f_in,
         open(output_path, "w", newline="") as f_out,
+        (gzip.open(xyz_path, "wt", encoding="utf-8", compresslevel=6)
+         if want_xyz else nullcontext()) as gz,
         ProcessPoolExecutor(max_workers=workers) as pool,
     ):
         writer = csv.writer(f_out)
@@ -217,16 +272,21 @@ def run_pipeline(
                 # Block until at least one future completes before submitting.
                 done, pending = _fut_wait(pending, return_when=FIRST_COMPLETED)
                 _write_done(done)
-            pending.add(pool.submit(_screen_chunk, list(chunk), target_groups))
+            pending.add(
+                pool.submit(_screen_chunk, list(chunk), target_groups, want_xyz)
+            )
             chunk.clear()
 
         def _write_done(futures) -> None:
             """Write results from a set of completed futures; refresh postfix."""
-            nonlocal kept
+            nonlocal kept, xyz_written
             for fut in futures:
-                for row in fut.result():
+                for row, xyz in fut.result():
                     writer.writerow(row)
                     kept += 1
+                    if want_xyz and xyz is not None:
+                        gz.write(xyz)
+                        xyz_written += 1
             if pbar is not None:
                 pbar.set_postfix(
                     heur=f"{heur_pass:,}",
@@ -283,5 +343,12 @@ def run_pipeline(
         print(f"  heuristic pass: {heur_pass:>10,}  ({100 * heur_pass / max(total, 1):.1f}%)")
         print(f"Kept (n={target_groups})      : {kept:>10,}  ({100 * kept / max(total, 1):.2f}%)")
         print(f"Output          : {output_path}")
+        if want_xyz:
+            size_mb = xyz_path.stat().st_size / 1e6
+            print(f"XYZ written     : {xyz_written:>10,}  ({size_mb:.1f} MB compressed)")
+            print(f"XYZ output      : {xyz_path}")
+            n_embed_fail = kept - xyz_written
+            if n_embed_fail:
+                print(f"  (no 3-D conf  : {n_embed_fail:>8,} kept molecules omitted from XYZ)")
 
     return total, kept

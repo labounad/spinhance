@@ -51,6 +51,7 @@ from generate.config import N_SPIN_GROUPS  # noqa: E402
 _REPO_ROOT        = Path(__file__).resolve().parent.parent
 _DEFAULT_CHEMBL   = _REPO_ROOT / "generate" / "chembl" / "chembl_37_chemreps.txt"
 _DEFAULT_OUTPUT   = _REPO_ROOT / "generate" / "data" / "8spin.csv"
+_DEFAULT_XYZ      = _REPO_ROOT / "generate" / "data" / "8spin.xyz.gz"
 _DEFAULT_WORKERS  = max(1, (os.cpu_count() or 2) - 1)
 _DEFAULT_CHUNK    = 32
 
@@ -62,6 +63,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
     _, kept = run_pipeline(
         chembl_path   = Path(args.chembl),
         output_path   = Path(args.output),
+        xyz_path      = None if args.no_xyz else Path(args.xyz_output),
         target_groups = args.n_groups,
         workers       = args.workers,
         chunk_size    = args.chunk_size,
@@ -113,11 +115,14 @@ def build_parser() -> argparse.ArgumentParser:
     # ── run ───────────────────────────────────────────────────────────────────
     p_run = sub.add_parser(
         "run",
-        help="Screen ChEMBL end-to-end and write 8spin.csv.",
+        help="Screen ChEMBL end-to-end and write 8spin.csv + 8spin.xyz.gz.",
         description=(
             "Single-pass pipeline: streams ChEMBL, applies the fast proton-count "
             "heuristic, then the 3-D deuterium substitution test.  Molecules with "
-            f"exactly N spin groups are written to {_DEFAULT_OUTPUT.name}."
+            f"exactly N spin groups are written to {_DEFAULT_OUTPUT.name}, and "
+            f"their annotated 3-D structures to {_DEFAULT_XYZ.name} in the same "
+            "pass (use --no-xyz to skip).  This fuses the old 'run' and 'xyz' "
+            "steps, avoiding a second 3-D embedding of every kept molecule."
         ),
     )
     p_run.add_argument(
@@ -127,6 +132,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument(
         "--output", default=str(_DEFAULT_OUTPUT), metavar="PATH",
         help=f"Output CSV  (default: {_DEFAULT_OUTPUT.name})",
+    )
+    p_run.add_argument(
+        "--xyz-output", default=str(_DEFAULT_XYZ), metavar="PATH",
+        dest="xyz_output",
+        help=f"Fused XYZ output  (default: {_DEFAULT_XYZ.name})",
+    )
+    p_run.add_argument(
+        "--no-xyz", action="store_true",
+        help="Skip XYZ generation; write the CSV only (old 'run' behaviour).",
     )
     p_run.add_argument(
         "--n-groups", type=int, default=N_SPIN_GROUPS, metavar="N",

@@ -12,14 +12,24 @@ and machine-learning (Task 4) modules.
 ```bash
 conda activate spinhance
 
-# 1. Screen ChEMBL → 8spin.csv  (takes several hours on full dataset)
+# 1. Screen ChEMBL → 8spin.csv + 8spin.xyz.gz in one pass
+#    (takes several hours on the full dataset)
 python generate/cli.py run
 
 # 2. Browse results in the interactive viewer
 python generate/cli.py view
+```
 
-# 3. Generate 3-D annotated XYZ structures for Task 2
-python generate/cli.py xyz
+`run` produces **both** the CSV and the 3-D annotated XYZ file in a single
+pass.  It embeds and classifies each molecule once — the old separate `xyz`
+step re-embedded every kept molecule a second time.  Pass `--no-xyz` to write
+only the CSV.
+
+The standalone `xyz` command is still available to (re)generate `8spin.xyz.gz`
+from an existing CSV:
+
+```bash
+python generate/cli.py xyz          # 8spin.csv → 8spin.xyz.gz
 ```
 
 All subcommands accept `--help` for full option listings.
@@ -39,12 +49,16 @@ ChEMBL chemreps.txt  (738 MB)
          │  ETKDG v3 + MMFF94 embedding → H→D substitution per proton
          │  AssignStereochemistryFrom3D → canonical isomeric SMILES
          │  HARD/SOFT/NONE tier assignment + magnetic equivalence check
+         │  (single embed per molecule; reused for both outputs below)
          │
-         ▼  8spin.csv  (~60 000 molecules)
-         │
-         ├─▶  viewer.py          interactive triage GUI
-         └─▶  xyz_writer.py      3-D XYZ with spin-group annotations → 8spin.xyz.gz
+         ├─▶  8spin.csv     (~60 000 molecules)  ──▶  viewer.py  triage GUI
+         └─▶  8spin.xyz.gz  3-D XYZ with spin-group annotations (xyz_writer.build_xyz_block)
 ```
+
+The deuterium test is the expensive step (ETKDG embedding ≫ everything else).
+`run` calls it **once** per molecule via `classify_spin_groups` and renders
+both the CSV row and the XYZ block from that single classification, so adding
+the XYZ output costs essentially nothing beyond the InChI string.
 
 ---
 
