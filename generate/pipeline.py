@@ -57,7 +57,7 @@ RDLogger.DisableLog("rdApp.*")
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
 DEFAULT_CHEMBL     = _REPO_ROOT / "generate" / "chembl" / "chembl_37_chemreps.txt"
-DEFAULT_OUTPUT     = _REPO_ROOT / "generate" / "data" / "candidates_final.csv"
+DEFAULT_OUTPUT     = _REPO_ROOT / "generate" / "data" / "8spin_final.csv"
 DEFAULT_WORKERS    = max(1, (os.cpu_count() or 2) - 1)
 DEFAULT_CHUNK_SIZE = 32
 
@@ -240,6 +240,9 @@ def run_pipeline(
                 continue
 
             chembl_id, smiles, inchikey = parts[0], parts[1], parts[3]
+
+            if "." in smiles:
+                continue
 
             mol = Chem.MolFromSmiles(smiles)
             if mol is None:

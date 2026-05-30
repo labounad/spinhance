@@ -4,10 +4,8 @@ Subcommands
 -----------
 
 ``run``
-    Screen the full ChEMBL database end-to-end in a single streaming pass:
-    the heuristic pre-filter and the exact 3-D deuterium substitution test
-    run back-to-back with no intermediate file.  Produces
-    ``candidates_final.csv``.
+    Screen the full ChEMBL database end-to-end in a single streaming pass.
+    Produces ``candidates_final.csv``.
 
 ``view``
     Launch the interactive Tkinter gallery viewer.  Defaults to
@@ -17,7 +15,7 @@ Usage
 -----
 ::
 
-    # From the repo root (all three forms are equivalent):
+    # All three invocation styles are equivalent:
     python generate/cli.py run
     python -m generate.cli run
     spinhance-gen run               # after pip install -e .
@@ -25,37 +23,42 @@ Usage
     python generate/cli.py view
     python generate/cli.py view --file generate/data/candidates_final.csv
 
-    # Override ChEMBL source, output path, or spin-group target:
-    python generate/cli.py run \\
-        --chembl /data/chembl_37_chemreps.txt \\
-        --output /data/candidates_final.csv \\
-        --n-groups 6
+    # Override paths / parameters:
+    python generate/cli.py run --chembl /data/chembl_37_chemreps.txt
+    python generate/cli.py run --n-groups 6
 
 Notes
 -----
-``sys.path.insert`` at module level ensures ``python generate/cli.py``
-(direct invocation) behaves identically to ``python -m generate.cli``.
+All heavy imports (RDKit, pipeline, viewer) are deferred to inside the
+command functions so that ``python generate/cli.py --help`` and startup
+are instant, regardless of WSL2 filesystem overhead.
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+# Only config.py (pure Python, no RDKit) is imported at module level.
 from generate.config import N_SPIN_GROUPS  # noqa: E402
-from generate.pipeline import (  # noqa: E402
-    DEFAULT_CHEMBL,
-    DEFAULT_CHUNK_SIZE,
-    DEFAULT_OUTPUT,
-    DEFAULT_WORKERS,
-    run_pipeline,
-)
 
+# Path defaults — computed here so the argument parser can show them,
+# but without importing RDKit or the pipeline.
+_REPO_ROOT        = Path(__file__).resolve().parent.parent
+_DEFAULT_CHEMBL   = _REPO_ROOT / "generate" / "chembl" / "chembl_37_chemreps.txt"
+_DEFAULT_OUTPUT   = _REPO_ROOT / "generate" / "data" / "candidates_final.csv"
+_DEFAULT_WORKERS  = max(1, (os.cpu_count() or 2) - 1)
+_DEFAULT_CHUNK    = 32
+
+
+# ── Command handlers (all heavy imports deferred to here) ────────────────────
 
 def _cmd_run(args: argparse.Namespace) -> int:
+    from generate.pipeline import run_pipeline  # noqa: PLC0415 — intentional lazy import
     _, kept = run_pipeline(
         chembl_path   = Path(args.chembl),
         output_path   = Path(args.output),
@@ -67,19 +70,29 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
 
 def _cmd_view(args: argparse.Namespace) -> int:
-    # Deferred import: tkinter raises on headless hosts, so we only import
-    # the viewer when the view subcommand is actually invoked.
-    from generate.viewer import launch
+    import os, signal  # noqa: E401
+
+    # RDKit can take 30-120 s to import on WSL2 (Windows Defender scans .so files).
+    # Install an os._exit handler so Ctrl+C works immediately during that phase.
+    _orig = signal.getsignal(signal.SIGINT)
+    signal.signal(signal.SIGINT, lambda sig, frame: os._exit(130))
+
+    print("Loading viewer (first run may take a moment)...", end=" ", flush=True)
+    from generate.viewer import launch  # noqa: PLC0415
+    print("ready.", flush=True)
+
+    signal.signal(signal.SIGINT, _orig)   # restore normal handler for the GUI
     launch(Path(args.file), n=args.n, seed=args.seed)
     return 0
 
 
+# ── Argument parser ───────────────────────────────────────────────────────────
+
 def build_parser() -> argparse.ArgumentParser:
-    """Construct and return the top-level argument parser."""
     parser = argparse.ArgumentParser(
         prog="spinhance-gen",
         description=(
-            "SpinHance Task 1 — screen ChEMBL for molecules with exactly "
+            f"SpinHance Task 1 — screen ChEMBL for molecules with exactly "
             f"{N_SPIN_GROUPS} magnetically distinct ¹H spin groups."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -94,46 +107,29 @@ def build_parser() -> argparse.ArgumentParser:
         description=(
             "Single-pass pipeline: streams ChEMBL, applies the fast proton-count "
             "heuristic, then the 3-D deuterium substitution test.  Molecules with "
-            f"exactly N spin groups are written to {DEFAULT_OUTPUT.name}."
+            f"exactly N spin groups are written to {_DEFAULT_OUTPUT.name}."
         ),
     )
     p_run.add_argument(
-        "--chembl",
-        default=str(DEFAULT_CHEMBL),
-        metavar="PATH",
-        help=f"ChEMBL chemreps .txt file  (default: {DEFAULT_CHEMBL.name})",
+        "--chembl", default=str(_DEFAULT_CHEMBL), metavar="PATH",
+        help=f"ChEMBL chemreps .txt file  (default: {_DEFAULT_CHEMBL.name})",
     )
     p_run.add_argument(
-        "--output",
-        default=str(DEFAULT_OUTPUT),
-        metavar="PATH",
-        help=f"Output CSV  (default: {DEFAULT_OUTPUT.name})",
+        "--output", default=str(_DEFAULT_OUTPUT), metavar="PATH",
+        help=f"Output CSV  (default: {_DEFAULT_OUTPUT.name})",
     )
     p_run.add_argument(
-        "--n-groups",
-        type=int,
-        default=N_SPIN_GROUPS,
-        metavar="N",
+        "--n-groups", type=int, default=N_SPIN_GROUPS, metavar="N",
         help=f"Target spin-group count  (default: {N_SPIN_GROUPS})",
     )
     p_run.add_argument(
-        "--workers",
-        type=int,
-        default=DEFAULT_WORKERS,
-        metavar="N",
-        help=f"Worker processes for the 3-D deuterium test  (default: {DEFAULT_WORKERS})",
+        "--workers", type=int, default=_DEFAULT_WORKERS, metavar="N",
+        help=f"Worker processes for the 3-D deuterium test  (default: {_DEFAULT_WORKERS})",
     )
     p_run.add_argument(
-        "--chunk-size",
-        type=int,
-        default=DEFAULT_CHUNK_SIZE,
-        metavar="N",
+        "--chunk-size", type=int, default=_DEFAULT_CHUNK, metavar="N",
         dest="chunk_size",
-        help=(
-            f"Molecules per work unit dispatched to a worker  "
-            f"(default: {DEFAULT_CHUNK_SIZE}). "
-            "Larger = less IPC overhead; smaller = better load balancing."
-        ),
+        help=f"Molecules per worker batch  (default: {_DEFAULT_CHUNK})",
     )
     p_run.set_defaults(func=_cmd_run)
 
@@ -142,33 +138,24 @@ def build_parser() -> argparse.ArgumentParser:
         "view",
         help="Launch the interactive gallery viewer.",
         description=(
-            "Opens a Tkinter GUI showing a 4×4 paginated gallery of molecules. "
-            "Click any thumbnail for a detail pane with structure, stats, SMILES, "
-            "and a collapsible deuterium-substitution sidebar."
+            "Opens a Tkinter GUI with a 4×4 molecule grid.  Click any thumbnail "
+            "for a labelled 2-D structure and spin-group table."
         ),
     )
     p_view.add_argument(
-        "--file",
-        default=str(DEFAULT_OUTPUT),
-        metavar="PATH",
+        "--file", default=str(_DEFAULT_OUTPUT), metavar="PATH",
         help=(
-            f"CSV to browse  (default: {DEFAULT_OUTPUT.name} — the final screened set). "
+            f"CSV to browse  (default: {_DEFAULT_OUTPUT.name}). "
             "Any pipeline CSV is accepted."
         ),
     )
     p_view.add_argument(
-        "--n",
-        type=int,
-        default=80,
-        metavar="N",
+        "--n", type=int, default=80, metavar="N",
         help="Molecules to sample for the gallery  (default: 80)",
     )
     p_view.add_argument(
-        "--seed",
-        type=int,
-        default=42,
-        metavar="SEED",
-        help="Random seed for the sample  (default: 42)",
+        "--seed", type=int, default=42, metavar="SEED",
+        help="Random seed  (default: 42)",
     )
     p_view.set_defaults(func=_cmd_view)
 

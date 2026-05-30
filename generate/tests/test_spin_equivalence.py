@@ -22,6 +22,7 @@ from rdkit import Chem
 from generate.spin_equivalence import (
     passes_heuristic,
     analyze_spin_systems,
+    classify_spin_groups,
     embed_3d,
     strip_exchangeable_protons,
     substitution_signature,
@@ -123,17 +124,49 @@ class TestAnalyzeSpinSystems:
         n, _ = analyze_spin_systems(_mol("CC(C)(C)C"))     # neopentane
         assert n == 1
 
-    def test_benzene_six_groups(self):
-        """Benzene has 6 spin groups under the new scheme.
+    def test_benzene_one_hard_group(self):
+        """Benzene: all 6 H homotopic with identical distance profiles → 1 HARD group.
 
-        All 6 aromatic H are chemically homotopic (1 SOFT class), but aromatic
-        carbons are not methyl rotors so the class is NOT HARD.  Each H is kept
-        as its own spin group.  This is the correct NMR treatment: in a
-        substituted benzene the equivalent protons form AA'BB' or AA'XX' systems
-        where each proton has a different coupling pattern to all others.
+        With no external H atoms, condition 2 of the magnetic-equivalence check
+        is vacuously satisfied, so the single equivalence class is HARD (n=1).
+        This is correct: benzene is an A₆ spin system — one resonance, one group.
         """
-        n, _ = analyze_spin_systems(_mol("c1ccccc1"))
-        assert n == 6
+        n, sizes = analyze_spin_systems(_mol("c1ccccc1"))
+        assert n == 1
+        assert sizes == [6]
+
+    def test_135_trisubstituted_benzene_hard_pair(self):
+        """1,3,5-trisubstituted benzene: H4 and H6 are HARD, H2 is NONE.
+
+        H4 and H6 are homotopic (identical D-sub SMILES by C₂ symmetry) AND
+        magnetically equivalent: both are equidistant from H2 (the only other
+        ring proton) and from all side-chain H atoms through the C5-O bond.
+        H2, flanked by two CF₃ groups, is chemically distinct → NONE.
+        """
+        smi = "FC(F)(F)c1cc(C(F)(F)F)cc(OCCCCl)c1"
+        mol = _mol(smi)
+        _, groups = classify_spin_groups(mol)
+
+        aromatic_groups = [
+            g for g in groups
+            if any(
+                mol.GetAtomWithIdx(
+                    mol.GetAtomWithIdx(
+                        # heavy parent in original mol (same index as mol_h heavy atoms)
+                        g.heavy_parent_indices[0]
+                    ).GetIdx()
+                ).GetIsAromatic()
+                for _ in [None]
+            )
+        ]
+        # Easier: check by tier
+        hard_aromatic = [g for g in groups if g.tier == "HARD" and any(
+            True for hi in g.h_indices
+            # We just check the count — exactly one HARD class with 2 H is expected
+        ) and len(g.h_indices) == 2]
+        assert len(hard_aromatic) == 1, (
+            f"Expected 1 HARD aromatic pair, got {hard_aromatic}"
+        )
 
     # ── enantiotopic cases ───────────────────────────────────────────────────
     def test_enantiotopic_ch2_counts_separately(self):
@@ -149,6 +182,36 @@ class TestAnalyzeSpinSystems:
         n, _ = analyze_spin_systems(_mol(smi))
         assert n == 9
         assert n != N_SPIN_GROUPS
+
+    # ── N-H structural context ───────────────────────────────────────────────
+    def test_indole_nh_preserves_ring_asymmetry(self):
+        """Dichloroindole aromatic CH protons must be chemically distinct (NONE).
+
+        The indole N-H is the structural element that differentiates the two
+        aromatic CH positions on the 6-membered ring.  The old code stripped
+        the N-H before the D-substitution test, making both ring junction
+        carbons appear equivalent and incorrectly merging the two CH protons
+        as SOFT.  The fix keeps N-H in the molecule as context while excluding
+        it from the candidate list.
+        """
+        from generate.spin_equivalence import classify_spin_groups
+        smi = "S=C(SCc1nc2cc(Cl)c(Cl)cc2[nH]1)N1CCCCC1"
+        mol = _mol(smi)
+
+        # No SOFT class should contain two aromatic CH protons.
+        mol_h, groups = classify_spin_groups(mol)
+        for g in groups:
+            if g.tier == "SOFT" and len(g.class_h_indices) == 2:
+                parents_are_aromatic = [
+                    mol_h.GetAtomWithIdx(
+                        mol_h.GetAtomWithIdx(h).GetNeighbors()[0].GetIdx()
+                    ).GetIsAromatic()
+                    for h in g.class_h_indices
+                ]
+                assert not all(parents_are_aromatic), (
+                    "Two aromatic CH protons merged as SOFT — "
+                    "N-H context was not preserved during equivalence test"
+                )
 
     # ── exchangeable protons ─────────────────────────────────────────────────
     def test_oh_not_counted(self):
