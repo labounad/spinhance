@@ -58,7 +58,8 @@ def load_records(spin_systems_json, spectra_root, fields=(90, 600),
         for f in fields:
             p = spectra_root / f"{int(f)}MHz" / f"{stem}.npy"
             d[f"spec{int(f)}_path"] = str(p)
-            if require_spectra and not p.exists():
+            tar = spectra_root / f"{int(f)}MHz" / "mol_all.tar.gz"
+            if require_spectra and not p.exists() and not tar.exists():
                 ok = False
         if ok:
             records.append(d)
