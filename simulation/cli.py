@@ -71,6 +71,20 @@ def _add_plot(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--show", action="store_true", help="Show interactively")
 
 
+def _add_export(sub: argparse._SubParsersAction) -> None:
+    p = sub.add_parser("export", help="Pack a spectra/ dir into one .tar.gz")
+    p.add_argument("--spectra_dir", type=Path, required=True,
+                   help="Dir containing <field>MHz/<stem>.npy subfolders")
+    p.add_argument("--out", type=Path, required=True,
+                   help="Output tarball path (e.g. spectra.tar.gz)")
+    p.add_argument("--no-sparsify", action="store_true",
+                   help="Store dense spectra instead of sparsifying")
+    p.add_argument("--cutoff", type=float, default=0.001,
+                   help="Sparsify: drop points <= cutoff x max per spectrum (default 0.001)")
+    p.add_argument("--no-renormalize", action="store_true",
+                   help="Do not rescale sparse spectra back to integral 1")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="simulation",
@@ -79,6 +93,7 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     _add_run(sub)
     _add_plot(sub)
+    _add_export(sub)
     args = parser.parse_args(argv)
 
     if args.command == "run":
@@ -122,6 +137,16 @@ def main(argv: list[str] | None = None) -> int:
             fields_mhz=args.fields,
             out=args.out,
             show=args.show,
+        )
+        return 0
+
+    if args.command == "export":
+        from simulation.export import export_spectra
+        export_spectra(
+            args.spectra_dir, args.out,
+            sparsify_data=not args.no_sparsify,
+            cutoff=args.cutoff,
+            renormalize=not args.no_renormalize,
         )
         return 0
 

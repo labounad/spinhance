@@ -56,22 +56,24 @@
   @media(max-width:680px){.nav-links{display:none}}
 
   /* ---- hero ---- */
-  .hero{position:relative;height:360vh}
-  .sticky{position:sticky;top:0;height:100vh;overflow:hidden;display:flex;flex-direction:column}
-  #spectrum{position:absolute;inset:0;width:100%;height:100%;display:block}
+  /* spectrum is a FIXED background layer; everything else scrolls over/past it */
+  #spectrum{position:fixed;inset:0;width:100vw;height:100vh;display:block;z-index:0;pointer-events:none}
+  .hero{position:relative;height:220vh;z-index:1}
+  .hero-stage{min-height:100vh;display:flex;flex-direction:column;justify-content:space-between;
+    position:relative;padding:84px 24px 4.5vh;text-align:center}
   .hero-grad{position:absolute;inset:0;pointer-events:none;
-    background:linear-gradient(180deg,var(--bg) 0%,color-mix(in srgb,var(--bg) 45%,transparent) 22%,transparent 40%)}
-  .hero-copy{position:absolute;top:84px;left:0;right:0;text-align:center;padding:0 24px;pointer-events:none}
+    background:linear-gradient(180deg,var(--bg) 0%,color-mix(in srgb,var(--bg) 40%,transparent) 20%,transparent 42%)}
+  .hero-copy{position:relative;z-index:1}
   .eyebrow{font-size:13px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent-2);font-weight:600;margin-bottom:10px}
   .hero-copy h1{font-size:clamp(32px,5vw,60px);font-weight:800;white-space:normal}
   @media(min-width:820px){.hero-copy h1{white-space:nowrap}}
   .hero-copy p{max-width:540px;margin:14px auto 0;color:var(--ink-soft);font-size:clamp(14px,1.5vw,16.5px)}
-  .mol-tag{margin:16px auto 0;font-size:13px;color:var(--ink-soft);pointer-events:auto}
+  .mol-tag{margin:16px auto 0;font-size:13px;color:var(--ink-soft)}
   .mol-tag b{color:var(--ink)}
   .mol-tag .smi{cursor:pointer;border-bottom:1px dashed var(--line-strong);transition:color .2s}
   .mol-tag .smi:hover{color:var(--accent)}
   .mol-tag .copied{color:var(--accent-2);margin-left:8px;font-weight:600}
-  .gauge{position:absolute;left:0;right:0;bottom:3.5vh;display:flex;flex-direction:column;align-items:center;gap:9px;pointer-events:none}
+  .gauge{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:9px}
   .field-read{font-weight:800;letter-spacing:-.03em;font-size:clamp(26px,3.6vw,40px);
     font-variant-numeric:tabular-nums;color:var(--ink)}
   .field-read .u{font-size:.42em;color:var(--ink-faint);font-weight:600;margin-left:6px;letter-spacing:0}
@@ -84,7 +86,11 @@
   @keyframes bob{0%,100%{transform:translateY(0);opacity:.6}50%{transform:translateY(5px);opacity:1}}
 
   /* ---- sections ---- */
-  section.block{padding:96px 0;border-top:1px solid var(--line);scroll-margin-top:72px}
+  /* above the fixed spectrum (so they scroll over it) but transparent, so the
+     faint persistent spectrum shows through behind the content */
+  section.block{padding:96px 0;border-top:1px solid var(--line);scroll-margin-top:72px;
+    position:relative;z-index:1}
+  footer{position:relative;z-index:1}
   .kicker{font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);font-weight:600;margin-bottom:14px}
   .block h2{font-size:clamp(26px,4vw,40px);font-weight:800;max-width:760px}
   .lead{color:var(--ink-soft);font-size:18px;max-width:740px;margin-top:18px}
@@ -119,8 +125,9 @@
   .spin-toggle input{position:absolute;opacity:0;pointer-events:none}
   .spin-toggle input:checked + .switch{background:linear-gradient(90deg,var(--accent),var(--accent-2))}
   .spin-toggle input:checked + .switch::after{transform:translateX(17px)}
-  .matrix{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:var(--shadow);overflow:auto}
-  table.mx{border-collapse:collapse;font:12px/1 "SF Mono",ui-monospace,Menlo,monospace;width:100%}
+  .matrix{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:var(--shadow);
+    overflow:auto;display:flex;min-height:380px}
+  table.mx{border-collapse:collapse;font:12px/1 "SF Mono",ui-monospace,Menlo,monospace;width:100%;height:100%}
   table.mx td,table.mx th{padding:6px 7px;text-align:center;border:1px solid var(--line);color:var(--ink-soft);white-space:nowrap}
   table.mx th{color:var(--ink-faint);font-weight:600}
   table.mx td.diag{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--ink);font-weight:700}
@@ -167,13 +174,13 @@
 </nav>
 
 <!-- ============ HERO ============ -->
+<canvas id="spectrum"></canvas>
 <header class="hero" id="top">
-  <div class="sticky">
-    <canvas id="spectrum"></canvas>
+  <div class="hero-stage">
     <div class="hero-grad"></div>
     <div class="hero-copy">
       <div class="eyebrow">Deep learning for ¹H NMR</div>
-      <h1>Read the couplings out of a blurry spectrum.</h1>
+      <h1>Read couplings out of a blurry spectrum.</h1>
       <p>At low field, ¹H spectra collapse into second-order multiplets. Scroll to sweep the
          spectrometer from <b>90&nbsp;MHz</b> to <b>600&nbsp;MHz</b> and watch the same molecule resolve.</p>
       <div class="mol-tag" id="molTag">—</div>
@@ -278,7 +285,7 @@
       permutation. We evaluate with a permutation-invariant matching loss plus a differentiable
       spectrum-reconstruction term.</p>
     <div class="stats">
-      <div class="stat"><b id="statMol">1,072</b><span>8-group molecules in the dataset</span></div>
+      <div class="stat"><b id="statMol">64,476</b><span>8-group molecules generated</span></div>
       <div class="stat"><b>90→600</b><span>MHz simulated per molecule</span></div>
       <div class="stat"><b>2¹⁴</b><span>intensity points per spectrum</span></div>
       <div class="stat"><b>8×9</b><span>shift + J + degeneracy target</span></div>
