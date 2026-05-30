@@ -145,6 +145,16 @@ def _shard(items: list, workers: int) -> list[list]:
     return [items[i::workers] for i in range(workers)]
 
 
+def _mnova_pids() -> set[str]:
+    """Return the set of running MestReNova process IDs (macOS/Linux)."""
+    try:
+        out = subprocess.run(["pgrep", "-f", "MestReNova"],
+                             capture_output=True, text=True)
+        return set(out.stdout.split()) if out.returncode == 0 else set()
+    except FileNotFoundError:
+        return set()
+
+
 def _app_bundle(mnova_exe: Path) -> str:
     """Return the ``.app`` bundle path for ``open -na`` (macOS)."""
     for parent in Path(mnova_exe).parents:
@@ -181,21 +191,26 @@ def run_mnova_parallel(
     launcher: str = "open",
     timeout_per_file: float = 30.0,
     poll_interval: float = 1.0,
+    max_retries: int = 1,
 ) -> dict:
     """Simulate all ``*.xml`` in ``xml_dir`` across ``workers`` MNova processes.
 
-    The XMLs are round-robin sharded; each shard is copied to a temp directory
-    and simulated by its own MNova instance. Outputs are merged into
-    ``txt_out_dir``. ``workers=1`` delegates to :func:`run_mnova_batch`.
+    The XMLs are round-robin sharded across ``workers`` MNova instances. After
+    each pass, molecules with no output are retried (up to ``max_retries`` extra
+    passes) — so a license seat cap or a flaky worker won't silently drop
+    spectra. ``workers=1`` delegates to a single batch launch.
 
     Parameters
     ----------
     workers
         Number of concurrent MNova instances. Capped at the number of XMLs.
+        Set this to your confirmed concurrent-instance / license-seat limit.
     launcher
         ``"open"`` (default, reliable parallel on macOS) or ``"direct"``.
     timeout_per_file
-        Per-file budget; the overall wait scales with files-per-worker.
+        Per-file budget; also sets the stall timeout (``4×``) per pass.
+    max_retries
+        Extra passes over still-missing molecules after the first pass.
 
     Returns
     -------
@@ -207,24 +222,82 @@ def run_mnova_parallel(
         raise FileNotFoundError(f"No XML files found in {xml_dir}")
 
     txt_out_dir.mkdir(parents=True, exist_ok=True)
-    workers = max(1, min(workers, len(xmls)))
+    expected = len(xmls)
+    workers = max(1, min(workers, expected))
 
-    if workers == 1:
-        t0 = time.perf_counter()
-        run_mnova_batch(mnova_exe, xml_dir, txt_out_dir, timeout_per_file)
-        produced = len(list(txt_out_dir.glob("*.txt")))
-        return {"workers": 1, "expected": len(xmls), "produced": produced,
-                "complete": produced >= len(xmls),
-                "elapsed_s": time.perf_counter() - t0}
+    def _missing(paths: list[Path]) -> list[Path]:
+        return [x for x in paths if not (txt_out_dir / f"{x.stem}.txt").exists()]
+
+    t0 = time.monotonic()
+    pending = list(xmls)
+    # attempt 0 = first pass; up to max_retries additional passes over leftovers.
+    for attempt in range(max_retries + 1):
+        if not pending:
+            break
+        if attempt > 0:
+            print(f"  Retry {attempt}/{max_retries}: {len(pending)} unfinished "
+                  "molecule(s)")
+        _one_parallel_pass(mnova_exe, pending, txt_out_dir,
+                           workers=min(workers, len(pending)), launcher=launcher,
+                           timeout_per_file=timeout_per_file,
+                           poll_interval=poll_interval)
+        pending = _missing(pending)
+
+    elapsed = time.monotonic() - t0
+    produced = expected - len(pending)
+    complete = not pending
+    status = "OK" if complete else f"INCOMPLETE ({produced}/{expected})"
+    print(f"  Parallel total: {status} in {elapsed:.2f}s "
+          f"({workers} workers, {launcher})")
+    if not complete:
+        print(f"    *** {len(pending)} molecule(s) still missing after "
+              f"{max_retries} retries. If launcher='open' produced nothing, "
+              "try launcher='direct'; if a license cap starves workers, lower "
+              "--workers to the confirmed concurrent-instance limit. ***")
+    return {"workers": workers, "expected": expected, "produced": produced,
+            "complete": complete, "elapsed_s": elapsed}
+
+
+def _one_parallel_pass(
+    mnova_exe: Path,
+    xml_paths: list[Path],
+    txt_out_dir: Path,
+    workers: int,
+    launcher: str,
+    timeout_per_file: float,
+    poll_interval: float,
+) -> None:
+    """Run a single sharded parallel pass over ``xml_paths`` into ``txt_out_dir``.
+
+    One MNova instance per shard. Outputs are merged into ``txt_out_dir`` as they
+    complete. Instances spawned by this pass that don't self-quit are killed at
+    the end so they don't hold license seats.
+    """
+    if workers <= 1:
+        # Single instance: copy paths into a temp dir and run the batch script.
+        tmp = Path(tempfile.mkdtemp(prefix="spinhance_seq_"))
+        try:
+            for x in xml_paths:
+                shutil.copy2(x, tmp / x.name)
+            run_mnova_batch(mnova_exe, tmp, txt_out_dir, timeout_per_file)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+        return
 
     check_qs_script()
-    shards = _shard(xmls, workers)
-    expected = len(xmls)
+    shards = _shard(xml_paths, workers)
+    expected = len(xml_paths)
     tmp = Path(tempfile.mkdtemp(prefix="spinhance_par_"))
     shard_out_dirs: list[Path] = []
     procs = []
 
-    print(f"  Parallel: {expected} sims across {len(shards)} workers "
+    pids_before = _mnova_pids()
+    if pids_before:
+        print(f"  WARNING: {len(pids_before)} MestReNova instance(s) already "
+              "running — they hold license seats and may starve workers. "
+              "Quit them first (pkill -i mestrenova).")
+
+    print(f"  Parallel pass: {expected} sims across {len(shards)} workers "
           f"(launcher={launcher})")
     try:
         for wi, shard in enumerate(shards):
@@ -237,16 +310,10 @@ def run_mnova_parallel(
             shard_out_dirs.append(sodir)
             procs.append(subprocess.Popen(_launch_cmd(mnova_exe, launcher, sdir, sodir)))
 
-        # Wait for completion. For "open", the launch commands return at once and
-        # work continues in the background, so we poll output counts. For
-        # "direct", processes stay alive, so we can also break when all exit.
         use_proc_exit = (launcher == "direct")
         total_timeout = max(120.0, expected * timeout_per_file)
-        # Abort if NO new output appears for this long (catches a stuck launcher
-        # — e.g. `open --args` not forwarding -sf — instead of hanging).
         stall_timeout = max(60.0, timeout_per_file * 4)
 
-        # Single monotonic clock for deadline, elapsed, and stall tracking.
         t0 = time.monotonic()
         deadline = t0 + total_timeout
         last_count = -1
@@ -263,30 +330,24 @@ def run_mnova_parallel(
             if use_proc_exit and all(p.poll() is not None for p in procs):
                 break
             if time.monotonic() - last_progress > stall_timeout:
-                print(f"    *** no new outputs for {stall_timeout:.0f}s — aborting "
-                      "(launcher likely not running sims). ***")
+                print(f"    *** no new outputs for {stall_timeout:.0f}s — ending "
+                      "pass (leftovers will be retried). ***")
                 break
             time.sleep(poll_interval)
-        elapsed = time.monotonic() - t0
 
-        # Merge outputs.
-        produced = 0
         for d in shard_out_dirs:
             for t in d.glob("*.txt"):
                 shutil.copy2(t, txt_out_dir / t.name)
-                produced += 1
-
-        complete = produced >= expected
-        status = "OK" if complete else f"INCOMPLETE ({produced}/{expected})"
-        print(f"  Parallel done: {status} in {elapsed:.2f}s")
-        if not complete:
-            print("    *** Some shards did not finish. If using launcher='open' "
-                  "and 0 outputs appeared, -sf may not pass through `open --args` "
-                  "on your machine — try launcher='direct'. ***")
-        return {"workers": workers, "expected": expected, "produced": produced,
-                "complete": complete, "elapsed_s": elapsed}
     finally:
-        for p in procs:
-            if p.poll() is None:
-                continue
+        # Kill any MNova instances THIS pass spawned but that did not self-quit.
+        import os
+        import signal
+        leftover = _mnova_pids() - pids_before
+        for pid in leftover:
+            try:
+                os.kill(int(pid), signal.SIGTERM)
+            except (ProcessLookupError, ValueError, PermissionError):
+                pass
+        if leftover:
+            print(f"  Cleaned up {len(leftover)} leftover MNova instance(s).")
         shutil.rmtree(tmp, ignore_errors=True)
