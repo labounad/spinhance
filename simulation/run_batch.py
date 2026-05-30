@@ -6,7 +6,7 @@ Python orchestrator for the SpinHance simulation pipeline.
 Pipeline
 --------
 1. Take a directory of source XMLs (one per molecule, any field).
-2. For each molecule generate two field-patched XMLs: 100 MHz and 600 MHz.
+2. For each molecule generate two field-patched XMLs: 90 MHz and 600 MHz.
 3. Invoke MNova headlessly on each XML directory via batch_simulate.qs.
 4. Load the exported .txt intensity arrays, normalise, and save as .npy.
 
@@ -34,6 +34,11 @@ import numpy as np
 # Repo root (two levels up from this file)
 REPO_ROOT   = Path(__file__).resolve().parent.parent
 SCRIPT_PATH = Path(__file__).resolve().parent / "batch_simulate.qs"
+
+# Ensure the repo root is importable so `from simulation.xml_utils import ...`
+# works when this file is run directly (python simulation/run_batch.py).
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 # Default MNova executable location on macOS
 MNOVA_DEFAULT = Path("/Applications/MestReNova.app/Contents/MacOS/MestReNova")
@@ -84,30 +89,26 @@ def prepare_xmls(
 
 # ── MNova script installation ─────────────────────────────────────────────────
 
-MNOVA_SCRIPTS_DIR = Path.home() / "Library" / "Application Support" / \
-                    "Mestrelab Research S.L." / "MestReNova" / "scripts"
-QS_SCRIPT = Path(__file__).parent / "batch_simulate.qs"
+# Canonical, version-controlled location of the script. Register THIS folder in
+# Edit > Preferences > Scripting > Directories (one-time GUI step). No copying.
+MNOVA_SCRIPTS_DIR = Path(__file__).resolve().parent / "mnova_scripts"
+QS_SCRIPT = MNOVA_SCRIPTS_DIR / "spinhanceBatch.qs"
 
 
-def install_qs_script(force: bool = False) -> Path:
+def check_qs_script() -> Path:
     """
-    Copy batch_simulate.qs into MNova's user scripts directory so MNova
-    auto-loads it on startup and the function spinhanceBatch() is available.
+    Verify the in-repo script exists and remind the user to register its folder.
     """
-    MNOVA_SCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
-    dest = MNOVA_SCRIPTS_DIR / QS_SCRIPT.name
-    if not dest.exists() or force:
-        import shutil
-        shutil.copy2(QS_SCRIPT, dest)
-        print(f"  Installed {QS_SCRIPT.name} → {dest}")
-    else:
-        print(f"  Script already installed at {dest}")
-    return dest
+    if not QS_SCRIPT.exists():
+        raise FileNotFoundError(f"Missing script: {QS_SCRIPT}")
+    print(f"  Using script: {QS_SCRIPT}")
+    print(f"  (Ensure this folder is registered in MNova: {MNOVA_SCRIPTS_DIR})")
+    return QS_SCRIPT
 
 
 # ── MNova invocation ──────────────────────────────────────────────────────────
 
-CONFIG_PATH = Path("/tmp/spinhance_batch_config.json")
+CONFIG_PATH = Path.home() / ".spinhance_batch_config.json"
 
 
 def run_mnova_batch(
@@ -120,12 +121,19 @@ def run_mnova_batch(
     Call MNova 16 headlessly on all XMLs in xml_dir.
     Outputs one .txt per XML into txt_out_dir.
 
-    Strategy (MNova 16):
-        --nogui          headless mode
-        --sf "spinhanceBatch()"   call our auto-loaded JS function
+    Strategy (MNova 16) — CORRECTED invocation:
+        -sf spinhanceBatch,XMLDIR,OUTDIR
+                                    call the registered JS function by NAME
+                                    (no parentheses), passing args after commas.
 
-    Paths are passed via a JSON config file at /tmp/spinhance_batch_config.json
-    which the .qs script reads on startup.
+    REQUIREMENTS for -sf to resolve the name (see spinhanceBatch.qs header):
+        - The .qs file is named exactly spinhanceBatch.qs.
+        - Its containing folder is registered in
+          Edit > Preferences > Scripting > Directories (one-time GUI step).
+        - The script has NO top-level auto-executing call.
+
+    A JSON config is still written as a fallback for running the function from
+    the GUI play button, but the CLI passes the paths as args directly.
     """
     import json
 
@@ -134,21 +142,26 @@ def run_mnova_batch(
     n_xml = len(list(xml_dir.glob("*.xml")))
     total_timeout = max(120, n_xml * timeout_per_file)
 
-    # Write config for the JS script
-    config = {
-        "xml_dir": str(xml_dir.resolve()),
-        "out_dir": str(txt_out_dir.resolve()),
-    }
+    xml_dir_abs = str(xml_dir.resolve())
+    out_dir_abs = str(txt_out_dir.resolve())
+
+    # Write config as a fallback (used when run from the GUI without args)
+    config = {"xml_dir": xml_dir_abs, "out_dir": out_dir_abs}
     CONFIG_PATH.write_text(json.dumps(config))
     print(f"  Config written to {CONFIG_PATH}")
 
-    # Ensure script is installed in MNova's scripts dir
-    install_qs_script()
+    # Verify the in-repo script is present (folder must be registered in MNova)
+    check_qs_script()
 
+    # CORRECT: single dash, function NAME (no parens), comma-separated args.
+    # NOTE: do NOT pass -nogui. Under -nogui, Application.quit() does not
+    # terminate the process (no GUI event loop to quit) and MNova hangs forever,
+    # even though the output IS written. With the window visible it runs the
+    # whole batch in one launch and exits cleanly (exit code 0). The window just
+    # opens and closes itself.
     cmd = [
         str(mnova_exe),
-        "--nogui",
-        "--sf", "spinhanceBatch()",
+        "-sf", f"spinhanceBatch,{xml_dir_abs},{out_dir_abs}",
     ]
     print(f"  Running MNova on {n_xml} files in {xml_dir.name} ...")
     print(f"  CMD: {' '.join(cmd)}")
@@ -222,7 +235,7 @@ def run_pipeline(
     source_xml_dir: Path,
     out_dir: Path,
     mnova_exe: Path,
-    fields_mhz: list[float] = (100.0, 600.15),
+    fields_mhz: list[float] = (90.0, 600.15),
 ) -> None:
     """
     End-to-end: source XMLs → patched XMLs → MNova simulation → .npy arrays.
@@ -276,8 +289,8 @@ def _parse_args() -> argparse.Namespace:
     )
     p.add_argument(
         "--fields", type=float, nargs="+",
-        default=[100.0, 600.15],
-        help="Spectrometer frequencies in MHz (default: 100.0 600.15)",
+        default=[90.0, 600.15],
+        help="Spectrometer frequencies in MHz (default: 90.0 600.15)",
     )
     return p.parse_args()
 

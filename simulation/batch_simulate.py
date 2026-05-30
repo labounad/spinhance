@@ -35,8 +35,8 @@ def _parse_args():
         return xml_dir, out_dir
     # Fallback: hard-code for GUI/console testing
     repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    xml_dir = os.path.join(repo, "data", "processed", "xmls", "100MHz")
-    out_dir = os.path.join(repo, "data", "processed", "txt", "100MHz")
+    xml_dir = os.path.join(repo, "data", "processed", "xmls", "90MHz")
+    out_dir = os.path.join(repo, "data", "processed", "txt", "90MHz")
     print(f"[batch_simulate] No env vars set; using defaults:\n  xml_dir={xml_dir}\n  out_dir={out_dir}")
     return xml_dir, out_dir
 

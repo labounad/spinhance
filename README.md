@@ -6,7 +6,7 @@
 
 ## Problem Statement
 
-At low field (e.g. 100 MHz), ¹H NMR spectra are often non-first-order: peaks overlap and standard peak-picking fails. We train a neural network to invert the spectrum back to the underlying spin-system parameters (shifts δ in ppm, coupling constants *J* in Hz, and spin-group degeneracies), represented as a symmetric 8×8 matrix + 8×1 degeneracy vector. Given those parameters, any field strength can be simulated exactly.
+At low field (e.g. 90 MHz), ¹H NMR spectra are often non-first-order: peaks overlap and standard peak-picking fails. We train a neural network to invert the spectrum back to the underlying spin-system parameters (shifts δ in ppm, coupling constants *J* in Hz, and spin-group degeneracies), represented as a symmetric 8×8 matrix + 8×1 degeneracy vector. Given those parameters, any field strength can be simulated exactly.
 
 ---
 
@@ -85,12 +85,12 @@ This is equivalently an **undirected labeled graph**: nodes carry (δ, n), edges
 ---
 
 ### Task 3 — SIMULATION (`simulation/`)
-**Simulate accurate ¹H NMR spectra at 100 MHz and 600 MHz using MNova.**
+**Simulate accurate ¹H NMR spectra at 90 MHz and 600 MHz using MNova.**
 
 #### Subtasks
 - [ ] Convert shift+J matrix → MNova spin-system XML (see `predicted_mnova_1h (10).xml` for format)
 - [ ] Write MNova Groovy/JS script to batch-load XMLs, run full quantum-mechanical spin simulation, export FID + spectrum
-- [ ] Simulate at **100 MHz** (low-field, non-first-order) and **600 MHz** (high-field, reference)
+- [ ] Simulate at **90 MHz** (low-field, non-first-order) and **600 MHz** (high-field, reference)
 - [ ] Post-process: zero-fill, apodize, FFT, phase, normalize integral to 1
 - [ ] Output: `data/processed/spectra/` — 2¹⁴-point intensity arrays (0–12 ppm) per molecule per field
 
@@ -105,13 +105,13 @@ This is equivalently an **undirected labeled graph**: nodes carry (δ, n), edges
 **Train a neural network: normalized spectrum → shift+J+degeneracy matrix.**
 
 #### Subtasks
-- [ ] Define input: 16384-point spectrum vector (100 MHz simulations)
+- [ ] Define input: 16384-point spectrum vector (90 MHz simulations)
 - [ ] Define output: 8×9 matrix (symmetric 8×8 + degeneracy column); handle S₈ permutation invariance in loss
 - [ ] Implement permutation-invariant loss (e.g. Hungarian matching on rows)
 - [ ] Architecture search: 1D-CNN encoder → transformer/MLP decoder; or direct regression
 - [ ] Train/val/test split (e.g. 80/10/10 by molecule)
 - [ ] Evaluation metrics: MAE on δ (ppm), MAE on *J* (Hz), fraction of *J* within 1 Hz
-- [ ] Stretch goal: condition on field strength to generalize beyond 100 MHz
+- [ ] Stretch goal: condition on field strength to generalize beyond 90 MHz
 
 #### Key challenges
 - Permutation invariance of spin-group labels
@@ -159,7 +159,7 @@ USPTO / pubchem SMILES
   [mol_to_matrix/]  ──→  matrices/*.npy
         │
         ▼
-  [simulation/]  ──→  spectra/{100MHz,600MHz}/*.npy
+  [simulation/]  ──→  spectra/{90MHz,600MHz}/*.npy
         │
         ▼
   [ml_model/]  ──→  trained model  ──→  predicted matrix from spectrum
