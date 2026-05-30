@@ -98,11 +98,22 @@ name (`spinhanceBatch`). See `CLAUDE.md` for the full list of invocation rules.
 
 ## Usage
 
-All commands are run from the repository root with the `spinhance` env active.
+All commands are run with the `spinhance` env active.
 
 ```bash
 micromamba activate spinhance
 ```
+
+Optionally install the package so you get a `spinhance-sim` command and can
+import `simulation` from anywhere (run once, from the repo root):
+
+```bash
+pip install -e .
+```
+
+With it installed, `spinhance-sim run …` is equivalent to
+`python -m simulation.cli run …`. The examples below use the module form, which
+works from the repo root without installing.
 
 ### Run the pipeline
 

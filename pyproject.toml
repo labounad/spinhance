@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "spinhance-sim"
+version = "0.1.0"
+description = "SpinHance Task 3 — convert shift+J matrices to MNova spin-system XML and simulate 1H NMR spectra at low (90 MHz) and high (600 MHz) field."
+readme = "simulation/README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=2.0",
+    "matplotlib>=3.9",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8.0", "pytest-cov"]
+
+[project.scripts]
+# Creates a `spinhance-sim` command mapped to simulation.cli:main after install.
+spinhance-sim = "simulation.cli:main"
+
+[tool.setuptools]
+# Only the simulation package is installable here; the other task dirs
+# (generate/, mol_to_matrix/, ml_model/) are independent modules.
+packages = ["simulation", "simulation.tests"]
+
+[tool.setuptools.package-data]
+# Ship the MNova batch script so it travels with non-editable installs too.
+simulation = ["mnova_scripts/*.qs"]
+
+[tool.pytest.ini_options]
+testpaths = ["simulation/tests"]
