@@ -3,8 +3,8 @@
 Spin-system data converted from `generate/data/8spin.xyz` by
 `mol_to_matrix.xyz.convert_file`.
 
-- `spin_systems.json` — currently a **5-molecule sample** (regenerate the full
-  set with `convert_file(..., limit=None)`).
+- `spin_systems.json` — full set of **1072 molecules** from `8spin.xyz`.
+  Regenerate with `convert_file('generate/data/8spin.xyz', <out>, workers=8)`.
 
 ## Format
 
