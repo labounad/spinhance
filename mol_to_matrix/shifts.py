@@ -113,6 +113,7 @@ def predict_shifts(
     mol: Chem.Mol,
     nucleus: str = "H",
     solvent: str = DEFAULT_SOLVENT,
+    use_3d: bool = True,
 ) -> dict[int, dict[str, float]]:
     """Predict shifts for an RDKit mol that already carries a 3D conformer.
 
@@ -126,7 +127,7 @@ def predict_shifts(
         path = Path(fh.name)
     try:
         Chem.MolToMolFile(mol, str(path))  # writes the 3D conformer
-        raw = predict_shifts_from_molfile(path, nucleus=nucleus, solvent=solvent, use_3d=True)
+        raw = predict_shifts_from_molfile(path, nucleus=nucleus, solvent=solvent, use_3d=use_3d)
     finally:
         path.unlink(missing_ok=True)
 
