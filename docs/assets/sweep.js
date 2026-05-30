@@ -34,13 +34,16 @@
   const canvas = document.getElementById("spectrum");
   const ctx = canvas.getContext("2d");
   const hero = document.getElementById("top");
+  const heroLayer = document.getElementById("heroLayer");
   const fieldVal = document.getElementById("fieldVal");
   const barFill = document.getElementById("barFill");
   const molTag = document.getElementById("molTag");
   const scrollHint = document.getElementById("scrollHint");
 
   const GRID = 4096;          // broadening resolution (independent of pixels)
-  const BASE = 0.80, AMP = 0.62;  // baseline at 80% height; peaks rise 62% of height
+  const BASE = 0.75, AMP = 0.56;  // baseline at 75% height; peaks rise 56% of height
+  const SWEEP_FRAC = 0.60;        // field reaches 600 MHz at 60% of the hero scroll
+  const FADE_START = 0.63, FADE_END = 0.92;  // spectrum fades out over this scroll range
 
   let W = 0, H = 0, dpr = 1;
   const fan = document.createElement("canvas");
@@ -98,7 +101,7 @@
     window.dispatchEvent(new CustomEvent("spinhance:molecule"));
   }
 
-  // click SMILES -> copy to clipboard
+  // click SMILES -> copy to clipboard AND jump to "The representation"
   molTag.addEventListener("click", (e) => {
     const t = e.target.closest(".smi");
     if (!t || !mol) return;
@@ -106,6 +109,8 @@
       const m = document.getElementById("copiedMsg");
       if (m) { m.style.opacity = "1"; clearTimeout(molTag._ct); molTag._ct = setTimeout(() => m.style.opacity = "0", 1300); }
     }).catch(() => {});
+    const rep = document.getElementById("rep");
+    if (rep) rep.scrollIntoView({ behavior: "smooth", block: "start" });
   });
 
   function curvePath(c, g, amp, baseY) {
@@ -143,18 +148,30 @@
     for (const c of curves) curvePath(c, fctx, amp, baseY);
   }
 
-  function progress() {
+  const clamp01 = (x) => Math.min(1, Math.max(0, x));
+
+  function scrollFrac() {                 // 0..1 over the hero's scroll distance
     const total = hero.offsetHeight - window.innerHeight;
-    return total > 0 ? Math.min(1, Math.max(0, window.scrollY / total)) : 0;
+    return total > 0 ? clamp01(window.scrollY / total) : 0;
   }
 
   function draw() {
     if (!meta) return;
     const baseY = H * BASE, amp = H * AMP;
+
+    // fade the whole spectrum layer (canvas + hero text) out as the page scrolls on
+    const sf = scrollFrac();
+    const op = sf <= FADE_START ? 1
+      : sf >= FADE_END ? 0
+      : 1 - (sf - FADE_START) / (FADE_END - FADE_START);
+    canvas.style.opacity = op.toFixed(3);
+    if (heroLayer) heroLayer.style.opacity = op.toFixed(3);
+    if (op === 0) return;                 // nothing visible — skip the draw work
+
     ctx.clearRect(0, 0, W, H);
     ctx.drawImage(fan, 0, 0, W, H);
 
-    const p = progress();
+    const p = clamp01(sf / SWEEP_FRAC);   // field completes the sweep at SWEEP_FRAC
     const fpos = p * (curves.length - 1);
     const lo = Math.floor(fpos), hi = Math.min(curves.length - 1, lo + 1), t = fpos - lo;
     const a = curves[lo], b = curves[hi];
@@ -199,7 +216,6 @@
   const onScroll = () => { if (!ticking) { ticking = true; requestAnimationFrame(() => { draw(); ticking = false; }); } };
 
   fetch("data/field_sweep.json").then(r => r.json()).then(data => {
-    document.getElementById("statMol").textContent = "1,072";
     resize(); chooseMolecule(data); renderFan(); draw();
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", () => { resize(); renderFan(); draw(); });
