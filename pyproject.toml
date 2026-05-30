@@ -17,17 +17,20 @@ dependencies = [
 test = ["pytest>=8.0", "pytest-cov"]
 
 [project.scripts]
-# Creates a `spinhance-sim` command mapped to simulation.cli:main after install.
+# spinhance-sim: Task 3 — MNova spin simulation pipeline.
 spinhance-sim = "simulation.cli:main"
+# spinhance-gen: Task 1 — molecule screening pipeline.
+spinhance-gen = "generate.cli:main"
 
 [tool.setuptools]
-# Only the simulation package is installable here; the other task dirs
-# (generate/, mol_to_matrix/, ml_model/) are independent modules.
-packages = ["simulation", "simulation.tests", "simulation.benchmarks"]
+packages = [
+    "simulation", "simulation.tests", "simulation.benchmarks",
+    "generate",   "generate.tests",
+]
 
 [tool.setuptools.package-data]
 # Ship the MNova batch script so it travels with non-editable installs too.
 simulation = ["mnova_scripts/*.qs"]
 
 [tool.pytest.ini_options]
-testpaths = ["simulation/tests"]
+testpaths = ["simulation/tests", "generate/tests"]
