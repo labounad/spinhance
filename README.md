@@ -87,17 +87,20 @@ This is equivalently an **undirected labeled graph**: nodes carry (δ, n), edges
 ### Task 3 — SIMULATION (`simulation/`)
 **Simulate accurate ¹H NMR spectra at 90 MHz and 600 MHz using MNova.**
 
+**Status: working.** See `simulation/README.md` for the architecture diagram,
+usage, and one-time MNova setup.
+
 #### Subtasks
-- [ ] Convert shift+J matrix → MNova spin-system XML (see `predicted_mnova_1h (10).xml` for format)
-- [ ] Write MNova Groovy/JS script to batch-load XMLs, run full quantum-mechanical spin simulation, export FID + spectrum
-- [ ] Simulate at **90 MHz** (low-field, non-first-order) and **600 MHz** (high-field, reference)
-- [ ] Post-process: zero-fill, apodize, FFT, phase, normalize integral to 1
-- [ ] Output: `data/processed/spectra/` — 2¹⁴-point intensity arrays (0–12 ppm) per molecule per field
+- [x] Convert shift+J matrix → MNova spin-system XML (`simulation/xml_io.py`)
+- [x] MNova JS batch script to load XMLs, run QM spin simulation, export spectra (`simulation/mnova_scripts/spinhanceBatch.qs`)
+- [x] Simulate at **90 MHz** (low-field, non-first-order) and **600 MHz** (high-field, reference)
+- [x] Post-process: normalize integral to 1, save `.npy` (`simulation/pipeline.py`)
+- [x] Output: `data/processed/spectra/<field>MHz/` — 2¹⁴-point intensity arrays (0–12 ppm)
 
 #### Notes
 - MNova spin simulator handles strongly-coupled spin systems exactly
 - All team members need an active MNova license
-- Script entry point: `simulation/run_batch.groovy`
+- Entry point: `python -m simulation.cli run` (see `simulation/README.md`)
 
 ---
 

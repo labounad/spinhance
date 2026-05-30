@@ -19,12 +19,18 @@ spinhance/
 ├── generate/            # Task 1 — molecule screening (teammate)
 ├── mol_to_matrix/       # Task 2 — 3D embedding + J/shift heuristics (teammate)
 ├── simulation/          # Task 3 — MNova spin simulation pipeline (LUCAS)
-│   ├── xml_utils.py         # Python: build/patch mnova-spinsim XML files
-│   ├── spinhanceBatch.qs    # MNova JavaScript batch script (see caveats below)
-│   ├── batch_simulate.py    # MNova Python batch script (abandoned — see below)
-│   ├── run_batch.py         # Python orchestrator for the full pipeline
-│   ├── test_xml_utils.py    # pytest suite for xml_utils.py
-│   └── discover_mnova_api*.py  # API discovery scripts (scratch, not production)
+│   ├── README.md            # human-facing docs + architecture diagram
+│   ├── CLAUDE.md            # this file (AI-facing contract)
+│   ├── __init__.py          # public API re-exports
+│   ├── xml_io.py            # build/patch mnova-spinsim XML (pure)
+│   ├── mnova_runner.py      # MestReNova CLI invocation
+│   ├── pipeline.py          # patch → simulate → convert orchestration
+│   ├── plotting.py          # QC plot of 90 vs 600 MHz spectra
+│   ├── cli.py               # `python -m simulation.cli run|plot`
+│   ├── mnova_scripts/
+│   │   └── spinhanceBatch.qs   # MNova JS batch script (register this folder)
+│   └── tests/
+│       └── test_xml_io.py      # pytest suite (no MNova required)
 ├── ml_model/            # Task 4 — deep learning model (teammate)
 ├── data/
 │   ├── raw/             # SMILES lists (gitignored if large)
@@ -66,50 +72,54 @@ Train a neural network: input = 16384-point normalized spectrum (90 MHz), output
 
 ---
 
-## Task 3 — Simulation: Detailed Status
+## Task 3 — Simulation: Status (WORKING)
+
+The full pipeline runs end to end: matrix/XML → MNova simulation at 90 & 600 MHz
+→ normalised `.npy`. Confirmed 2026-05-29 on the reference molecule (16384-point
+spectra, integral = 1).
 
 ### Environment
 - **MNova version:** MestReNova v16.0.0-39276 (macOS, x86_64)
 - **Python env:** micromamba `spinhance`, Python 3.14, conda-forge
 
-### What Works
-
-**`xml_utils.py` — fully working.** Builds and patches mnova-spinsim XML files:
+### Public API (import contract)
 ```python
-from simulation.xml_utils import matrix_to_xml, save_xml, patch_frequency, generate_field_pair
+from simulation import (
+    matrix_to_xml, save_xml, patch_frequency, generate_field_pair,  # xml_io
+    prepare_xmls, txt_to_npy, run_pipeline,                          # pipeline
+    run_mnova_batch, MNOVA_DEFAULT,                                  # mnova_runner
+    LOW_FIELD_MHZ, HIGH_FIELD_MHZ, DEFAULT_FIELDS_MHZ, N_POINTS,
+)
 
-# Build XML from matrix
 tree = matrix_to_xml(shifts, couplings, degeneracy, frequency_mhz=90.0)
 save_xml(tree, "output.xml")
-
-# Patch an existing XML to a different field
-patched = patch_frequency("existing.xml", 90.0)
-save_xml(patched, "patched_90MHz.xml")
-
-# Generate both field variants at once
-lo, hi = generate_field_pair("source.xml", "output_dir/", stem="mol_001")
+lo, hi = generate_field_pair("source.xml", "out_dir/", stem="mol_001")
+run_pipeline(Path("xmls_source"), Path("data/processed"))  # patch→sim→npy
 ```
 
-**`run_batch.py` — pipeline orchestrator, working except for MNova invocation.** Handles XML patching, config file writing, post-processing (txt → normalized npy).
+### Module responsibilities
+- `xml_io.py` — pure matrix ⇄ XML; no MNova or numpy dependency.
+- `mnova_runner.py` — the ONLY module that invokes MestReNova.
+- `pipeline.py` — orchestration + numpy post-processing (`txt_to_npy`).
+- `plotting.py` — QC overlays (`plot_field_comparison`).
+- `cli.py` — `python -m simulation.cli run|plot`.
 
-**MNova Script Editor — confirmed working.** Opening `spinhanceBatch.qs` via Tools → Scripts → Edit Scripts and pressing the green play button successfully runs the batch function. The JS API calls are confirmed correct.
-
-### What Does NOT Work — MNova CLI Invocation
-
-We spent extensive time trying to invoke MNova from the command line. Here is what was learned:
-
-| Attempt | Result |
-|---|---|
-| `--no-gui` flag | MNova 16 uses `--nogui` (one word) |
-| `--py script.py` | `MnovaCore` only — bare Qt bindings, no NMR API |
-| `--sf "functionName()"` from user scripts dir | "Not Found" — `--sf` doesn't find user scripts |
-| `--sf "functionName()"` from app bundle scripts dir | "Not Found" — still not found |
-| `--sf "/path/to/file.qs"` | Segfault — file paths not accepted |
-| Script with top-level `spinhanceBatch()` call in user scripts dir | MNova crashes on startup |
-
-**Root cause:** In MNova 16, `--sf` only calls functions from scripts that have been pre-registered via the GUI (File → Preferences → Scripts → Directories). Running `--sf` before doing that GUI step consistently fails.
-
-**DO NOT put a script with top-level auto-executing code in `~/Library/Application Support/Mestrelab Research S.L./MestReNova/scripts/`** — it will crash MNova on startup. To recover: `rm ~/Library/Application\ Support/Mestrelab\ Research\ S.L./MestReNova/scripts/spinhanceBatch.qs`.
+### MNova CLI invocation — the rules (solved; do not regress)
+The CLI works **without** `-nogui`:
+```bash
+MestReNova -sf spinhanceBatch,<xmlDir>,<outDir>   # exit 0, writes <stem>.txt per XML
+```
+- **Single dash, function NAME, no parens, comma-separated args.** `--sf "fn()"` fails "Not Found".
+- The script's folder (`simulation/mnova_scripts`) must be registered in
+  **Edit → Preferences → Scripting → Directories**, then MNova restarted. `-sf`
+  only resolves names from registered dirs. File name must equal function name.
+- **Never pass `-nogui`:** under it `Application.quit()` cannot terminate (no GUI
+  event loop) and MNova hangs forever despite writing output. With the window
+  visible it runs the whole batch in one launch and exits cleanly.
+- The `.qs` must have **no top-level auto-executing call** (crashes MNova at
+  startup). `spinhanceBatch(xmlDir, outDir, argNoQuit)` — pass a truthy 3rd arg
+  to skip the quit for interactive Script-Editor testing.
+- The Script Editor caches the loaded file; after editing on disk, reload it.
 
 ### Correct MNova JavaScript API (confirmed from Script Editor)
 ```javascript
@@ -135,27 +145,24 @@ var stream = new TextStream(f);
 stream.writeln(value);
 f.close();
 
-// Quit MNova
-Application.mainWindow.close();
+// Quit MNova (only in CLI runs; guarded in the .qs)
+Application.quit();                  // global mainWindow.close() is the fallback
 ```
 
 **WRONG API (do not use):**
 - `Application.open()` — does not exist
+- `Application.mainWindow.close()` — `Application.mainWindow` is undefined; use `Application.quit()` or the global `mainWindow`
 - `nmr.activeSpectrum()` alone — use `Application.nmr.activeSpectrum()`
 - `dir.setFilter()` / `dir.setNameFilters()` — not methods on Dir
 - `Application.waitAllThreadsFinished()` — does not exist
 
-### Next Steps for Task 3
-
-**Option A (recommended if continuing with MNova):**
-1. Open MNova GUI
-2. File → Preferences → Scripts → Directories → add `~/Library/Application Support/Mestrelab Research S.L./MestReNova/scripts/`
-3. Close MNova
-4. Copy `simulation/spinhanceBatch.qs` to that directory (without auto-executing top-level call)
-5. Test: `MestReNova --sf "spinhanceBatch()"`
-
-**Option B (recommended for hackathon reliability — pure Python):**
-Implement the spin simulation directly in Python using numpy/scipy. For N≤8 spin-½ systems, the Hilbert space is at most 2⁸ = 256 dimensional. Build the full spin Hamiltonian H = Σ δᵢ Izᵢ + Σ Jᵢⱼ (IᵢxIⱼx + IᵢyIⱼy + IᵢzIⱼz), diagonalize, compute transition frequencies and intensities, apply Lorentzian broadening, sum to spectrum. This bypasses MNova entirely and is fully scriptable.
+### Possible future work
+- **Scale:** every XML is opened in one MNova session; if memory grows over many
+  thousand molecules, relaunch MNova every N files (chunking in `pipeline.py`).
+- **Pure-Python fallback (if MNova ever blocks):** for N≤8 spin-½ systems the
+  Hilbert space is ≤ 2⁸ = 256-d. Build H = Σ δᵢ Izᵢ + Σ Jᵢⱼ (IᵢxIⱼx + IᵢyIⱼy +
+  IᵢzIⱼz), diagonalise, compute transitions + intensities, Lorentzian-broaden.
+  Fully scriptable, bypasses MNova.
 
 ---
 
@@ -171,7 +178,7 @@ bash setup_env.sh
 micromamba activate spinhance
 
 # Run tests
-python -m pytest simulation/test_xml_utils.py -v
+python -m pytest simulation/tests -v
 ```
 
 **`environment.yml` key packages:** Python 3.14, rdkit, numpy, scipy, pandas, pytorch, scikit-learn, matplotlib, lxml, jupyterlab, pytest. Conda-forge channel only (no `defaults` — Anaconda SSL issues on this machine).
@@ -180,11 +187,11 @@ python -m pytest simulation/test_xml_utils.py -v
 
 ## Key Files to Read First
 
-1. `README.md` — full project overview, data flow diagram, all subtasks
+1. `simulation/README.md` — architecture diagram, usage, MNova setup
 2. `predicted_mnova_1h (10).xml` — the mnova-spinsim XML format (reference)
-3. `simulation/xml_utils.py` — fully working XML builder/patcher
-4. `simulation/spinhanceBatch.qs` — the confirmed-correct MNova JS batch script
-5. `simulation/run_batch.py` — the Python orchestrator (needs MNova invocation fixed)
+3. `simulation/xml_io.py` — XML builder/patcher (pure)
+4. `simulation/pipeline.py` — patch → simulate → convert orchestration
+5. `simulation/mnova_scripts/spinhanceBatch.qs` — the MNova JS batch script
 
 ---
 
@@ -194,5 +201,5 @@ python -m pytest simulation/test_xml_utils.py -v
 - The shift+J matrix is the shared data contract between Tasks 2 and 3
 - Task 3 needs Task 2's output (XML files or matrices) to proceed at scale; for testing, use `predicted_mnova_1h (10).xml` as a stand-in
 - Degeneracy is stored in the XML `number=` attribute and in the 9th column of the matrix
-- Field strength is baked into the XML `<frequency>` tag; `xml_utils.patch_frequency()` generates multi-field variants
+- Field strength is baked into the XML `<frequency>` tag; `xml_io.patch_frequency()` generates multi-field variants
 - Target spectral grid: 2¹⁴ = 16384 points, 0–12 ppm, normalized so ∫ intensity dppm = 1

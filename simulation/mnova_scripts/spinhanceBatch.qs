@@ -49,9 +49,13 @@
 
 // ── Main entry point ──────────────────────────────────────────────────────────
 
-function spinhanceBatch(argXmlDir, argOutDir) {
+// argNoQuit: pass any truthy 3rd arg (e.g. "noquit") to keep MNova open after
+// the batch — useful for interactive testing from the Script Editor. When
+// omitted (the CLI case), MNova quits so the headless process can exit.
+function spinhanceBatch(argXmlDir, argOutDir, argNoQuit) {
     "use strict";
 
+    var quitWhenDone = !argNoQuit;
     var xmlDir;
     var outDir;
 
@@ -60,7 +64,7 @@ function spinhanceBatch(argXmlDir, argOutDir) {
         xmlDir = String(argXmlDir);
         outDir = String(argOutDir);
     } else {
-        // Fall back to config JSON written by run_batch.py
+        // Fall back to config JSON written by simulation/mnova_runner.py
         var configPath = Dir.home() + "/.spinhance_batch_config.json";
         var configFile = new File(configPath);
         if (!configFile.exists) {
@@ -129,7 +133,20 @@ function spinhanceBatch(argXmlDir, argOutDir) {
     print("Done.  Succeeded: " + succeeded + "  Failed: " + failed);
 
     // ── 4. Quit MNova ─────────────────────────────────────────────────────────
-    Application.mainWindow.close();
+    // Only quit in headless/CLI runs. When testing interactively from the
+    // Script Editor, leave MNova open. Guarded so a missing quit API can't throw.
+    // NB: use the global `mainWindow`, NOT `Application.mainWindow` (undefined).
+    if (quitWhenDone) {
+        try {
+            if (typeof Application !== "undefined" && Application.quit) {
+                Application.quit();
+            } else if (typeof mainWindow !== "undefined" && mainWindow.close) {
+                mainWindow.close();
+            }
+        } catch (e) {
+            print("  (quit skipped: " + e + ")");
+        }
+    }
 }
 
 

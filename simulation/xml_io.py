@@ -1,28 +1,65 @@
 """
-xml_utils.py
-------------
-Utilities for creating and patching mnova-spinsim XML files.
+xml_io.py
+=========
+Conversion between SpinHance spin-system parameters and the ``mnova-spinsim``
+XML format consumed by MestReNova's quantum spin simulator.
 
-A shift+J matrix is represented as a dict with keys:
-    shifts      : list of float, length n_groups  (ppm, diagonal)
-    couplings   : list of list of float, n x n    (Hz, off-diagonal; symmetric)
-    degeneracy  : list of int, length n_groups    (number of protons per group)
-    linewidths  : list of float (Hz), optional    (default 1.0 for all groups)
+This module is **pure** — it has no dependency on MNova or numpy and performs no
+orchestration. It only builds, patches, and writes XML trees.
 
-Group labels are auto-assigned: A, B, C, ...
+Spin-system representation
+---------------------------
+A molecule's spin system is described by:
+
+==============  =========================================================
+``shifts``      list[float], length ``n`` — chemical shifts δ in ppm
+                (the diagonal of the shift+J matrix; field-independent).
+``couplings``   list[list[float]], ``n × n`` — scalar couplings *J* in Hz
+                (off-diagonal; must be symmetric, zero diagonal).
+``degeneracy``  list[int], length ``n`` — protons per spin group
+                (e.g. 3 for CH₃, 9 for tert-butyl).
+``linewidths``  list[float], length ``n``, optional — Hz, default 1.0 each.
+==============  =========================================================
+
+Group labels are auto-assigned A, B, C, … (see :func:`_labels`).
+
+Public API
+----------
+- :func:`matrix_to_xml`     — build an XML tree from matrix parameters.
+- :func:`save_xml`          — write a tree to disk (creates parent dirs).
+- :func:`patch_frequency`   — change a tree's spectrometer frequency.
+- :func:`generate_field_pair` — emit low- + high-field XMLs from one source.
 """
 
 from __future__ import annotations
-import xml.etree.ElementTree as ET
+
 import copy
 import string
+import xml.etree.ElementTree as ET
 from pathlib import Path
+
+__all__ = [
+    "matrix_to_xml",
+    "save_xml",
+    "patch_frequency",
+    "generate_field_pair",
+]
+
+# Default field strengths (MHz). "Low field" is 90 MHz (strongly coupled,
+# non-first-order); "high field" 600.15 MHz is the first-order reference.
+LOW_FIELD_MHZ = 90.0
+HIGH_FIELD_MHZ = 600.15
+
+# Default spectral grid (kept in sync with pipeline.N_POINTS / PPM window).
+DEFAULT_POINTS = 16384  # 2**14
+DEFAULT_PPM_FROM = 0.0
+DEFAULT_PPM_TO = 12.0
 
 
 # ── Label helpers ─────────────────────────────────────────────────────────────
 
 def _labels(n: int) -> list[str]:
-    """Return n single-letter labels: A, B, C, ..., Z, AA, AB, ..."""
+    """Return ``n`` spin-group labels: A, B, …, Z, AA, AB, …"""
     alpha = string.ascii_uppercase
     if n <= 26:
         return list(alpha[:n])
@@ -41,24 +78,35 @@ def matrix_to_xml(
     shifts: list[float],
     couplings: list[list[float]],
     degeneracy: list[int],
-    frequency_mhz: float = 600.15,
-    points: int = 16384,
-    ppm_from: float = 0.0,
-    ppm_to: float = 12.0,
+    frequency_mhz: float = HIGH_FIELD_MHZ,
+    points: int = DEFAULT_POINTS,
+    ppm_from: float = DEFAULT_PPM_FROM,
+    ppm_to: float = DEFAULT_PPM_TO,
     linewidths: list[float] | None = None,
 ) -> ET.ElementTree:
-    """
-    Build a mnova-spinsim XML ElementTree from spin-system parameters.
+    """Build a ``mnova-spinsim`` :class:`~xml.etree.ElementTree.ElementTree`.
 
     Parameters
     ----------
-    shifts       : chemical shifts in ppm (diagonal of J-matrix)
-    couplings    : scalar couplings in Hz (off-diagonal); must be symmetric
-    degeneracy   : number of protons per spin group
-    frequency_mhz: spectrometer frequency (e.g. 90.0 or 600.15)
-    points       : number of spectral points (recommend 16384 = 2^14)
-    ppm_from/to  : spectral window in ppm
-    linewidths   : peak linewidths in Hz per group (default 1.0 Hz each)
+    shifts
+        Chemical shifts in ppm (diagonal of the shift+J matrix).
+    couplings
+        ``n × n`` scalar couplings in Hz (off-diagonal); must be symmetric.
+    degeneracy
+        Number of protons per spin group.
+    frequency_mhz
+        Spectrometer frequency (e.g. ``90.0`` or ``600.15``).
+    points
+        Number of spectral points (recommend ``16384 = 2**14``).
+    ppm_from, ppm_to
+        Spectral window in ppm.
+    linewidths
+        Per-group peak linewidths in Hz (default ``1.0`` for each group).
+
+    Returns
+    -------
+    xml.etree.ElementTree.ElementTree
+        A tree rooted at ``<mnova-spinsim>``, ready for :func:`save_xml`.
     """
     n = len(shifts)
     assert len(couplings) == n and len(couplings[0]) == n, "Coupling matrix must be n×n"
@@ -70,21 +118,13 @@ def matrix_to_xml(
     root = ET.Element("mnova-spinsim")
     ss = ET.SubElement(root, "spin-system")
 
-    # ── summary block (human-readable matrix) ────────────────────────────────
+    # ── summary block (human-readable lower-triangular matrix) ────────────────
     header = "\t" + "\t".join(labels)
     rows = [header]
     for i, lab in enumerate(labels):
-        row_vals = [f"{shifts[i]:.6f}"] + [
-            f"{couplings[i][j]:.6f}" if j < i else ""
-            for j in range(n)
-        ]
-        # fill diagonal and lower triangle only (mirrors MNova convention)
         cells = []
         for j in range(i + 1):
-            if i == j:
-                cells.append(f"{shifts[i]:.6f}")
-            else:
-                cells.append(f"{couplings[i][j]:.6f}")
+            cells.append(f"{shifts[i]:.6f}" if i == j else f"{couplings[i][j]:.6f}")
         rows.append(lab + "\t" + "\t".join(cells))
 
     summary = ET.SubElement(ss, "summary")
@@ -122,6 +162,7 @@ def matrix_to_xml(
 
 
 def save_xml(tree: ET.ElementTree, path: str | Path) -> None:
+    """Write ``tree`` to ``path`` as UTF-8 XML, creating parent dirs."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     tree.write(str(path), encoding="UTF-8", xml_declaration=True)
@@ -130,9 +171,14 @@ def save_xml(tree: ET.ElementTree, path: str | Path) -> None:
 # ── Patch an existing XML to a different field ────────────────────────────────
 
 def patch_frequency(xml_path: str | Path, new_freq_mhz: float) -> ET.ElementTree:
-    """
-    Load an existing mnova-spinsim XML and change its spectrometer frequency.
-    Returns a modified ElementTree (does not overwrite the original).
+    """Return a copy of the XML at ``xml_path`` with its frequency changed.
+
+    The original file is not modified.
+
+    Raises
+    ------
+    ValueError
+        If the XML has no ``<spectrum>/<frequency>`` element.
     """
     tree = ET.parse(str(xml_path))
     root = copy.deepcopy(tree.getroot())
@@ -143,55 +189,33 @@ def patch_frequency(xml_path: str | Path, new_freq_mhz: float) -> ET.ElementTree
     return ET.ElementTree(root)
 
 
-# ── Generate paired XMLs (90 MHz + 600 MHz) for one molecule ──────────────────
+# ── Generate paired XMLs (low + high field) for one molecule ──────────────────
 
 def generate_field_pair(
     source_xml: str | Path,
     output_dir: str | Path,
     stem: str | None = None,
-    low_field_mhz: float = 90.0,
-    high_field_mhz: float = 600.15,
+    low_field_mhz: float = LOW_FIELD_MHZ,
+    high_field_mhz: float = HIGH_FIELD_MHZ,
 ) -> tuple[Path, Path]:
-    """
-    From a single source XML, produce two field-specific XMLs.
+    """From one source XML, write two field-specific XMLs.
+
+    Output files are named ``<stem>_<field>MHz.xml``.
 
     Returns
     -------
-    (low_field_path, high_field_path)
+    tuple[Path, Path]
+        ``(low_field_path, high_field_path)``.
     """
     source_xml = Path(source_xml)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     stem = stem or source_xml.stem
 
-    low_path = output_dir / f"{stem}_90MHz.xml"
-    high_path = output_dir / f"{stem}_600MHz.xml"
+    low_path = output_dir / f"{stem}_{low_field_mhz:.0f}MHz.xml"
+    high_path = output_dir / f"{stem}_{high_field_mhz:.0f}MHz.xml"
 
     save_xml(patch_frequency(source_xml, low_field_mhz), low_path)
     save_xml(patch_frequency(source_xml, high_field_mhz), high_path)
 
     return low_path, high_path
-
-
-# ── Quick test ────────────────────────────────────────────────────────────────
-
-if __name__ == "__main__":
-    import numpy as np
-
-    # Trivial 2-spin AX system
-    shifts = [3.0, 7.5]
-    couplings = [[0.0, 8.0], [8.0, 0.0]]
-    degeneracy = [1, 1]
-
-    tree = matrix_to_xml(shifts, couplings, degeneracy, frequency_mhz=90.0)
-    save_xml(tree, "/tmp/test_ax.xml")
-    print("Wrote /tmp/test_ax.xml")
-
-    # Patch existing example
-    from pathlib import Path
-    repo = Path(__file__).parent.parent
-    example = repo / "predicted_mnova_1h (10).xml"
-    if example.exists():
-        lo, hi = generate_field_pair(example, "/tmp/spinhance_test", stem="example_mol")
-        print(f"Low field:  {lo}")
-        print(f"High field: {hi}")
