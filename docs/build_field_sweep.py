@@ -35,12 +35,14 @@ from simulation.pyspin.composite import (  # noqa: E402
 # ── config ────────────────────────────────────────────────────────────────────
 LOW_MHZ, HIGH_MHZ = 90.0, 600.0
 N_FIELDS = 16            # geometric frames between low and high field
-SIM_POINTS = 16384       # 2**14, native simulation resolution
-DISP_POINTS = 1800       # downsampled points stored per frame
 PPM_FROM, PPM_TO = 0.0, 12.0
-LINEWIDTH_HZ = 1.6       # slightly broadened so peaks render on the web
+SIM_POINTS = 32768       # 2**15 native resolution, simulated over the TIGHT window
+DISP_POINTS = 2048       # stored points across the (narrow) per-molecule window
+LINEWIDTH_HZ = 1.3       # crisp lines for high-field resolution
 N_MOLECULES = 30         # how many molecules to ship
 MAX_FRAGMENT_SPINS = 11  # skip very large coupled fragments (slow / huge)
+SIGNAL_FRAC = 2e-3       # signal-extent threshold (fraction of peak) for windowing
+SCAN_POINTS = 16384      # resolution of the full-range scan that finds the window
 
 SPIN = REPO / "mol_to_matrix" / "data" / "spin_systems.json"
 OUT = REPO / "docs" / "data" / "field_sweep.json"
@@ -59,6 +61,31 @@ def maxpool_downsample(y, target):
     if usable < n:  # fold any remainder into the last bin
         head[-1] = max(head[-1], y[usable:].max())
     return head
+
+
+def signal_window(shifts, couplings, deg):
+    """Data-driven ppm window: where protons actually resonate.
+
+    Scan the broad LOW-field spectrum (widest peaks) over the full 0-12 ppm range
+    and return [lo, hi] covering all signal above SIGNAL_FRAC of the peak, padded.
+    Falls back to the shift range if the scan is empty.
+    """
+    _, spec = simulate_spectrum_composite(
+        shifts, couplings, deg, LOW_MHZ,
+        points=SCAN_POINTS, ppm_from=PPM_FROM, ppm_to=PPM_TO, linewidth_hz=LINEWIDTH_HZ,
+    )
+    ppm = np.linspace(PPM_FROM, PPM_TO, SCAN_POINTS)
+    thr = spec.max() * SIGNAL_FRAC
+    idx = np.where(spec > thr)[0]
+    if len(idx):
+        lo, hi = ppm[idx[0]], ppm[idx[-1]]
+    else:
+        lo, hi = min(shifts), max(shifts)
+    pad = max(0.18, 0.05 * (hi - lo))
+    lo, hi = max(PPM_FROM, lo - pad), min(PPM_TO, hi + pad)
+    if hi - lo < 0.8:                       # don't over-zoom a lone singlet
+        c = 0.5 * (lo + hi); lo, hi = c - 0.45, c + 0.45
+    return round(float(lo), 3), round(float(hi), 3)
 
 
 def second_order_score(shifts, couplings, deg):
@@ -119,20 +146,23 @@ def main():
     fields = geometric_fields(LOW_MHZ, HIGH_MHZ, N_FIELDS)
     molecules = []
     for rank, (score, rec, shifts, couplings, deg) in enumerate(chosen):
+        win_lo, win_hi = signal_window(shifts, couplings, deg)
         frames = []
-        gmax = 0.0
-        raw_frames = []
         for f in fields:
+            # simulate at high native resolution OVER THE TIGHT WINDOW so every
+            # stored point lands where the protons are (max resolution per byte).
             _, spec = simulate_spectrum_composite(
                 shifts, couplings, deg, f,
-                points=SIM_POINTS, ppm_from=PPM_FROM, ppm_to=PPM_TO,
+                points=SIM_POINTS, ppm_from=win_lo, ppm_to=win_hi,
                 linewidth_hz=LINEWIDTH_HZ,
             )
             ds = maxpool_downsample(spec, DISP_POINTS)
-            raw_frames.append(ds)
-            gmax = max(gmax, float(ds.max()))
-        for ds in raw_frames:
-            q = np.clip(np.round(ds / gmax * 65535.0), 0, 65535).astype("<u2")
+            # PER-FRAME normalization: each field's tallest peak -> full scale, so
+            # peak HEIGHTS stay ~constant across the sweep and the eye tracks the
+            # change in resolution / splitting rather than overall amplitude.
+            m = float(ds.max())
+            q = np.clip(np.round(ds / m * 65535.0), 0, 65535).astype("<u2") if m > 0 \
+                else np.zeros(DISP_POINTS, dtype="<u2")
             frames.append(base64.b64encode(q.tobytes()).decode("ascii"))
 
         molecules.append({
@@ -144,10 +174,11 @@ def main():
             "shifts": [round(float(s), 3) for s in shifts],
             "couplings": [[round(float(couplings[i][j]), 1) for j in range(len(shifts))]
                           for i in range(len(shifts))],
-            "frames": frames,           # base64 uint16 LE, len DISP_POINTS each
+            "win": [win_lo, win_hi],     # ppm display window (data-driven)
+            "frames": frames,            # base64 uint16 LE, len DISP_POINTS each
         })
         print(f"  [{rank+1:2d}] {rec.get('chembl_id'):12s} score={score:6.1f} "
-              f"smiles={rec.get('smiles')[:40]}")
+              f"win=[{win_lo:.2f},{win_hi:.2f}] smiles={rec.get('smiles')[:36]}")
 
     payload = {
         "meta": {
@@ -159,7 +190,8 @@ def main():
             "ppm_from": PPM_FROM,
             "ppm_to": PPM_TO,
             "linewidth_hz": LINEWIDTH_HZ,
-            "encoding": "base64-uint16le-per-molecule-normalized",
+            "windowed": True,
+            "encoding": "base64-uint16le-per-frame-normalized (points span molecule.win)",
             "source": "pyspin composite simulator over mol_to_matrix/data/spin_systems.json",
         },
         "molecules": molecules,

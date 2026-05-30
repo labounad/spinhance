@@ -70,21 +70,16 @@
     meta = data.meta;
     mol = data.molecules[Math.floor(Math.random() * data.molecules.length)];
     frames = mol.frames.map(decodeFrame);
-    const pad = 0.55;
-    winHi = Math.min(meta.ppm_to, Math.max(...mol.shifts) + pad);
-    winLo = Math.max(meta.ppm_from, Math.min(...mol.shifts) - pad);
-    if (winHi - winLo < 1.2) { const c = (winHi + winLo) / 2; winLo = c - 0.7; winHi = c + 0.7; }
-    const P = meta.disp_points, span = meta.ppm_to - meta.ppm_from;
-    iLo = Math.max(0, Math.floor((winLo - meta.ppm_from) / span * (P - 1)));
-    iHi = Math.min(P - 1, Math.ceil((winHi - meta.ppm_from) / span * (P - 1)));
-    molTag.innerHTML = `<b>${mol.chembl_id || mol.id || "molecule"}</b> · <span class="mono">${(mol.smiles || "").slice(0, 36)}</span>`;
+    // each stored frame's points span exactly the molecule's data-driven window
+    [winLo, winHi] = mol.win;
+    iLo = 0; iHi = meta.disp_points - 1;
+    molTag.innerHTML = `<b>${mol.chembl_id || mol.id || "molecule"}</b> · <span class="mono">${(mol.smiles || "").slice(0, 40)}</span>`;
     buildMatrix(data);
   }
 
   /* map a sample index -> x (NMR: high ppm on the left) */
-  const span = () => meta.ppm_to - meta.ppm_from;
   function xOf(i) {
-    const ppm = meta.ppm_from + (i / (meta.disp_points - 1)) * span();
+    const ppm = winLo + (i / (meta.disp_points - 1)) * (winHi - winLo);
     return ((winHi - ppm) / (winHi - winLo)) * W;
   }
 
@@ -127,12 +122,12 @@
   function draw() {
     if (!meta) return;
     ctx.clearRect(0, 0, W, H);
-    const baseY = H * 0.82, amp = H * 0.58;
+    const baseY = H * 0.86, amp = H * 0.62;
 
     drawAxis(baseY);
 
     // faint fan: every precomputed field
-    ctx.strokeStyle = colors.fan; ctx.lineWidth = 1;
+    ctx.strokeStyle = colors.fan; ctx.lineWidth = 1.1;
     for (let f = 0; f < frames.length; f++) tracePath(frames[f], amp, baseY);
 
     // current field (interpolated between the two nearest frames)
@@ -144,8 +139,8 @@
     for (let i = iLo; i <= iHi; i++) cur[i] = a[i] * (1 - t) + b[i] * t;
 
     ctx.strokeStyle = colors.trace;
-    ctx.lineWidth = 2.1; ctx.lineJoin = "round"; ctx.lineCap = "round";
-    if (colors.dark) { ctx.shadowColor = colors.accent; ctx.shadowBlur = 14; }
+    ctx.lineWidth = 2.7; ctx.lineJoin = "round"; ctx.lineCap = "round";
+    ctx.shadowColor = colors.accent; ctx.shadowBlur = colors.dark ? 22 : 8;
     tracePath(cur, amp, baseY);
     ctx.shadowBlur = 0;
 
