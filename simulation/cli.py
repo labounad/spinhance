@@ -37,6 +37,10 @@ def _add_run(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser("run", help="Run the full simulation pipeline")
     p.add_argument("--xml_dir", type=Path, default=_REPO_DATA / "xmls_source",
                    help="Directory of source mnova-spinsim XML files")
+    p.add_argument("--graphs", type=Path, default=None,
+                   help="Task-2 spin-graph JSONL (alternative to --xml_dir). "
+                        "engine=python consumes it directly; mnova/auto "
+                        "materialize XMLs first")
     p.add_argument("--out_dir", type=Path, default=_REPO_DATA,
                    help="Root output directory")
     p.add_argument("--mnova", type=Path, default=MNOVA_DEFAULT,
@@ -83,6 +87,22 @@ def main(argv: list[str] | None = None) -> int:
                   "Pass --mnova /path/to/MestReNova (or use --engine python)",
                   file=sys.stderr)
             return 2
+
+        # Graph (Task 2 JSONL) input.
+        if args.graphs is not None:
+            if args.engine == "python":
+                from simulation.pyspin.batch import run_pyspin_batch_graphs
+                run_pyspin_batch_graphs(args.graphs, args.out_dir,
+                                        fields_mhz=args.fields, workers=args.workers)
+                print(f"\nSpectra saved to: {args.out_dir / 'spectra'}")
+                return 0
+            # mnova / auto: materialize XMLs from graphs, then run normally
+            from simulation.graph_io import graphs_jsonl_to_xml_dir
+            xml_dir = args.out_dir / "_graph_xmls"
+            n = graphs_jsonl_to_xml_dir(args.graphs, xml_dir)
+            print(f"Materialised {n} XMLs from graphs → {xml_dir}")
+            args.xml_dir = xml_dir
+
         run_pipeline(
             source_xml_dir=args.xml_dir,
             out_dir=args.out_dir,

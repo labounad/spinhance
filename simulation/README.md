@@ -2,8 +2,22 @@
 
 Turn spin-system parameters (chemical shifts δ, scalar couplings *J*, and proton
 degeneracies) into simulated ¹H NMR spectra at two field strengths. This is the
-bridge between **Task 2** (molecule → matrix) and **Task 4** (spectrum → matrix
-model).
+bridge between **Task 2** (molecule → spin-graph) and **Task 4** (spectrum →
+matrix model).
+
+**Task 2 input format** (`graph_io.py`): each molecule is a labelled graph,
+streamed as JSONL (one molecule per line):
+
+```json
+{"smiles": "...", "nodes": {"A": {"sigma": 1.06, "degeneracy": 3},
+ "B": {"sigma": 2.02, "degeneracy": 1}}, "edges": [["A", "B", 6.6]]}
+```
+
+Nodes are spin groups (`sigma` = shift ppm, `degeneracy` = protons); edges are
+couplings in Hz; absent edges mean J = 0. The pyspin engine consumes graphs
+directly; the MNova path materialises XMLs from them. *(Field names are
+provisional — they live in `graph_io.py` constants and adapt in one place when
+Task 2 settles them.)*
 
 - **Low field — 90 MHz:** strongly coupled, non-first-order. The model's *input*.
 - **High field — 600.15 MHz:** first-order reference / optional second input.
@@ -43,9 +57,10 @@ Both are selected with `--engine` and produce identical output layout.
 
 ```mermaid
 flowchart TB
-    M["Task 2 output<br/>shift + J + degeneracy (XML)"]
+    M["Task 2 output<br/>spin-graph JSONL"]
 
     subgraph pkg["simulation package"]
+        GIO["graph_io<br/>graph ⇄ arrays / XML / JSONL"]
         XIO["xml_io<br/>matrix ⇄ mnova-spinsim XML"]
         CLI["cli<br/>run / plot"]
         PIPE["pipeline<br/>orchestration + routing"]
@@ -60,7 +75,7 @@ flowchart TB
     MNOVA[["MestReNova"]]
     NPY["spectra/&lt;field&gt;MHz/*.npy<br/>+ ppm_axis.npy → Task 4"]
 
-    M --> CLI --> PIPE
+    M --> GIO --> CLI --> PIPE
     PIPE -->|"engine=mnova / large fragment"| RUN -->|"-sf spinhanceBatch,…"| MNOVA
     QS -. registered .-> MNOVA
     MNOVA -->|"*.txt"| PIPE
@@ -93,6 +108,7 @@ simulation/
 ├── README.md            # this file (human-facing)
 ├── CLAUDE.md            # AI-facing contract: interfaces, invariants, gotchas
 ├── __init__.py          # public API re-exports
+├── graph_io.py          # Task 2 contract: spin-graph ⇄ arrays/XML, JSONL I/O
 ├── xml_io.py            # matrix ⇄ mnova-spinsim XML (pure; matrix_to_xml / xml_to_matrix)
 ├── mnova_runner.py      # MestReNova CLI: run_mnova_batch / run_mnova_parallel
 ├── pipeline.py          # orchestration: run_pipeline (engine mnova/python/auto)
@@ -111,8 +127,9 @@ simulation/
 │   ├── benchmark_pyspin.py   # pyspin parallel-scaling sweep (sims/s vs workers)
 │   └── benchmark_scaling.py  # per-engine ceiling: grow a fully-coupled system
 ├── examples/               # sample spin systems + validation overlays
-└── tests/                  # 38 tests, no MNova required
+└── tests/                  # 45 tests, no MNova required
     ├── test_xml_io.py            # XML build/parse/patch/round-trip
+    ├── test_graph_io.py          # spin-graph contract: arrays/xml/JSONL round-trips
     ├── test_mnova_runner.py      # parallel runner helpers (shard/launch cmd)
     ├── test_benchmark_fields.py  # geometric frequency grid
     ├── test_composite.py         # composite == explicit; components; high-deg
@@ -144,7 +161,23 @@ name (`spinhanceBatch.qs`) must equal the function name. See `CLAUDE.md`.
 
 ## Usage
 
-### Pure-Python engine (recommended at scale / HPC)
+### From Task 2 spin-graphs (JSONL)
+
+```bash
+# pyspin consumes the graphs directly
+python -m simulation.cli run --graphs data/processed/graphs.jsonl \
+    --out_dir data/processed --fields 90 600 --engine python --workers 8
+
+# mnova / auto first materialise XMLs from the graphs, then simulate
+python -m simulation.cli run --graphs data/processed/graphs.jsonl \
+    --out_dir data/processed --fields 90 600 --engine auto --workers 8 \
+    --mnova "/Applications/MestReNova.app/Contents/MacOS/MestReNova"
+```
+
+Outputs `spectra/<field>MHz/mol_<i>.npy` (index = JSONL line) plus
+`spectra/index.csv` mapping each spectrum to its molecule id (SMILES).
+
+### From source XML directory (pure-Python engine)
 
 ```bash
 python -m simulation.cli run \

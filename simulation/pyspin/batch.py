@@ -28,7 +28,7 @@ import numpy as np
 from simulation.pyspin.cluster import simulate_spectrum_pyspin
 from simulation.xml_io import xml_to_matrix
 
-__all__ = ["simulate_xml_to_npy", "run_pyspin_batch"]
+__all__ = ["simulate_xml_to_npy", "run_pyspin_batch", "run_pyspin_batch_graphs"]
 
 
 def simulate_xml_to_npy(
@@ -118,6 +118,88 @@ def run_pyspin_batch(
         ctx = mp.get_context("spawn")
         with ctx.Pool(processes=workers) as pool:
             results = pool.map(_worker, tasks, chunksize=4)
+
+    failures = [(o, err) for o, ok, err in results if not ok]
+    succeeded = len(results) - len(failures)
+    print(f"  done: {succeeded}/{len(tasks)} succeeded")
+    for o, err in failures[:10]:
+        print(f"  FAILED {o}: {err}")
+    return {"tasks": len(tasks), "succeeded": succeeded,
+            "failed": len(failures), "failures": failures}
+
+
+# ── Graph input (Task 2 JSONL → npy), pyspin engine ──────────────────────────
+
+def _graph_worker(task):
+    """Top-level (picklable) worker: one (graph, field) -> npy task."""
+    graph, field, out_npy, points, ppm_from, ppm_to, linewidth = task
+    try:
+        from simulation.graph_io import graph_to_arrays
+        _labels, shifts, couplings, degeneracy = graph_to_arrays(graph)
+        _, spec = simulate_spectrum_pyspin(
+            shifts, couplings, degeneracy, field,
+            points=points, ppm_from=ppm_from, ppm_to=ppm_to, linewidth_hz=linewidth)
+        Path(out_npy).parent.mkdir(parents=True, exist_ok=True)
+        np.save(out_npy, spec.astype(np.float32))
+        return (out_npy, True, "")
+    except Exception as e:  # noqa: BLE001
+        return (out_npy, False, repr(e))
+
+
+def run_pyspin_batch_graphs(
+    jsonl_path: Path,
+    out_dir: Path,
+    fields_mhz=(90.0, 600.0),
+    workers: int | None = None,
+    points: int = 16384,
+    ppm_from: float = 0.0,
+    ppm_to: float = 12.0,
+    linewidth_hz: float = 1.0,
+) -> dict:
+    """Simulate every spin-graph in a Task-2 JSONL file with the pyspin engine.
+
+    Output: ``<out_dir>/spectra/<field>MHz/mol_<i>.npy`` (index = JSONL line) plus
+    a shared ``ppm_axis.npy`` per field and an ``index.csv`` mapping the spectrum
+    index to the molecule id (SMILES). Parallel across (molecule, field) tasks.
+    """
+    import csv
+
+    from simulation.graph_io import molecule_id, read_graphs_jsonl
+
+    out_dir = Path(out_dir)
+    graphs = list(read_graphs_jsonl(jsonl_path))   # [(line_idx, graph), ...]
+    if not graphs:
+        raise ValueError(f"No graphs found in {jsonl_path}")
+    workers = workers or os.cpu_count() or 1
+
+    spectra_root = out_dir / "spectra"
+    ppm_axis = np.linspace(ppm_from, ppm_to, points)
+    tasks = []
+    for field in fields_mhz:
+        fdir = spectra_root / f"{field:.0f}MHz"
+        fdir.mkdir(parents=True, exist_ok=True)
+        np.save(fdir / "ppm_axis.npy", ppm_axis)
+        for idx, graph in graphs:
+            tasks.append((graph, float(field), str(fdir / f"mol_{idx:06d}.npy"),
+                          points, ppm_from, ppm_to, linewidth_hz))
+
+    # id manifest: index → molecule identifier
+    spectra_root.mkdir(parents=True, exist_ok=True)
+    with (spectra_root / "index.csv").open("w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["index", "id"])
+        for idx, graph in graphs:
+            w.writerow([f"mol_{idx:06d}", molecule_id(graph, "")])
+
+    print(f"pyspin graph batch: {len(graphs)} molecules × {len(fields_mhz)} fields "
+          f"= {len(tasks)} sims on {workers} workers")
+
+    if workers == 1:
+        results = [_graph_worker(t) for t in tasks]
+    else:
+        ctx = mp.get_context("spawn")
+        with ctx.Pool(processes=workers) as pool:
+            results = pool.map(_graph_worker, tasks, chunksize=4)
 
     failures = [(o, err) for o, ok, err in results if not ok]
     succeeded = len(results) - len(failures)

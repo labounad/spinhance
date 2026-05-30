@@ -22,6 +22,7 @@ spinhance/
 │   ├── README.md            # human-facing docs + architecture diagram
 │   ├── CLAUDE.md            # this file (AI-facing contract)
 │   ├── __init__.py          # public API re-exports
+│   ├── graph_io.py          # Task 2 contract: spin-graph ⇄ arrays/XML + JSONL I/O
 │   ├── xml_io.py            # matrix ⇄ mnova-spinsim XML (matrix_to_xml/xml_to_matrix)
 │   ├── mnova_runner.py      # MestReNova CLI (run_mnova_batch/run_mnova_parallel)
 │   ├── pipeline.py          # orchestration: run_pipeline (engine mnova/python/auto)
@@ -110,7 +111,20 @@ ppm, spec = simulate_spectrum_composite(shifts, couplings, degeneracy, 90.0)
 run_pipeline(Path("xmls_source"), Path("out"), engine="python", workers=8)
 ```
 
+### Task 2 → Task 3 contract (`graph_io.py`)
+Task 2 emits each molecule as a labelled GRAPH (not a dense matrix), streamed as
+JSONL (one molecule/line): `{"smiles":..., "nodes":{"A":{"sigma":ppm,"degeneracy":n},...}, "edges":[["A","B",J_Hz],...]}`.
+Absent edges ⇒ J=0. **Field names are PROVISIONAL** — all keys are constants at
+the top of `graph_io.py` (KEY_NODES/KEY_EDGES/KEY_SHIFT="sigma"/KEY_DEGEN=
+"degeneracy"/KEY_ID="smiles"); change there when Task 2 settles, nothing else.
+`graph_to_arrays` → (labels, shifts, couplings, degeneracy); `graph_to_xml` for
+MNova; `read/write_graphs_jsonl`; `graphs_jsonl_to_xml_dir` materialises XMLs.
+CLI: `run --graphs file.jsonl` (engine=python consumes graphs directly via
+`run_pyspin_batch_graphs`; mnova/auto materialise XMLs first). Outputs
+`spectra/<field>MHz/mol_<lineidx>.npy` + `spectra/index.csv` (index→SMILES).
+
 ### Module responsibilities
+- `graph_io.py` — Task 2 spin-graph contract: graph ⇄ arrays/XML, JSONL I/O, validation.
 - `xml_io.py` — pure matrix ⇄ XML (build, parse, patch-frequency, field-pair); no MNova/numpy.
 - `mnova_runner.py` — the ONLY module that invokes MestReNova (batch + parallel + retry).
 - `pipeline.py` — orchestration + routing; `run_pipeline(engine=…)`, `_run_auto`, `txt_to_npy`.

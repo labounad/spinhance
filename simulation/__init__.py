@@ -38,6 +38,13 @@ from .pipeline import (
     PPM_TO,
 )
 from .mnova_runner import run_mnova_batch, MNOVA_DEFAULT
+from .graph_io import (
+    graph_to_arrays,
+    arrays_to_graph,
+    graph_to_xml,
+    read_graphs_jsonl,
+    write_graphs_jsonl,
+)
 
 __all__ = [
     # xml_io
@@ -58,4 +65,10 @@ __all__ = [
     # mnova_runner
     "run_mnova_batch",
     "MNOVA_DEFAULT",
+    # graph_io (Task 2 contract)
+    "graph_to_arrays",
+    "arrays_to_graph",
+    "graph_to_xml",
+    "read_graphs_jsonl",
+    "write_graphs_jsonl",
 ]
