@@ -97,9 +97,9 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"\nSpectra saved to: {args.out_dir / 'spectra'}")
                 return 0
             # mnova / auto: materialize XMLs from graphs, then run normally
-            from simulation.graph_io import graphs_jsonl_to_xml_dir
+            from simulation.graph_io import spin_systems_to_xml_dir
             xml_dir = args.out_dir / "_graph_xmls"
-            n = graphs_jsonl_to_xml_dir(args.graphs, xml_dir)
+            n = spin_systems_to_xml_dir(args.graphs, xml_dir)
             print(f"Materialised {n} XMLs from graphs → {xml_dir}")
             args.xml_dir = xml_dir
 

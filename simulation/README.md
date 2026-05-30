@@ -5,19 +5,20 @@ degeneracies) into simulated ¹H NMR spectra at two field strengths. This is the
 bridge between **Task 2** (molecule → spin-graph) and **Task 4** (spectrum →
 matrix model).
 
-**Task 2 input format** (`graph_io.py`): each molecule is a labelled graph,
-streamed as JSONL (one molecule per line):
+**Task 2 input format** (`graph_io.py`, matches `mol_to_matrix/data`): a single
+JSON **array**; each element is one molecule:
 
 ```json
-{"smiles": "...", "nodes": {"A": {"sigma": 1.06, "degeneracy": 3},
- "B": {"sigma": 2.02, "degeneracy": 1}}, "edges": [["A", "B", 6.6]]}
+{"chembl_id": "CHEMBL6622", "smiles": "...", "inchikey": "...",
+ "labels": ["A", "B", "C"],
+ "spin_groups": [[1.06, 3], [2.02, 1], [7.20, 2]],
+ "couplings": [["A", "B", 6.6], ["B", "C", 7.8]]}
 ```
 
-Nodes are spin groups (`sigma` = shift ppm, `degeneracy` = protons); edges are
-couplings in Hz; absent edges mean J = 0. The pyspin engine consumes graphs
-directly; the MNova path materialises XMLs from them. *(Field names are
-provisional — they live in `graph_io.py` constants and adapt in one place when
-Task 2 settles them.)*
+`spin_groups[i]` (= `[shift ppm, #protons]`) describes `labels[i]`; `couplings`
+lists non-zero inter-group J (Hz, sign retained); absent pairs mean J = 0. The
+pyspin engine consumes records directly; the MNova path materialises XMLs from
+them. Schema field names live in `graph_io.py` constants.
 
 - **Low field — 90 MHz:** strongly coupled, non-first-order. The model's *input*.
 - **High field — 600.15 MHz:** first-order reference / optional second input.

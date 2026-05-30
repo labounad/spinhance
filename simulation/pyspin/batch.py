@@ -134,8 +134,8 @@ def _graph_worker(task):
     """Top-level (picklable) worker: one (graph, field) -> npy task."""
     graph, field, out_npy, points, ppm_from, ppm_to, linewidth = task
     try:
-        from simulation.graph_io import graph_to_arrays
-        _labels, shifts, couplings, degeneracy = graph_to_arrays(graph)
+        from simulation.graph_io import record_to_arrays
+        _labels, shifts, couplings, degeneracy = record_to_arrays(graph)
         _, spec = simulate_spectrum_pyspin(
             shifts, couplings, degeneracy, field,
             points=points, ppm_from=ppm_from, ppm_to=ppm_to, linewidth_hz=linewidth)
@@ -164,12 +164,12 @@ def run_pyspin_batch_graphs(
     """
     import csv
 
-    from simulation.graph_io import molecule_id, read_graphs_jsonl
+    from simulation.graph_io import molecule_id, read_spin_systems
 
     out_dir = Path(out_dir)
-    graphs = list(read_graphs_jsonl(jsonl_path))   # [(line_idx, graph), ...]
+    graphs = list(read_spin_systems(jsonl_path))   # [(idx, record), ...]
     if not graphs:
-        raise ValueError(f"No graphs found in {jsonl_path}")
+        raise ValueError(f"No spin systems found in {jsonl_path}")
     workers = workers or os.cpu_count() or 1
 
     spectra_root = out_dir / "spectra"

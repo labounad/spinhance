@@ -111,17 +111,18 @@ ppm, spec = simulate_spectrum_composite(shifts, couplings, degeneracy, 90.0)
 run_pipeline(Path("xmls_source"), Path("out"), engine="python", workers=8)
 ```
 
-### Task 2 → Task 3 contract (`graph_io.py`)
-Task 2 emits each molecule as a labelled GRAPH (not a dense matrix), streamed as
-JSONL (one molecule/line): `{"smiles":..., "nodes":{"A":{"sigma":ppm,"degeneracy":n},...}, "edges":[["A","B",J_Hz],...]}`.
-Absent edges ⇒ J=0. **Field names are PROVISIONAL** — all keys are constants at
-the top of `graph_io.py` (KEY_NODES/KEY_EDGES/KEY_SHIFT="sigma"/KEY_DEGEN=
-"degeneracy"/KEY_ID="smiles"); change there when Task 2 settles, nothing else.
-`graph_to_arrays` → (labels, shifts, couplings, degeneracy); `graph_to_xml` for
-MNova; `read/write_graphs_jsonl`; `graphs_jsonl_to_xml_dir` materialises XMLs.
-CLI: `run --graphs file.jsonl` (engine=python consumes graphs directly via
-`run_pyspin_batch_graphs`; mnova/auto materialise XMLs first). Outputs
-`spectra/<field>MHz/mol_<lineidx>.npy` + `spectra/index.csv` (index→SMILES).
+### Task 2 → Task 3 contract (`graph_io.py`) — FINALIZED
+Task 2 emits a single JSON ARRAY (`mol_to_matrix/data/spin_systems.json`); each
+element: `{"chembl_id","smiles","inchikey", "labels":["A",...], "spin_groups":[[shift_ppm,n],...] (aligned to labels), "couplings":[["A","B",J_Hz],...]}`.
+Absent couplings ⇒ J=0; sign retained (geminal negative). Keys are constants in
+`graph_io.py` (KEY_LABELS/KEY_GROUPS/KEY_COUPLINGS/ID_KEYS). `record_to_arrays`
+→ (labels, shifts, couplings, degeneracy) using the record's OWN label order;
+`record_to_xml` for MNova; `read_spin_systems` (JSON array, tolerates JSONL);
+`spin_systems_to_xml_dir` materialises XMLs. CLI: `run --graphs spin_systems.json`
+(engine=python consumes records directly via `run_pyspin_batch_graphs`;
+mnova/auto materialise XMLs first). Outputs `spectra/<field>MHz/mol_<idx>.npy` +
+`spectra/index.csv` (idx→chembl_id). Verified end-to-end on the 5-molecule
+sample (10/10 sims).
 
 ### Module responsibilities
 - `graph_io.py` — Task 2 spin-graph contract: graph ⇄ arrays/XML, JSONL I/O, validation.
