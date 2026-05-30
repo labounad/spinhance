@@ -46,11 +46,17 @@ MAX_FRAGMENT_SPINS = 11  # skip very large coupled fragments (slow / huge)
 SIGNAL_FRAC = 2e-3       # signal-extent threshold (fraction of peak) for windowing
 SCAN_POINTS = 16384      # resolution of the full-range scan that finds the window
 
-SPIN = REPO / "mol_to_matrix" / "data" / "spin_systems.json"
 OUT = REPO / "docs" / "data" / "field_sweep.json"
-# precomputed 3D coordinates (force-field embedded) for the 3D structure view;
-# prefer the working copy, fall back to the tracked backup.
-XYZ_CANDIDATES = [REPO / "generate" / "data" / "8spin.xyz", REPO / "data" / "8spin.xyz"]
+# Spin-system source. Prefer the self-contained copy in docs/data so the site can
+# be rebuilt from docs/ alone; fall back to the canonical mol_to_matrix location.
+SPIN = next((p for p in [REPO / "docs" / "data" / "spin_systems.json",
+                         REPO / "mol_to_matrix" / "data" / "spin_systems.json"] if p.exists()),
+            REPO / "mol_to_matrix" / "data" / "spin_systems.json")
+# Precomputed 3D coordinates (force-field embedded) for the 3D structure view.
+# Prefer the in-docs copy, then the working copy, then the tracked backup.
+XYZ_CANDIDATES = [REPO / "docs" / "data" / "8spin.xyz",
+                  REPO / "generate" / "data" / "8spin.xyz",
+                  REPO / "data" / "8spin.xyz"]
 
 
 def build_xyz_index():
