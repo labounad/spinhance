@@ -69,6 +69,15 @@ def _cmd_run(args: argparse.Namespace) -> int:
     return 0 if kept >= 0 else 1
 
 
+def _cmd_xyz(args: argparse.Namespace) -> int:
+    from generate.xyz_writer import write_xyz_gz  # noqa: PLC0415
+    _, written = write_xyz_gz(
+        input_path  = Path(args.input),
+        output_path = Path(args.output),
+    )
+    return 0 if written >= 0 else 1
+
+
 def _cmd_view(args: argparse.Namespace) -> int:
     import os, signal  # noqa: E401
 
@@ -158,6 +167,31 @@ def build_parser() -> argparse.ArgumentParser:
         help="Random seed  (default: 42)",
     )
     p_view.set_defaults(func=_cmd_view)
+
+    # ── xyz ───────────────────────────────────────────────────────────────────
+    _xyz_in  = _REPO_ROOT / "generate" / "data" / "8spin.csv"
+    _xyz_out = _REPO_ROOT / "generate" / "data" / "8spin.xyz.gz"
+
+    p_xyz = sub.add_parser(
+        "xyz",
+        help="Convert 8spin.csv to a gzip-compressed multi-XYZ file.",
+        description=(
+            "Reads 8spin.csv, embeds each molecule in 3-D, classifies spin groups, "
+            "and writes a single gzip-compressed multi-XYZ file.  "
+            "Each H atom is annotated with its group letter, tier (H/S/N), "
+            "and chemical-shift class number.  "
+            f"~100k molecules compress to ~10-12 MB."
+        ),
+    )
+    p_xyz.add_argument(
+        "--input",  default=str(_xyz_in),  metavar="PATH",
+        help=f"Input CSV  (default: {_xyz_in.name})",
+    )
+    p_xyz.add_argument(
+        "--output", default=str(_xyz_out), metavar="PATH",
+        help=f"Output .xyz.gz  (default: {_xyz_out.name})",
+    )
+    p_xyz.set_defaults(func=_cmd_xyz)
 
     return parser
 

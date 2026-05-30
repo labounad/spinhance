@@ -21,7 +21,6 @@ venv/
 *.ipynb
 
 # Data / outputs (large files — store externally or use DVC)
-generate/data/
 outputs/
 *.sdf
 *.mol2

@@ -56,8 +56,8 @@ This is equivalently an **undirected labeled graph**: nodes carry (δ, n), edges
 - [x] Download/sample SMILES from USPTO or another large public database
 - [x] Parse SMILES with RDKit; assign CIP stereochemistry
 - [x] Identify chemically **and** magnetically equivalent proton groups (homotopic/enantiotopic analysis)
-- [ ] Filter to molecules with **exactly 8** hard-equivalent spin groups
-- [ ] Output: `data/raw/smiles_8group.csv` (SMILES, InChIKey, n_groups, group_sizes)
+- [x] Filter to molecules with **exactly 8** hard-equivalent spin groups
+- [x] Output: `data/raw/smiles_8group.csv` (SMILES, InChIKey, n_groups, group_sizes)
 
 #### Key decisions
 - Magnetic equivalence requires symmetry analysis beyond simple graph isomorphism — use RDKit `GetSymmSSSR` + point-group or topological equivalence
@@ -147,9 +147,9 @@ See `environment.yml` for the full dependency list.
 
 | Task | Module | Assignee |
 |------|--------|----------|
-| 1 — Generate | `generate/` | TBD |
-| 2 — Mol → Matrix | `mol_to_matrix/` | TBD |
-| 3 — Simulation | `simulation/` | TBD |
+| 1 — Generate | `generate/` | Sam |
+| 2 — Mol → Matrix | `mol_to_matrix/` | Yiming |
+| 3 — Simulation | `simulation/` | Lucas |
 | 4 — ML Model | `ml_model/` | TBD |
 
 Update this table once responsibilities are assigned.
