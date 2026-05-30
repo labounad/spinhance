@@ -133,11 +133,31 @@ degeneracy/structure so each micro-batch shares operator matrices (reuse the
 expected gradient unbiased (just noisier — fine for SGD) while capping per-step
 cost.
 
-### 8. Data split — _PENDING_
-Direction so far: 70/20/10 train/val/test, but **split by molecule, ideally by
-Bemis–Murcko scaffold**, not by spectrum, so a molecule's 90 MHz and 600 MHz
-spectra never straddle train/test (leakage would overstate performance). To be
-finalized.
+### 8. Data split — **scaffold split + matrix dedup**, stratified, by molecule
+70/20/10 train/val/test. Non-negotiable: assign folds **at the molecule level**
+so all of a molecule's derived spectra (90 + 600 MHz + augmentations) stay in the
+same fold — otherwise the model sees the answer (90 MHz in train, 600 MHz in
+test) and the score is inflated.
+
+Grouping into folds:
+- **Bemis–Murcko scaffold split (RDKit):** whole scaffolds are assigned to a
+  single fold, so test scaffolds are structurally unseen → honest generalization
+  estimate (vs random split, which mostly measures interpolation).
+- **Near-duplicate matrix dedup:** the model only ever sees the spectrum/matrix,
+  so the leakage that matters most is two different molecules with nearly
+  identical 8×9 systems straddling folds. After canonical ordering, detect
+  near-identical matrices (shift/J within tolerance, same degeneracy vector) and
+  force them into the same fold (or drop dups).
+- **Stratify** fold assignment so degeneracy patterns and coupling regimes
+  (e.g. strongly- vs weakly-coupled) are balanced across train/val/test — avoids
+  all t-Bu-heavy or strongly-coupled systems landing in one split and skewing
+  metrics.
+
+**Later / harder upgrade (deferred):** embed the matrices → dimensionality
+reduction → cluster, then hold out **entire clusters** as val/test. Forces the
+model to generalize beyond primitive/local patterns to genuinely novel regions
+of spin-system space. More involved to build and tune; introduce once the
+baseline works.
 
 ## Open items / v2 upgrades
 - Swap explicit expansion → composite reduction in `diff_renderer_torch.py` for
@@ -145,4 +165,5 @@ finalized.
 - Set-prediction + Hungarian loss if canonical-ordering label noise plateaus.
 - Transformer / hybrid encoder if long-range coupling structure is missed.
 - Learned-uncertainty loss weighting if manual weights prove fiddly.
-- Finalize Decision 8 (scaffold split).
+- Cluster-holdout split (embed → reduce → cluster → hold out whole clusters) as
+  a harsher generalization test (Decision 8).
