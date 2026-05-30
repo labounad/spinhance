@@ -34,7 +34,6 @@
   const canvas = document.getElementById("spectrum");
   const ctx = canvas.getContext("2d");
   const hero = document.getElementById("top");
-  const heroLayer = document.getElementById("heroLayer");
   const fieldVal = document.getElementById("fieldVal");
   const barFill = document.getElementById("barFill");
   const molTag = document.getElementById("molTag");
@@ -42,8 +41,9 @@
 
   const GRID = 4096;          // broadening resolution (independent of pixels)
   const BASE = 0.75, AMP = 0.56;  // baseline at 75% height; peaks rise 56% of height
-  const SWEEP_FRAC = 0.60;        // field reaches 600 MHz at 60% of the hero scroll
-  const FADE_START = 0.63, FADE_END = 0.92;  // spectrum fades out over this scroll range
+  const SWEEP_FRAC = 0.50;        // field reaches 600 MHz at 50% of the hero scroll
+  const FADE_START = 0.50, FADE_END = 1.0;  // then the spectrum fades, concurrent with scrolling
+  const FADE_MIN = 0.14;          // it never fully disappears — stays a faint backdrop
 
   let W = 0, H = 0, dpr = 1;
   const fan = document.createElement("canvas");
@@ -159,14 +159,13 @@
     if (!meta) return;
     const baseY = H * BASE, amp = H * AMP;
 
-    // fade the whole spectrum layer (canvas + hero text) out as the page scrolls on
+    // fade the fixed spectrum from full -> a faint persistent backdrop as the page
+    // scrolls on (the hero text scrolls normally over it and is unaffected)
     const sf = scrollFrac();
     const op = sf <= FADE_START ? 1
-      : sf >= FADE_END ? 0
-      : 1 - (sf - FADE_START) / (FADE_END - FADE_START);
+      : sf >= FADE_END ? FADE_MIN
+      : 1 - (1 - FADE_MIN) * (sf - FADE_START) / (FADE_END - FADE_START);
     canvas.style.opacity = op.toFixed(3);
-    if (heroLayer) heroLayer.style.opacity = op.toFixed(3);
-    if (op === 0) return;                 // nothing visible — skip the draw work
 
     ctx.clearRect(0, 0, W, H);
     ctx.drawImage(fan, 0, 0, W, H);
