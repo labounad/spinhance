@@ -92,8 +92,10 @@ def _time_batch(mnova_exe: Path, xml_paths: list[Path], work_dir: Path,
 
     xml_dir = work_dir / f"xmls_{label}"
     txt_dir = work_dir / f"txt_{label}"
-    if txt_dir.exists():
-        shutil.rmtree(txt_dir)          # ensure we count only this run's outputs
+    # Clear BOTH dirs so leftovers from a previous run can't inflate the count.
+    for d in (xml_dir, txt_dir):
+        if d.exists():
+            shutil.rmtree(d)
     xml_dir.mkdir(parents=True, exist_ok=True)
     for p in xml_paths:
         shutil.copy2(p, xml_dir / p.name)
@@ -134,6 +136,7 @@ def run_benchmark(
     calib_n: int = 1,
     workers: int = 1,
     launcher: str = "open",
+    baseline: bool = False,
 ) -> dict:
     """Patch one XML to ``n`` geometric frequencies and time the simulation.
 
@@ -191,19 +194,20 @@ def run_benchmark(
         "throughput_sims_per_s": round(throughput, 2) if throughput else None,
     }
 
-    # The startup/marginal linear model only holds for a single sequential
-    # launch (calib and full share the same per-launch model). For parallel
-    # runs we report wall-clock throughput and speedup instead.
+    # The startup/marginal linear model is valid only for a single sequential
+    # launch (calib and full share one per-launch model). Speedup must be
+    # measured against a SAME-n single-worker baseline, not the calibration run
+    # (the calib run is startup-dominated, which would inflate the ratio).
     if workers <= 1:
         per_sim = (t_full - t_calib) / (n - calib_n) if n > calib_n else float("nan")
         startup = max(0.0, t_calib - calib_n * per_sim)
         report["startup_overhead_s"] = round(startup, 3)
         report["marginal_per_sim_s"] = round(per_sim, 4)
-    else:
-        # calib (1 worker) per-sim ~ single-process cost; compare to parallel.
-        single_per_sim = t_calib / max(1, calib_n)
-        report["est_speedup_x"] = round(single_per_sim / (t_full / n), 2) \
-            if t_full > 0 else None
+    elif baseline:
+        base = _time_batch(mnova_exe, all_xmls, out_dir, "baseline", workers=1)
+        t_base = base["dt"]
+        report["t_baseline_1worker_s"] = round(t_base, 3)
+        report["speedup_vs_1worker_x"] = round(t_base / t_full, 2) if t_full > 0 else None
 
     print("\n================ BENCHMARK REPORT ================")
     print(f"  simulations (n)            : {report['n']}")
@@ -218,8 +222,12 @@ def run_benchmark(
     if workers <= 1:
         print(f"  estimated startup overhead : {report['startup_overhead_s']} s")
         print(f"  estimated per-sim (marginal): {report['marginal_per_sim_s']} s")
+    elif baseline:
+        print(f"  1-worker baseline wall-clock: {report['t_baseline_1worker_s']} s")
+        print(f"  REAL speedup vs 1 worker   : {report['speedup_vs_1worker_x']}x")
     else:
-        print(f"  est. speedup vs 1 worker   : {report.get('est_speedup_x')}x")
+        print("  (run with --baseline to measure true speedup vs 1 worker;")
+        print("   comparing to the 1-sim calib run would be misleading)")
     if not report["outputs_complete"]:
         print("  >>> TIMING UNRELIABLE: outputs incomplete when MNova returned.")
         print("  >>> If launcher='open' gave 0 outputs, try --launcher direct.")
@@ -244,6 +252,8 @@ def main(argv: list[str] | None = None) -> int:
                    help="Concurrent MNova instances for the full run (default 1)")
     p.add_argument("--launcher", choices=["open", "direct"], default="open",
                    help="Parallel launch method on macOS (default: open)")
+    p.add_argument("--baseline", action="store_true",
+                   help="Also run a 1-worker full pass to measure TRUE speedup")
     args = p.parse_args(argv)
 
     if not args.mnova.exists():
@@ -265,7 +275,7 @@ def main(argv: list[str] | None = None) -> int:
     run_benchmark(
         source_xml=source, out_dir=args.out_dir, mnova_exe=args.mnova,
         n=args.n, fmin=args.fmin, fmax=args.fmax, calib_n=args.calib_n,
-        workers=args.workers, launcher=args.launcher,
+        workers=args.workers, launcher=args.launcher, baseline=args.baseline,
     )
     return 0
 
