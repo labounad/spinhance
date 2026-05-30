@@ -81,6 +81,7 @@ def run_mnova_batch(
     xml_dir: Path,
     txt_out_dir: Path,
     timeout_per_file: float = 30.0,
+    timeout: float | None = None,
 ) -> None:
     """Simulate every ``*.xml`` in ``xml_dir``, writing one ``.txt`` per file.
 
@@ -105,7 +106,7 @@ def run_mnova_batch(
     txt_out_dir.mkdir(parents=True, exist_ok=True)
 
     n_xml = len(list(xml_dir.glob("*.xml")))
-    total_timeout = max(120, n_xml * timeout_per_file)
+    total_timeout = timeout if timeout is not None else max(120, n_xml * timeout_per_file)
 
     xml_dir_abs = str(xml_dir.resolve())
     out_dir_abs = str(txt_out_dir.resolve())

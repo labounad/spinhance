@@ -20,8 +20,10 @@ from __future__ import annotations
 
 import argparse
 import shutil
+import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 import numpy as np
@@ -31,7 +33,7 @@ if __package__ in (None, "") and str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from simulation.mnova_runner import MNOVA_DEFAULT, run_mnova_batch
-from simulation.pyspin.simulator import simulate_spectrum
+from simulation.pyspin.composite import simulate_spectrum_composite
 from simulation.xml_io import patch_frequency, save_xml, xml_to_matrix
 
 
@@ -55,14 +57,15 @@ def _peak_agreement(p1: np.ndarray, p2: np.ndarray) -> float:
 
 
 def run_mnova_spectrum(xml_path: Path, mnova_exe: Path, field: float,
-                       points: int, ppm_from: float, ppm_to: float) -> np.ndarray:
-    """Patch XML to `field`, run MNova, return a normalized intensity array."""
+                       points: int, ppm_from: float, ppm_to: float,
+                       timeout: float = 120.0) -> np.ndarray:
+    """Patch XML to `field`, run MNova (strict timeout), return normalized array."""
     tmp = Path(tempfile.mkdtemp(prefix="pyspin_val_"))
     try:
         xdir = tmp / "xml"; odir = tmp / "txt"
         xdir.mkdir(); odir.mkdir()
         save_xml(patch_frequency(xml_path, field), xdir / "mol.xml")
-        run_mnova_batch(mnova_exe, xdir, odir)
+        run_mnova_batch(mnova_exe, xdir, odir, timeout=timeout)
         txts = list(odir.glob("*.txt"))
         if not txts:
             raise RuntimeError("MNova produced no output (is the scripts folder registered?)")
@@ -73,22 +76,42 @@ def run_mnova_spectrum(xml_path: Path, mnova_exe: Path, field: float,
 
 
 def compare(xml_path: Path, mnova_exe: Path, field: float | None = None,
-            show: bool = False, out: Path | None = None) -> dict:
+            show: bool = False, out: Path | None = None, timeout: float = 120.0,
+            pyspin_only: bool = False, mnova_only: bool = False) -> dict:
     meta = xml_to_matrix(xml_path)
     field = field or meta["frequency_mhz"] or 90.0
     points = meta["points"] or 16384
     ppm_from = meta["ppm_from"] if meta["ppm_from"] is not None else 0.0
     ppm_to = meta["ppm_to"] if meta["ppm_to"] is not None else 12.0
+    ppm = np.linspace(ppm_from, ppm_to, points)
 
     print(f"Comparing at {field} MHz ({points} pts, {ppm_from}-{ppm_to} ppm)")
 
-    # pyspin
-    ppm, py = simulate_spectrum(meta["shifts"], meta["couplings"], meta["degeneracy"],
-                                field, points=points, ppm_from=ppm_from, ppm_to=ppm_to)
-    py = _normalize(py, ppm_from, ppm_to)
+    # pyspin (composite engine) — timed
+    py = None
+    if not mnova_only:
+        t = time.perf_counter()
+        _, py = simulate_spectrum_composite(
+            meta["shifts"], meta["couplings"], meta["degeneracy"],
+            field, points=points, ppm_from=ppm_from, ppm_to=ppm_to)
+        py = _normalize(py, ppm_from, ppm_to)
+        print(f"  pyspin (composite): {time.perf_counter() - t:.3f}s")
+        if pyspin_only:
+            print("  (pyspin-only: skipping MNova)")
+            return {"field_mhz": field, "pyspin_seconds": True}
 
-    # MNova
-    mn = run_mnova_spectrum(xml_path, mnova_exe, field, points, ppm_from, ppm_to)
+    # MNova — timed, strict timeout
+    t = time.perf_counter()
+    try:
+        mn = run_mnova_spectrum(xml_path, mnova_exe, field, points, ppm_from, ppm_to,
+                                timeout=timeout)
+    except subprocess.TimeoutExpired:
+        print(f"  MNova: TIMED OUT after {timeout:.0f}s "
+              "(this spin system likely exceeds MNova's practical limit)")
+        return {"field_mhz": field, "mnova_timed_out": True}
+    print(f"  MNova: {time.perf_counter() - t:.3f}s")
+    if mnova_only:
+        return {"field_mhz": field, "mnova_seconds": True}
     if len(mn) != len(py):
         # resample MNova onto pyspin grid if point counts differ
         mn = np.interp(np.linspace(0, 1, len(py)), np.linspace(0, 1, len(mn)), mn)
@@ -139,8 +162,14 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--field", type=float, default=None, help="MHz (default: XML's)")
     p.add_argument("--show", action="store_true")
     p.add_argument("--out", type=Path, default=None)
+    p.add_argument("--timeout", type=float, default=120.0,
+                   help="Strict MNova timeout in seconds (default 120)")
+    p.add_argument("--pyspin-only", action="store_true",
+                   help="Time pyspin only; skip MNova")
+    p.add_argument("--mnova-only", action="store_true",
+                   help="Time MNova only; skip pyspin")
     args = p.parse_args(argv)
-    if not args.mnova.exists():
+    if not args.pyspin_only and not args.mnova.exists():
         print(f"ERROR: MNova not found at {args.mnova}", file=sys.stderr)
         return 2
     if not args.xml.exists():
@@ -150,7 +179,9 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(f"ERROR: XML not found: {args.xml}", file=sys.stderr)
             return 2
-    compare(args.xml, args.mnova, field=args.field, show=args.show, out=args.out)
+    compare(args.xml, args.mnova, field=args.field, show=args.show, out=args.out,
+            timeout=args.timeout, pyspin_only=args.pyspin_only,
+            mnova_only=args.mnova_only)
     return 0
 
 
