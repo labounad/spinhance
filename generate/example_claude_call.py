@@ -3,7 +3,7 @@ import boto3
 
 PROFILE = "hack-scripps"
 REGION = "us-west-2"
-MODEL = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+MODEL = "anthropic.claude-sonnet-4-20250514-v1:0"
 
 PROMPT = """\
 List exactly 10 SMILES strings for small organic molecules that each have

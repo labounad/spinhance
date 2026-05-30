@@ -156,8 +156,11 @@ def run_benchmark(
 
     freqs = geometric_frequencies(fmin, fmax, n)
     print(f"Frequencies: {n} points, geometric in [{fmin}, {fmax}] MHz")
-    print(f"  first gaps: {freqs[1]-freqs[0]:.2f}, {freqs[2]-freqs[1]:.2f} MHz; "
-          f"last gap: {freqs[-1]-freqs[-2]:.2f} MHz")
+    if n >= 3:
+        print(f"  first gaps: {freqs[1]-freqs[0]:.2f}, {freqs[2]-freqs[1]:.2f} MHz; "
+              f"last gap: {freqs[-1]-freqs[-2]:.2f} MHz")
+    else:
+        print(f"  values: {', '.join(f'{f:.1f}' for f in freqs)} MHz")
 
     # Patch the source XML to every frequency.
     xml_dir = out_dir / "freq_xmls"
