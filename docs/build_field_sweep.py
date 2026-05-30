@@ -48,6 +48,41 @@ SCAN_POINTS = 16384      # resolution of the full-range scan that finds the wind
 
 SPIN = REPO / "mol_to_matrix" / "data" / "spin_systems.json"
 OUT = REPO / "docs" / "data" / "field_sweep.json"
+# precomputed 3D coordinates (force-field embedded) for the 3D structure view;
+# prefer the working copy, fall back to the tracked backup.
+XYZ_CANDIDATES = [REPO / "generate" / "data" / "8spin.xyz", REPO / "data" / "8spin.xyz"]
+
+
+def build_xyz_index():
+    """Index 8spin.xyz by chembl_id and smiles -> cleaned XYZ block (element+coords).
+
+    The source file's H rows carry trailing spin-group labels ("A N"); we keep only
+    the element symbol and x/y/z so 3Dmol.js parses it cleanly (it infers bonds).
+    """
+    path = next((p for p in XYZ_CANDIDATES if p.exists()), None)
+    by_chembl, by_smiles = {}, {}
+    if path is None:
+        print("WARNING: 8spin.xyz not found; 3D structures will be omitted")
+        return by_chembl, by_smiles
+    lines = path.read_text().splitlines()
+    i = 0
+    while i < len(lines):
+        if not lines[i].strip():
+            i += 1; continue
+        natoms = int(lines[i].strip())
+        meta = json.loads(lines[i + 1])
+        clean = []
+        for ln in lines[i + 2: i + 2 + natoms]:
+            p = ln.split()
+            clean.append(f"{p[0]} {p[1]} {p[2]} {p[3]}")
+        xyz = f"{natoms}\n{meta.get('chembl_id', '')}\n" + "\n".join(clean)
+        if meta.get("chembl_id"):
+            by_chembl[meta["chembl_id"]] = xyz
+        if meta.get("smiles"):
+            by_smiles[meta["smiles"]] = xyz
+        i += 2 + natoms
+    print(f"indexed {len(by_chembl)} XYZ structures from {path.name}")
+    return by_chembl, by_smiles
 
 
 def geometric_fields(lo, hi, n):
@@ -192,11 +227,16 @@ def main():
     chosen = scored[:N_MOLECULES]
     print(f"{len(records)} records -> {len(scored)} eligible -> {len(chosen)} chosen")
 
+    xyz_chembl, xyz_smiles = build_xyz_index()
     fields = geometric_fields(LOW_MHZ, HIGH_MHZ, N_FIELDS)
     molecules = []
     max_sticks = 0
+    n_xyz = 0
     for rank, (score, rec, shifts, couplings, deg) in enumerate(chosen):
         win_lo, win_hi = signal_window(shifts, couplings, deg)
+        xyz = xyz_chembl.get(rec.get("chembl_id")) or xyz_smiles.get(rec.get("smiles"))
+        if xyz:
+            n_xyz += 1
         frames = []
         for f in fields:
             mc, ma = molecule_sticks(shifts, couplings, deg, f, win_lo, win_hi)
@@ -220,11 +260,12 @@ def main():
             "couplings": [[round(float(couplings[i][j]), 1) for j in range(len(shifts))]
                           for i in range(len(shifts))],
             "win": [win_lo, win_hi],     # ppm display window (data-driven)
+            "xyz": xyz,                  # precomputed 3D coords (XYZ block) or None
             "frames": frames,            # per field: {c: centers ppm, a: amps} (base64)
         })
         print(f"  [{rank+1:2d}] {rec.get('chembl_id'):12s} score={score:6.1f} "
               f"win=[{win_lo:.2f},{win_hi:.2f}] smiles={rec.get('smiles')[:34]}")
-    print(f"max sticks/frame = {max_sticks}")
+    print(f"max sticks/frame = {max_sticks}; molecules with 3D coords = {n_xyz}/{len(chosen)}")
 
     payload = {
         "meta": {

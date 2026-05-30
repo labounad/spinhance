@@ -94,7 +94,7 @@
       `<span class="copied" id="copiedMsg" style="opacity:0">✓ copied</span>`;
     buildMatrix();
     // hand the molecule to the 3D viewer module
-    window.__heroMol = { smiles: mol.smiles, id: mol.chembl_id || mol.id };
+    window.__heroMol = { smiles: mol.smiles, id: mol.chembl_id || mol.id, xyz: mol.xyz };
     window.dispatchEvent(new CustomEvent("spinhance:molecule"));
   }
 
