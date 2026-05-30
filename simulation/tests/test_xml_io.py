@@ -22,6 +22,7 @@ from simulation.xml_io import (  # noqa: E402
     save_xml,
     patch_frequency,
     generate_field_pair,
+    xml_to_matrix,
     _labels,
     LOW_FIELD_MHZ,
     HIGH_FIELD_MHZ,
@@ -73,6 +74,24 @@ def test_jcoupling_symmetry():
     j_ba = root.find(".//group[@name='B']").find("jCoupling[@name='A']")
     assert abs(float(j_ab.text) - 7.2) < 1e-5
     assert abs(float(j_ba.text) - 7.2) < 1e-5
+
+
+def test_xml_to_matrix_roundtrip(tmp_path):
+    shifts = [1.0, 2.5, 7.2]
+    couplings = [[0.0, 7.1, 0.0], [7.1, 0.0, -12.0], [0.0, -12.0, 0.0]]
+    degeneracy = [3, 2, 1]
+    tree = matrix_to_xml(shifts, couplings, degeneracy, frequency_mhz=90.0)
+    out = tmp_path / "rt.xml"
+    save_xml(tree, out)
+
+    m = xml_to_matrix(out)
+    assert m["shifts"] == pytest.approx(shifts)
+    assert m["degeneracy"] == degeneracy
+    assert m["frequency_mhz"] == pytest.approx(90.0)
+    assert m["points"] == 16384
+    for i in range(3):
+        for j in range(3):
+            assert m["couplings"][i][j] == pytest.approx(couplings[i][j])
 
 
 def test_save_and_reload(tmp_path):
