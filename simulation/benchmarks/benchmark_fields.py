@@ -126,6 +126,55 @@ def _time_batch(mnova_exe: Path, xml_paths: list[Path], work_dir: Path,
     return {"dt": dt, "n": n, "n_out": n_out, "mtime_span": mtime_span}
 
 
+def run_per_field_benchmark(
+    source_xml: Path,
+    out_dir: Path,
+    mnova_exe: Path = MNOVA_DEFAULT,
+    fields_mhz: list[float] = (90.0, 600.0),
+    reps: int = 50,
+) -> dict:
+    """Time each field separately by simulating it ``reps`` times.
+
+    Isolates the per-field compute cost (e.g. 90 MHz ×reps, then 600 MHz ×reps),
+    which the geometric sweep blends together. Per-sim cost uses the output
+    mtime span (``span / (reps - 1)``) so it excludes one-time MNova startup.
+    """
+    source_xml = Path(source_xml)
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    per_field = {}
+    print(f"Per-field benchmark: {reps} reps each at {fields_mhz} MHz\n")
+    for field in fields_mhz:
+        xmls = []
+        fdir = out_dir / f"reps_{field:.0f}MHz"
+        fdir.mkdir(parents=True, exist_ok=True)
+        for i in range(reps):
+            p = fdir / f"{source_xml.stem}_{i:03d}.xml"
+            save_xml(patch_frequency(source_xml, field), p)
+            xmls.append(p)
+        res = _time_batch(mnova_exe, xmls, out_dir, f"{field:.0f}MHz")
+        # mtime span excludes startup; divide by (reps-1) gaps for per-sim compute.
+        per_sim = res["mtime_span"] / (reps - 1) if reps > 1 else float("nan")
+        per_field[field] = {
+            "reps": reps,
+            "wall_s": round(res["dt"], 3),
+            "mtime_span_s": round(res["mtime_span"], 3),
+            "per_sim_compute_s": round(per_sim, 4),
+            "complete": res["n_out"] == res["n"],
+        }
+
+    print("\n============ PER-FIELD BENCHMARK ============")
+    for field, r in per_field.items():
+        print(f"  {field:>7.0f} MHz: per-sim {r['per_sim_compute_s']}s "
+              f"(span {r['mtime_span_s']}s over {r['reps']} reps, "
+              f"complete={r['complete']})")
+    pair_cost = sum(r["per_sim_compute_s"] for r in per_field.values())
+    print(f"  --> per-molecule (one sim per field): {round(pair_cost, 4)} s")
+    print("=============================================")
+    return per_field
+
+
 def run_benchmark(
     source_xml: Path,
     out_dir: Path,
@@ -266,6 +315,13 @@ def main(argv: list[str] | None = None) -> int:
                    help="Parallel launch method on macOS (default: open)")
     p.add_argument("--baseline", action="store_true",
                    help="Also run a 1-worker full pass to measure TRUE speedup")
+    p.add_argument("--per-field", action="store_true",
+                   help="Per-field mode: time each --fields value separately, "
+                        "--reps times each (isolates per-field compute cost)")
+    p.add_argument("--fields", type=float, nargs="+", default=[90.0, 600.0],
+                   help="Fields (MHz) for --per-field mode (default: 90 600)")
+    p.add_argument("--reps", type=int, default=50,
+                   help="Reps per field in --per-field mode (default: 50)")
     args = p.parse_args(argv)
 
     if not args.mnova.exists():
@@ -283,6 +339,13 @@ def main(argv: list[str] | None = None) -> int:
             print(f"ERROR: source XML not found: {args.source_xml}\n"
                   f"  (also tried {candidate})", file=sys.stderr)
             return 2
+
+    if args.per_field:
+        run_per_field_benchmark(
+            source_xml=source, out_dir=args.out_dir, mnova_exe=args.mnova,
+            fields_mhz=args.fields, reps=args.reps,
+        )
+        return 0
 
     run_benchmark(
         source_xml=source, out_dir=args.out_dir, mnova_exe=args.mnova,
