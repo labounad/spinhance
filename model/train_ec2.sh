@@ -44,7 +44,27 @@ echo "  instance : $INSTANCE_TYPE"
 echo "  args     : $TRAIN_ARGS"
 echo ""
 
+# ── 0. Reuse existing instance if available ──────────────────────────────────
+if [ -f /tmp/spinhance_instance_id ]; then
+  EXISTING=$(cat /tmp/spinhance_instance_id)
+  STATE=$(aws ec2 describe-instances --profile "$PROFILE" --region "$REGION" \
+    --instance-ids "$EXISTING" \
+    --query 'Reservations[0].Instances[0].State.Name' --output text 2>/dev/null || echo "gone")
+  if [ "$STATE" = "running" ]; then
+    echo "  reusing existing instance $EXISTING"
+    INSTANCE="$EXISTING"
+    REUSING=true
+  else
+    echo "  previous instance $EXISTING is $STATE — launching new one"
+    INSTANCE=""
+  fi
+fi
+
 # ── 1. Find latest Deep Learning AMI ─────────────────────────────────────────
+if [ -n "${INSTANCE:-}" ]; then
+  echo "[1/5] Skipping AMI lookup (reusing instance)"
+  echo "[2/5] Skipping launch (reusing instance)"
+else
 echo "[1/5] Finding latest Deep Learning AMI..."
 AMI=$(aws ec2 describe-images \
   --profile "$PROFILE" --region "$REGION" \
@@ -103,6 +123,7 @@ aws ec2 wait instance-running \
   --instance-ids "$INSTANCE"
 echo "  running — waiting 60s for SSH daemon..."
 sleep 60
+fi  # end of new-instance block
 
 # ── 3. SSH helpers (config file avoids ProxyCommand word-splitting) ───────────
 rm -f "$EICE_KEY" "$EICE_KEY.pub"
@@ -159,34 +180,39 @@ _sync_code() {
 }
 
 # ── 4. Sync code + download data ──────────────────────────────────────────────
-echo "[3/5] Syncing code..."
-_sync_code
+if [ "${REUSING:-false}" = "true" ]; then
+  echo "[3/5] Skipping code sync (reusing instance)"
+  echo "[4/5] Skipping data download (reusing instance)"
+else
+  echo "[3/5] Syncing code..."
+  _sync_code
 
-echo "[4/5] Downloading data from S3..."
-_ssh "
-  set -e
-  mkdir -p $WORKSPACE/mol_to_spin_system/data $WORKSPACE/simulation/data/spectra/90MHz
+  echo "[4/5] Downloading data from S3..."
+  _ssh "
+    set -e
+    mkdir -p $WORKSPACE/mol_to_spin_system/data $WORKSPACE/simulation/data/spectra/90MHz
 
-  echo '  downloading spin_systems_60k.json...'
-  aws s3 cp s3://$BUCKET/spin_systems_60k.json \
-    $WORKSPACE/mol_to_spin_system/data/spin_systems_60k.json
+    echo '  downloading spin_systems_60k.json...'
+    aws s3 cp s3://$BUCKET/spin_systems_60k.json \
+      $WORKSPACE/mol_to_spin_system/data/spin_systems_60k.json
 
-  echo '  downloading 90MHz spectra tar...'
-  aws s3 cp s3://$BUCKET/spectra/90MHz/mol_all.tar.gz \
-    $WORKSPACE/simulation/data/spectra/90MHz/mol_all.tar.gz
+    echo '  downloading 90MHz spectra tar...'
+    aws s3 cp s3://$BUCKET/spectra/90MHz/mol_all.tar.gz \
+      $WORKSPACE/simulation/data/spectra/90MHz/mol_all.tar.gz
 
-  echo '  extracting spectra...'
-  tar xzf $WORKSPACE/simulation/data/spectra/90MHz/mol_all.tar.gz \
-    -C $WORKSPACE/simulation/data/spectra/90MHz/
-  rm $WORKSPACE/simulation/data/spectra/90MHz/mol_all.tar.gz
-  echo '  done.'
-"
+    echo '  extracting spectra...'
+    tar xzf $WORKSPACE/simulation/data/spectra/90MHz/mol_all.tar.gz \
+      -C $WORKSPACE/simulation/data/spectra/90MHz/
+    rm $WORKSPACE/simulation/data/spectra/90MHz/mol_all.tar.gz
+    echo '  done.'
+  "
+fi
 
 # ── 5. Launch training ────────────────────────────────────────────────────────
 echo "[5/5] Starting training..."
 _ssh "
   cd $WORKSPACE
-  nohup bash -c 'PYTHONPATH=. conda run -n pytorch python -m model.run_experiment \
+  nohup bash -c 'PYTHONPATH=. /opt/conda/bin/conda run -n pytorch python -m model.run_experiment \
     --json mol_to_spin_system/data/spin_systems_60k.json \
     --spectra simulation/data/spectra \
     $TRAIN_ARGS' \
@@ -199,26 +225,16 @@ _ssh "
 cat <<EOF
 
 === Training launched ===
-Instance   : $INSTANCE  (saved to /tmp/spinhance_instance_id)
-SSH config : $SSH_CFG
-Checkpoint : $WORKSPACE/model/checkpoints/spinhance.pt
-Logs       : /tmp/train.log on the instance
+Instance : $INSTANCE
+Logs     : /tmp/train.log
+Checkpoint: $WORKSPACE/model/checkpoints/spinhance.pt
 
-To tail logs (push key first, valid 60s):
+To get a shell:
   aws ec2-instance-connect send-ssh-public-key \\
     --profile $PROFILE --region $REGION \\
     --instance-id $INSTANCE --instance-os-user ec2-user \\
-    --ssh-public-key file://$EICE_KEY.pub && \\
-  ssh -F $SSH_CFG $INSTANCE 'tail -f /tmp/train.log'
-
-To copy checkpoint when done:
-  aws ec2-instance-connect send-ssh-public-key \\
-    --profile $PROFILE --region $REGION \\
-    --instance-id $INSTANCE --instance-os-user ec2-user \\
-    --ssh-public-key file://$EICE_KEY.pub && \\
-  scp -F $SSH_CFG \\
-    $INSTANCE:$WORKSPACE/model/checkpoints/spinhance.pt \\
-    model/checkpoints/spinhance_ec2.pt
+    --ssh-public-key file://$EICE_KEY.pub
+  ssh -F $SSH_CFG $INSTANCE
 
 To terminate:
   aws ec2 terminate-instances \\
