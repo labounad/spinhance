@@ -51,7 +51,7 @@ def test_long_range_allylic():
     assert long_range_couplings(make_test_mol_3d("CCC")) == {}                     # propane
 
 
-def test_all_couplings_no_overlap_and_threshold():
+def test_all_couplings_no_overlap():
     mol = make_test_mol_3d("C=CC")
     merged = all_couplings(mol)
     individual = sum(
@@ -64,8 +64,7 @@ def test_all_couplings_no_overlap_and_threshold():
             long_range_couplings,
         )
     )
-    assert len(merged) == individual  # no key collisions
-    assert all(abs(v) >= 0.3 for v in merged.values())
+    assert len(merged) == individual  # no key collisions, nothing dropped
 
 
 def test_proton_groups():

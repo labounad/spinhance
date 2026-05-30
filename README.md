@@ -73,7 +73,7 @@ This is equivalently an **undirected labeled graph**: nodes carry (δ, n), edges
 - [x] Assign ¹H chemical shifts via a pre-trained predictor (NMRShiftDB HOSE-code lookup) (`shifts.py`)
 - [x] Compute dihedral angles between each proton pair for Karplus-based ³*J* estimation (`vicinal.py`)
 - [x] Apply literature tables for geminal (²*J*), vinyl, aryl, benzylic, allylic, long-range (⁴*J*) couplings (`geminal.py`, `olefinic.py`, `aromatic.py`, `long_range.py`)
-- [x] Zero out negligible couplings (|*J*| < 0.3 Hz threshold) (`coupling.py`)
+- [x] Merge all coupling types into one J dict, no pruning (`coupling.py`)
 - [x] Assemble symmetric 8×8 *J*-matrix + δ-diagonal + degeneracy vector (`matrix.py`, `groups.py`)
 - [x] Output: `data/processed/matrices/` — one `.npy` (packed 8×9) + `.json` per molecule (`pipeline.py`)
 

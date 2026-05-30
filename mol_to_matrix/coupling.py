@@ -8,8 +8,6 @@ from mol_to_matrix.long_range import long_range_couplings
 from mol_to_matrix.olefinic import olefinic_couplings
 from mol_to_matrix.vicinal import vicinal_couplings
 
-J_THRESHOLD = 0.3  # Hz; |J| below this is treated as zero
-
 _ESTIMATORS = (
     geminal_couplings,    # 2J, same carbon
     vicinal_couplings,    # 3J, H-C-C-H single bond
@@ -19,20 +17,17 @@ _ESTIMATORS = (
 )
 
 
-def all_couplings(
-    mol: Chem.Mol,
-    threshold: float = J_THRESHOLD,
-) -> dict[tuple[int, int], float]:
+def all_couplings(mol: Chem.Mol) -> dict[tuple[int, int], float]:
     """Merge every H-H coupling estimator into one {(atom_i, atom_j): J_Hz}.
 
     Each estimator covers a distinct topological relationship, so keys do not
-    overlap. Couplings with |J| < threshold are dropped.
+    overlap.
     """
     merged: dict[tuple[int, int], float] = {}
     for estimator in _ESTIMATORS:
         for pair, jval in estimator(mol).items():
             merged[pair] = jval
-    return {pair: jv for pair, jv in merged.items() if abs(jv) >= threshold}
+    return merged
 
 
 if __name__ == "__main__":

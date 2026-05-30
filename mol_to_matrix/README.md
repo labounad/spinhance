@@ -35,7 +35,7 @@ python -m mol_to_matrix.pipeline input.csv out_dir --smiles-col smiles --id-col 
 | `olefinic.py` | ³J across C=C (cis/trans from geometry) |
 | `aromatic.py` | ortho/meta/para ring couplings |
 | `long_range.py` | ⁴J allylic |
-| `coupling.py` | merges all coupling estimators, prunes \|J\| < 0.3 Hz |
+| `coupling.py` | merges all coupling estimators into one J dict |
 | `groups.py` | proton equivalence → spin groups + degeneracy |
 | `matrix.py` | assembles the SpinSystem matrix; save/pack |
 | `pipeline.py` | SMILES → matrix; batch CSV runner (CLI) |
