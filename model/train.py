@@ -1,13 +1,17 @@
 """
 model.train
-==============
-Training loop for Task 4.  Changes from the original:
-  - DiagnosticsWriter integration (run_dir, status.json, metrics.jsonl, events.jsonl)
-  - Step-level metric logging (every log_every_steps optimizer steps)
-  - Canonical run directory: model/runs/<run_id>/checkpoints/
-  - ProbeEvaluator + failure-case tables every probe_every_epochs
-  - Hungarian-matched metrics logged at validation
-  - train_epoch now returns (metrics_dict, global_step)
+===========
+Infrastructure and orchestration for Task-4 training.
+
+Stage logic lives in dedicated modules:
+  model.stage1  matrix-only training + validation (stage 1)
+  model.stage2  matrix + spectral training          (stage 2)
+
+This file provides:
+  TrainConfig        hyper-parameter dataclass
+  build_datasets     record -> Dataset/DataLoader construction
+  fit                main training loop (calls stage1 / stage2)
+  _Prefetcher        CUDA-stream data prefetcher passed to stage functions
 """
 
 from __future__ import annotations
@@ -28,14 +32,12 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
-from model import diff_renderer_torch as renderer
+import model.stage1 as stage1
+import model.stage2 as stage2
 from model.dataset import (SpectrumMatrixDataset, BucketByDegeneracySampler,
-                              collate_fn, worker_init_fn)
+                            collate_fn, worker_init_fn)
 from model.diagnostics import DiagnosticsWriter
-from model.losses import matrix_loss, spectral_loss
-from model.metrics import compute_metrics
 from model.model import SpinHanceModel
-from model.schedules import curriculum_weights, lr_factor
 from model.targets import DegeneracyVocab, Standardizer
 
 
@@ -72,9 +74,9 @@ class TrainConfig:
     val_every: int = 1
     # ── Diagnostics ────────────────────────────────────────────────────────────
     diagnostics_enabled: bool = True
-    run_dir: str = ""           # auto-generated if empty
-    run_name: str = ""          # suffix for auto-generated run_id
-    log_every_steps: int = 25   # step-level metric logging frequency
+    run_dir: str = ""
+    run_name: str = ""
+    log_every_steps: int = 25
     probe_every_epochs: int = 5
     probe_count: int = 16
     save_probe_plots: bool = True
@@ -92,26 +94,11 @@ def _make_run_dir(cfg: TrainConfig) -> Path:
         {k: v for k, v in vars(cfg).items() if k not in ("run_dir", "run_name")},
         sort_keys=True, default=str,
     ).encode()
-    h      = hashlib.sha256(cfg_s).hexdigest()[:6]
+    h = hashlib.sha256(cfg_s).hexdigest()[:6]
     return Path(__file__).parent / "runs" / f"{ts}_{suffix}_{h}"
 
 
-# ── Differentiable decode ──────────────────────────────────────────────────────
-
-def decode_physical(pred, std: Standardizer):
-    shifts = pred["shifts"] * std.shift_std + std.shift_mean
-    jmag   = pred["j_mag"] * std.j_std + std.j_mean
-    gate   = torch.sigmoid(pred["j_presence"])
-    jmag   = jmag * gate
-    B, G   = shifts.shape
-    iu     = torch.triu_indices(G, G, 1, device=shifts.device)
-    C      = torch.zeros(B, G, G, device=shifts.device, dtype=shifts.dtype)
-    C[:, iu[0], iu[1]] = jmag
-    C[:, iu[1], iu[0]] = jmag
-    return {"shifts": shifts, "couplings": C}
-
-
-# ── Loaders ────────────────────────────────────────────────────────────────────
+# ── Datasets ───────────────────────────────────────────────────────────────────
 
 def build_datasets(records, assignment, cfg: TrainConfig):
     by_fold = {"train": [], "val": [], "test": []}
@@ -128,160 +115,12 @@ def build_datasets(records, assignment, cfg: TrainConfig):
                 test=mk(by_fold["test"], False)), std, vocab
 
 
-# ── Spectral term ──────────────────────────────────────────────────────────────
-
-# K = total spectral lines per molecule across all spin-manifold combos.
-# With no connected-component splitting, K grows exponentially with group count and
-# degeneracy. For K > 1M, keeping k samples alive in the autograd graph requires
-# ~28 * K * k bytes for broadening intermediates alone, which quickly exceeds VRAM.
-# Skip the spectral loss for those batches; matrix loss still supervises them.
-_MAX_SPEC_K  = 1_000_000
-_SPEC_CHUNK  = 1   # one sample at a time to keep peak (1, K) tensors bounded
-
-
-def _spectral_term(pred_phys, batch, cfg, device):
-    deg = batch["shared_degeneracy"]
-    if deg is None:
-        z = torch.zeros((), device=device)
-        return z, z
-    B   = batch["spectrum"].shape[0]
-    k   = max(1, int(round(cfg.render_subset_frac * B)))
-    sel = torch.randperm(B, device=device)[:k]
-    deg_list = [int(x) for x in deg.tolist()]
-    struct   = renderer._structure(deg_list, device, pred_phys["shifts"].dtype)
-
-    # Count spectral lines from the numpy struct (CPU, free) before touching GPU.
-    total_k = sum(
-        Fp.shape[0] * Fp.shape[1]
-        for _, _, sb in struct["combos"]
-        for _, (_, Fp) in sb["fplus"].items()
-    )
-    if total_k > _MAX_SPEC_K:
-        z = torch.zeros((), device=device)
-        return z, z
-
-    chunk_losses, chunk_w1s = [], []
-    for start in range(0, k, _SPEC_CHUNK):
-        idx = sel[start : start + _SPEC_CHUNK]
-        sub = {"shifts":    pred_phys["shifts"][idx].float(),
-               "couplings": pred_phys["couplings"][idx].float()}
-        ref = batch["spectrum_ref"][idx]
-        with torch.autocast(device_type="cuda", enabled=False):
-            loss, w1 = spectral_loss(
-                sub, ref, batch["degeneracy"][idx], cfg.field_low, renderer, struct=struct,
-                points=cfg.points, ppm_from=cfg.ppm_from, ppm_to=cfg.ppm_to,
-                linewidth_hz=cfg.linewidth_hz, eigh_eps=cfg.eigh_eps)
-        chunk_losses.append(loss)
-        chunk_w1s.append(w1)
-
-    return torch.stack(chunk_losses).mean(), torch.cat(chunk_w1s).mean()
-
-
-# ── Epoch loops ────────────────────────────────────────────────────────────────
-
-def train_epoch(
-    model, loader, opt, sched, scaler, cfg, std, epoch, device,
-    amp_ctx, balance=None, diagnostics=None, global_step_start: int = 0,
-) -> tuple[dict, int]:
-    """Returns (epoch_metrics, global_step_after_epoch)."""
-    model.train()
-    bal    = balance or {}
-    w_mat, w_spec = curriculum_weights(epoch, cfg.stage1_epochs, cfg.ramp_epochs,
-                                       cfg.spectral_max, cfg.matrix_anchor)
-    stage   = 1 if epoch < cfg.stage1_epochs else 2
-    running = {}
-    step    = global_step_start
-
-    for batch_idx, batch in enumerate(_Prefetcher(loader, device)):
-        t0 = time.time()
-        opt.zero_grad(set_to_none=True)
-        with amp_ctx():
-            pred             = model(batch["spectrum"])
-            mloss, comps     = matrix_loss(pred, batch, weights=cfg.loss_weights,
-                                           deg_class_weight=bal.get("deg_weights"),
-                                           presence_pos_weight=bal.get("presence_pos_weight"))
-            total = w_mat * mloss
-            if w_spec > 0:
-                pred_phys    = decode_physical(pred, std)
-                sloss, w1    = _spectral_term(pred_phys, batch, cfg, device)
-                total        = total + w_spec * sloss
-                comps["spectral_w1"] = w1.detach()
-
-        if scaler is not None:
-            scaler.scale(total).backward()
-            scaler.unscale_(opt)
-            gnorm = float(torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.grad_clip))
-            scaler.step(opt)
-            scaler.update()
-            amp_scale = float(scaler.get_scale())
-        else:
-            total.backward()
-            gnorm = float(torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.grad_clip))
-            opt.step()
-            amp_scale = 1.0
-
-        sched.step()
-        step_secs = time.time() - t0
-
-        for k, v in comps.items():
-            running[k] = running.get(k, 0.0) + float(v)
-        running["total"] = running.get("total", 0.0) + float(total.detach())
-
-        if diagnostics is not None and step % cfg.log_every_steps == 0:
-            step_metrics: dict = {
-                "loss_total":    float(total.detach()),
-                "loss_shift":    float(comps.get("shift",      0.0)),
-                "loss_jmag":     float(comps.get("jmag",       0.0)),
-                "loss_presence": float(comps.get("presence",   0.0)),
-                "loss_deg":      float(comps.get("deg",        0.0)),
-                "spectral_w1":   float(comps.get("spectral_w1", 0.0)),
-                "lr":            float(sched.get_last_lr()[0]),
-                "w_mat":         float(w_mat),
-                "w_spec":        float(w_spec),
-                "grad_norm":     gnorm,
-                "seconds_per_step": step_secs,
-                "amp_scale":     amp_scale,
-            }
-            if torch.cuda.is_available():
-                step_metrics["cuda_allocated_gb"] = torch.cuda.memory_allocated(device) / 1e9
-                step_metrics["cuda_reserved_gb"]  = torch.cuda.memory_reserved(device)  / 1e9
-            diagnostics.log_metrics(
-                split="train_step", epoch=epoch, step=step,
-                metrics=step_metrics, extra={"stage": stage, "batch_idx": batch_idx},
-            )
-
-        step += 1
-
-    n = max(1, len(loader))
-    epoch_metrics = {k: v / n for k, v in running.items()} | {"w_mat": w_mat, "w_spec": w_spec}
-    return epoch_metrics, step
-
-
-@torch.no_grad()
-def evaluate(model, loader, cfg, std, vocab, device, amp_ctx, balance=None):
-    model.eval()
-    bal = balance or {}
-    agg, nb = {}, 0
-    for batch in _Prefetcher(loader, device):
-        with amp_ctx():
-            pred  = model(batch["spectrum"])
-            mloss, _ = matrix_loss(pred, batch, weights=cfg.loss_weights,
-                                   deg_class_weight=bal.get("deg_weights"),
-                                   presence_pos_weight=bal.get("presence_pos_weight"))
-        pred_np = {k: pred[k].float().cpu().numpy() for k in pred}
-        tgt_np  = {k: batch[k].cpu().numpy()
-                   for k in ("shifts", "j_mag", "j_presence", "deg_class")}
-        met     = compute_metrics(pred_np, tgt_np, std, vocab)
-        met["matrix_loss"] = float(mloss)
-        for k, v in met.items():
-            agg[k] = agg.get(k, 0.0) + v
-        nb += 1
-    return {k: v / max(1, nb) for k, v in agg.items()}
-
-
 # ── CUDA-stream prefetcher ─────────────────────────────────────────────────────
 
 class _Prefetcher:
+    """Wraps a DataLoader; moves each batch to device on a side stream so the
+    next batch is ready before the training step finishes."""
+
     def __init__(self, loader, device):
         self._n      = len(loader)
         self._loader = iter(loader)
@@ -339,7 +178,7 @@ def _ckpt_worker(q: "_queue.Queue"):
         _do_checkpoint(*item)
 
 
-# ── Fit ────────────────────────────────────────────────────────────────────────
+# ── AMP context factory ────────────────────────────────────────────────────────
 
 def _amp_context(cfg, device):
     if cfg.amp_dtype == "none" or device == "cpu":
@@ -349,6 +188,8 @@ def _amp_context(cfg, device):
     scaler = torch.cuda.amp.GradScaler() if dt == torch.float16 else None
     return (lambda: torch.autocast(device_type="cuda", dtype=dt)), scaler
 
+
+# ── Fit ────────────────────────────────────────────────────────────────────────
 
 def fit(records, assignment, cfg: TrainConfig, model=None):
     torch.manual_seed(cfg.seed)
@@ -386,7 +227,7 @@ def fit(records, assignment, cfg: TrainConfig, model=None):
     val_recs   = [r for r in records if assignment.get(r["mol_id"]) == "val"]
     cb = class_balance(train_recs, vocab)
     balance = {
-        "deg_weights":        torch.tensor(cb["deg_weights"],        device=device),
+        "deg_weights":         torch.tensor(cb["deg_weights"],         device=device),
         "presence_pos_weight": torch.tensor(cb["presence_pos_weight"], device=device),
     }
     print(f"class balance: deg_counts={cb['deg_counts'].tolist()} "
@@ -410,6 +251,7 @@ def fit(records, assignment, cfg: TrainConfig, model=None):
     steps_per  = max(1, len(plain))
     total_steps = steps_per * cfg.epochs
     warmup     = int(cfg.warmup_frac * total_steps)
+    from model.schedules import lr_factor
     sched      = torch.optim.lr_scheduler.LambdaLR(opt, lambda s: lr_factor(s, warmup, total_steps))
     amp_ctx, scaler = _amp_context(cfg, device)
 
@@ -426,31 +268,45 @@ def fit(records, assignment, cfg: TrainConfig, model=None):
     last_stage  = 1
 
     for epoch in range(cfg.epochs):
-        stage = 1 if epoch < cfg.stage1_epochs else 2
+        cur_stage = 1 if epoch < cfg.stage1_epochs else 2
 
-        if stage != last_stage:
-            diag.log_event("stage_change", {"from_stage": last_stage, "to_stage": stage, "epoch": epoch})
-            bad       = 0
-            last_stage = stage
+        if cur_stage != last_stage:
+            diag.log_event("stage_change",
+                           {"from_stage": last_stage, "to_stage": cur_stage, "epoch": epoch})
+            bad        = 0
+            last_stage = cur_stage
 
-        loader = plain if epoch < cfg.stage1_epochs else bucketed
-        tr, global_step = train_epoch(
-            model, loader, opt, sched, scaler, cfg, std, epoch, device,
-            amp_ctx, balance=balance,
-            diagnostics=diag, global_step_start=global_step,
-        )
+        # ── Dispatch to the correct stage module ───────────────────────────────
+        if cur_stage == 1:
+            tr, global_step = stage1.train_epoch(
+                model, _Prefetcher(plain, device),
+                opt, sched, scaler, cfg, std, epoch, device,
+                amp_ctx, balance=balance,
+                diagnostics=diag, global_step_start=global_step,
+            )
+        else:
+            tr, global_step = stage2.train_epoch(
+                model, _Prefetcher(bucketed, device),
+                opt, sched, scaler, cfg, std, epoch, device,
+                amp_ctx, balance=balance,
+                diagnostics=diag, global_step_start=global_step,
+            )
 
         tr_log = {k: v for k, v in tr.items()
                   if k not in ("w_mat", "w_spec") and isinstance(v, (int, float))}
         diag.log_metrics(split="train", epoch=epoch, step=global_step,
-                         metrics=tr_log, extra={"stage": stage, "w_mat": tr["w_mat"],
+                         metrics=tr_log, extra={"stage": cur_stage,
+                                                "w_mat": tr["w_mat"],
                                                 "w_spec": tr["w_spec"]})
 
         do_val = (epoch % cfg.val_every == 0) or (epoch == cfg.epochs - 1)
         if do_val:
-            va = evaluate(model, val_dl, cfg, std, vocab, device, amp_ctx, balance=balance)
+            va = stage1.evaluate(
+                model, _Prefetcher(val_dl, device),
+                cfg, std, vocab, device, amp_ctx, balance=balance,
+            )
             diag.log_metrics(split="val", epoch=epoch, step=global_step, metrics=va,
-                             extra={"stage": stage})
+                             extra={"stage": cur_stage})
 
         score            = (va.get("shift_mae_ppm", float("inf")) +
                             va.get("j_mae_hz",      float("inf")) / 10.0)
@@ -467,23 +323,22 @@ def fit(records, assignment, cfg: TrainConfig, model=None):
                 print(f"early stop at epoch {epoch}")
                 break
 
-        # Status (written atomically — safe for concurrent dashboard reads)
         diag.update_status({
-            "state":             "running",
-            "run_id":            run_id,
-            "epoch":             epoch,
-            "epochs":            cfg.epochs,
-            "stage":             stage,
-            "global_step":       global_step,
-            "best_score":        float(best) if best != float("inf") else None,
-            "best_epoch":        best_epoch,
-            "last_update_time":  time.time(),
-            "device":            cfg.device,
-            "checkpoint_best":   "checkpoints/best.pt",
-            "checkpoint_last":   "checkpoints/last.pt",
+            "state":            "running",
+            "run_id":           run_id,
+            "epoch":            epoch,
+            "epochs":           cfg.epochs,
+            "stage":            cur_stage,
+            "global_step":      global_step,
+            "best_score":       float(best) if best != float("inf") else None,
+            "best_epoch":       best_epoch,
+            "last_update_time": time.time(),
+            "device":           cfg.device,
+            "checkpoint_best":  "checkpoints/best.pt",
+            "checkpoint_last":  "checkpoints/last.pt",
         })
 
-        print(f"epoch {epoch:3d} | stage {stage} | w_spec {tr['w_spec']:.2f} "
+        print(f"epoch {epoch:3d} | stage {cur_stage} | w_spec {tr['w_spec']:.2f} "
               f"| train {tr.get('total', 0):.4f}"
               + (f" | val shift {va.get('shift_mae_ppm', 0):.3f}ppm "
                  f"J {va.get('j_mae_hz', 0):.2f}Hz "
@@ -493,16 +348,16 @@ def fit(records, assignment, cfg: TrainConfig, model=None):
 
         # ── Checkpoint ────────────────────────────────────────────────────────
         ckpt = {
-            "model":       {k: v.cpu() for k, v in model.state_dict().items()},
+            "model":        {k: v.cpu() for k, v in model.state_dict().items()},
             "standardizer": vars(std),
             "cfg":          vars(cfg),
             "epoch":        epoch,
             "metrics":      va,
         }
-        last_path  = str(ckpt_dir / "last.pt")
-        best_path  = str(ckpt_dir / "best.pt") if is_best else ""
-        legacy     = cfg.ckpt_path if is_best else ""
-        s3_dest    = f"{cfg.s3_ckpt_prefix}/epoch_{epoch:03d}.pt" if cfg.s3_ckpt_prefix else ""
+        last_path = str(ckpt_dir / "last.pt")
+        best_path = str(ckpt_dir / "best.pt") if is_best else ""
+        legacy    = cfg.ckpt_path if is_best else ""
+        s3_dest   = f"{cfg.s3_ckpt_prefix}/epoch_{epoch:03d}.pt" if cfg.s3_ckpt_prefix else ""
         ckpt_q.put((ckpt, last_path, s3_dest, best_path, legacy))
 
         # ── Probes + failure analysis ──────────────────────────────────────────
@@ -531,7 +386,6 @@ def fit(records, assignment, cfg: TrainConfig, model=None):
     ckpt_thread.join()
 
     # ── Finalize ───────────────────────────────────────────────────────────────
-    # Read the most recent failure summary written by failure_analysis (if any)
     failure_summary: dict = {}
     dominant = ""
     probe_dir = run_dir / "probes"
@@ -566,18 +420,18 @@ def fit(records, assignment, cfg: TrainConfig, model=None):
     }
     diag.finalize(summary)
     diag.update_status({
-        "state":             "finished",
-        "run_id":            run_id,
-        "epoch":             best_epoch,
-        "epochs":            cfg.epochs,
-        "stage":             last_stage,
-        "global_step":       global_step,
-        "best_score":        float(best) if best != float("inf") else None,
-        "best_epoch":        best_epoch,
-        "last_update_time":  time.time(),
-        "device":            cfg.device,
-        "checkpoint_best":   "checkpoints/best.pt",
-        "checkpoint_last":   "checkpoints/last.pt",
+        "state":            "finished",
+        "run_id":           run_id,
+        "epoch":            best_epoch,
+        "epochs":           cfg.epochs,
+        "stage":            last_stage,
+        "global_step":      global_step,
+        "best_score":       float(best) if best != float("inf") else None,
+        "best_epoch":       best_epoch,
+        "last_update_time": time.time(),
+        "device":           cfg.device,
+        "checkpoint_best":  "checkpoints/best.pt",
+        "checkpoint_last":  "checkpoints/last.pt",
     })
     diag.log_event("run_end", {"run_id": run_id, "best_epoch": best_epoch,
                                "best_score": float(best) if best != float("inf") else None})
