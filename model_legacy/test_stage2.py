@@ -29,6 +29,7 @@ import traceback
 import unittest.mock as mock
 
 import numpy as np
+import pytest
 import torch
 
 from model_legacy import diff_renderer_torch as renderer
@@ -193,9 +194,13 @@ def test_k_grows_exponentially_with_methyl_groups():
     print("test_k_grows_exponentially_with_methyl_groups: PASS")
 
 
+@pytest.mark.slow
 def test_k_threshold_classifies_patterns():
     """Report which patterns exceed _MAX_SPEC_K and would be skipped.
-    Any pattern below the threshold must actually render without OOM."""
+    Any pattern below the threshold must actually render without OOM.
+
+    Slow (~100s): renders every degeneracy pattern below the threshold to prove
+    no OOM. Deselected by default; run with ``pytest --runslow``."""
     high_deg = [3] * 8  # worst realistic case: all CH3 groups
     low_deg = [1] * 8   # simplest case: all single protons
 

@@ -46,3 +46,6 @@ simulation = ["mnova_scripts/*.qs"]
 
 [tool.pytest.ini_options]
 testpaths = ["simulation/tests", "generate/tests", "model", "model_legacy", "autoai"]
+markers = [
+    "slow: slow test, deselected by default (run with --runslow)",
+]
