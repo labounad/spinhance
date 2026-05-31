@@ -2,8 +2,8 @@
 model.live_dashboard
 ====================
 Streamlit live dashboard for monitoring active or completed training runs.
-Reads status.json + metrics.jsonl from a run directory produced by
-model/diagnostics.py; auto-refreshes every 5 s when live mode is on.
+Reads artifacts from S3 at s3://spinhance-data/training/<session>/.
+Auto-refreshes every 5 s when live mode is on.
 
 Usage:
     streamlit run model/live_dashboard.py
@@ -11,59 +11,65 @@ Usage:
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 
-REPO = Path(__file__).resolve().parents[1]
-RUNS_ROOT = REPO / "model" / "runs"
+S3_TRAINING = "s3://spinhance-data/training"
 
 st.set_page_config(page_title="SpinHance Training", layout="wide")
 
 
-# ── I/O helpers ───────────────────────────────────────────────────────────────
+# ── S3-aware I/O helpers ───────────────────────────────────────────────────────
 
-def _read_json(path: Path, default=None):
+def _s3_read_json(uri: str, default=None):
     try:
-        return json.loads(path.read_text())
+        from model import s3io
+        return s3io.get_json(uri, default)
     except Exception:
         return default
 
 
-def _read_jsonl(path: Path) -> pd.DataFrame:
-    rows = []
-    if not path.exists():
-        return pd.DataFrame()
-    with open(path) as f:
-        for line in f:
+def _s3_read_jsonl(uri: str) -> pd.DataFrame:
+    try:
+        from model import s3io
+        text = s3io.get_text(uri, "")
+        if not text:
+            return pd.DataFrame()
+        rows = []
+        for line in text.splitlines():
             try:
                 rows.append(json.loads(line))
             except json.JSONDecodeError:
                 pass
-    return pd.json_normalize(rows) if rows else pd.DataFrame()
+        return pd.json_normalize(rows) if rows else pd.DataFrame()
+    except Exception:
+        return pd.DataFrame()
 
 
-def _list_runs() -> list[str]:
-    if not RUNS_ROOT.exists():
+def _list_sessions() -> list[str]:
+    try:
+        from model import s3io
+        return sorted(s3io.list_prefixes(S3_TRAINING), reverse=True)
+    except Exception:
         return []
-    return sorted([d.name for d in RUNS_ROOT.iterdir() if d.is_dir()], reverse=True)
 
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 
 with st.sidebar:
     st.title("SpinHance Training")
-    run_options = _list_runs()
-    if run_options:
-        run_name = st.selectbox("Run", run_options)
-        run_dir  = RUNS_ROOT / run_name
+    session_options = _list_sessions()
+    if session_options:
+        session_name = st.selectbox("Session", session_options)
+        run_uri      = f"{S3_TRAINING}/{session_name}"
     else:
-        raw = st.text_input("Run directory", str(RUNS_ROOT / "latest"))
-        run_dir = Path(raw)
+        raw          = st.text_input("Session URI", f"{S3_TRAINING}/latest")
+        run_uri      = raw.rstrip("/")
+        session_name = run_uri.rsplit("/", 1)[-1]
     live     = st.toggle("Auto-refresh (5 s)", value=True)
     interval = "5s" if live else None
-    st.caption(f"`{run_dir.name}`")
+    st.caption(f"`{session_name}`")
 
 
 # ── Plot helpers ──────────────────────────────────────────────────────────────
@@ -81,13 +87,13 @@ def _line(df: pd.DataFrame, x: str, y: str, title: str):
 # ── Main dashboard ────────────────────────────────────────────────────────────
 
 def _dashboard():
-    status     = _read_json(run_dir / "status.json", {})
-    metrics_df = _read_jsonl(run_dir / "metrics.jsonl")
+    status     = _s3_read_json(f"{run_uri}/status.json", {})
+    metrics_df = _s3_read_jsonl(f"{run_uri}/metrics.jsonl")
 
     # Header
     state = status.get("state", "—")
     icon  = {"running": "🟢", "finished": "🔵"}.get(state, "🔴")
-    st.subheader(f"{icon}  {run_dir.name}")
+    st.subheader(f"{icon}  {session_name}")
 
     c = st.columns(6)
     c[0].metric("State",   state)
@@ -102,7 +108,6 @@ def _dashboard():
         st.info("Waiting for training metrics…")
         return
 
-    # Filter splits
     def _split(name):
         if "split" not in metrics_df.columns:
             return pd.DataFrame()
@@ -156,7 +161,7 @@ def _dashboard():
             _line(train_df, "step", "metrics.cuda_reserved_gb",  "Reserved (GB)")
 
     # Best metrics table
-    summary = _read_json(run_dir / "summary.json")
+    summary = _s3_read_json(f"{run_uri}/summary.json")
     if summary and "best_metrics" in summary:
         st.subheader("Best metrics")
         bm = summary["best_metrics"]
@@ -170,49 +175,64 @@ def _dashboard():
                     f"— {summary.get('recommendation', '')}")
 
     # Probe inspector
-    probes_dir = run_dir / "probes"
-    if probes_dir.exists():
-        epoch_dirs = sorted([d for d in probes_dir.iterdir() if d.is_dir()], reverse=True)
-        if epoch_dirs:
-            st.subheader("Probe diagnostics")
-            sel = st.selectbox("Probe epoch", [d.name for d in epoch_dirs])
-            ep_dir = probes_dir / sel
+    try:
+        from model import s3io
+        probes_prefix = f"{run_uri}/probes"
+        epoch_names   = sorted(s3io.list_prefixes(probes_prefix), reverse=True)
+    except Exception:
+        epoch_names = []
 
-            pm = _read_json(ep_dir / "probe_metrics.json", {})
-            if pm:
-                pc = st.columns(len(pm))
-                for i, (k, v) in enumerate(pm.items()):
-                    pc[i].metric(k.replace("_", " "), f"{v:.3f}")
+    if epoch_names:
+        st.subheader("Probe diagnostics")
+        sel       = st.selectbox("Probe epoch", epoch_names)
+        ep_prefix = f"{run_uri}/probes/{sel}"
 
-            worst = _read_json(ep_dir / "worst_cases.json", [])
-            if worst:
-                st.write("Worst probe cases (by shift MAE)")
-                wdf = pd.DataFrame([{
-                    "mol_id":    m["mol_id"],
-                    "shift_mae": f"{m.get('shift_mae_ppm', 0):.3f}",
-                    "j_mae":     f"{m.get('j_mae_hz', 0):.2f}",
-                    "pres_f1":   f"{m.get('presence_f1', 0):.2f}",
-                    "deg_acc":   f"{m.get('deg_acc', 0):.2f}",
-                } for m in worst[:8]])
-                st.dataframe(wdf, use_container_width=True, hide_index=True)
+        pm = _s3_read_json(f"{ep_prefix}/probe_metrics.json", {})
+        if pm:
+            pc = st.columns(len(pm))
+            for i, (k, v) in enumerate(pm.items()):
+                pc[i].metric(k.replace("_", " "), f"{v:.3f}")
 
-            imgs = sorted(ep_dir.glob("matrix_*.png"))
-            if imgs:
-                n_show = min(6, len(imgs))
-                st.write(f"Matrix plots ({len(imgs)} probes, showing {n_show})")
-                img_cols = st.columns(3)
-                for i, img in enumerate(imgs[:n_show]):
-                    img_cols[i % 3].image(str(img), width="stretch")
+        worst = _s3_read_json(f"{ep_prefix}/worst_cases.json", [])
+        if worst:
+            st.write("Worst probe cases (by shift MAE)")
+            wdf = pd.DataFrame([{
+                "mol_id":    m["mol_id"],
+                "shift_mae": f"{m.get('shift_mae_ppm', 0):.3f}",
+                "j_mae":     f"{m.get('j_mae_hz', 0):.2f}",
+                "pres_f1":   f"{m.get('presence_f1', 0):.2f}",
+                "deg_acc":   f"{m.get('deg_acc', 0):.2f}",
+            } for m in worst[:8]])
+            st.dataframe(wdf, use_container_width=True, hide_index=True)
 
-            fsummary = _read_json(ep_dir / "failure_summary.json")
-            if fsummary:
-                st.subheader("Failure analysis")
-                col_a, col_b = st.columns(2)
-                col_a.metric("Dominant failure", fsummary.get("dominant_failure", "—"))
-                col_b.metric("OK molecules", fsummary.get("n_ok", "?"))
-                fd = fsummary.get("failure_distribution", {})
-                if fd:
-                    st.bar_chart(pd.Series(fd, name="count"))
+        # Matrix PNG plots — download bytes from S3, render inline
+        try:
+            img_keys = sorted(k for k in s3io.list_keys(f"{ep_prefix}/")
+                              if k.endswith(".png") and "matrix_" in k)
+        except Exception:
+            img_keys = []
+
+        if img_keys:
+            n_show = min(6, len(img_keys))
+            st.write(f"Matrix plots ({len(img_keys)} probes, showing {n_show})")
+            img_cols = st.columns(3)
+            for i, key in enumerate(img_keys[:n_show]):
+                try:
+                    img_bytes = s3io.get_bytes(f"{ep_prefix}/{key}")
+                    if img_bytes:
+                        img_cols[i % 3].image(img_bytes)
+                except Exception:
+                    pass
+
+        fsummary = _s3_read_json(f"{ep_prefix}/failure_summary.json")
+        if fsummary:
+            st.subheader("Failure analysis")
+            col_a, col_b = st.columns(2)
+            col_a.metric("Dominant failure", fsummary.get("dominant_failure", "—"))
+            col_b.metric("OK molecules", fsummary.get("n_ok", "?"))
+            fd = fsummary.get("failure_distribution", {})
+            if fd:
+                st.bar_chart(pd.Series(fd, name="count"))
 
 
 # ── Fragment (auto-refresh if supported) ──────────────────────────────────────

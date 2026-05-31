@@ -19,9 +19,13 @@ Each cycle should:
 
 ## Canonical training diagnostics
 
-Model training writes a canonical run directory under `model/runs/<run_id>/`.
+Model training writes all artifacts to an S3 session:
 
-See `docs/training_diagnostics.md` for the full artifact contract.
+~~~text
+s3://spinhance-data/training/<session>/
+~~~
+
+See `docs/training_diagnostics.md` for the full S3 artifact layout.
 
 ## Required WorkerResult artifact paths
 
@@ -29,8 +33,8 @@ When a worker launches `model.run_experiment`, it should return artifact paths l
 
 ~~~json
 {
-  "run_dir": "model/runs/<run_id>",
-  "checkpoint": "model/runs/<run_id>/checkpoints/best.pt",
+  "run_dir": "s3://spinhance-data/training/<session>",
+  "checkpoint": "s3://spinhance-data/training/<session>/checkpoints/best.pt",
   "metrics": "autoai/runs/<cycle>/metrics.json",
   "summary": "autoai/runs/<cycle>/summary.md"
 }
@@ -82,20 +86,20 @@ AutoAI should inspect `failure_summary.json` and use the dominant failure to cho
 | `false_positive_couplings` | tune coupling threshold; add sparsity prior |
 | `bad_j_magnitude` | adjust J regression loss; add peak-shape features |
 
-## Local smoke run
+## Training launch
 
 ~~~bash
+# Write artifacts to S3 session001
 PYTHONPATH=. python -m model.run_experiment \
-  --small \
-  --epochs 2 \
-  --batch 16 \
-  --max-mol 128 \
-  --run-dir model/runs/diagnostics_smoke \
-  --ckpt model/runs/diagnostics_smoke/checkpoints/spinhance.pt \
-  --log-every-steps 1
+  --session-id session001 \
+  --small --epochs 60 --batch 64
+
+# Auto-generate a timestamped session (session_<YYYYMMDD_HHMMSS>)
+PYTHONPATH=. python -m model.run_experiment \
+  --small --epochs 60 --batch 64
 ~~~
 
-Dashboard:
+Live dashboard (reads from S3):
 
 ~~~bash
 PYTHONPATH=. streamlit run model/live_dashboard.py

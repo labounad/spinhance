@@ -1,15 +1,15 @@
 # SpinHance Training Diagnostics
 
-SpinHance model training now writes a durable, file-based diagnostics bundle for every run. This diagnostics bundle is the canonical interface between human debugging, the Streamlit live dashboard, probe/failure analysis, and AutoAI experiment selection.
+SpinHance model training writes a durable, S3-backed diagnostics bundle for every run. This bundle is the canonical interface between human debugging, the Streamlit live dashboard, probe/failure analysis, and AutoAI experiment selection.
 
-The source of truth is the run directory, not stdout, screenshots, or prose summaries.
+The source of truth is the S3 session, not stdout, screenshots, or prose summaries.
 
-## Canonical run directory
+## Canonical S3 layout
 
-Every training run should write to:
+Every training run writes to a session directory inside S3:
 
 ~~~text
-model/runs/<run_id>/
+s3://spinhance-data/training/sessionXXX/
 ├── config.json
 ├── status.json
 ├── metrics.jsonl
@@ -18,9 +18,10 @@ model/runs/<run_id>/
 ├── checkpoints/
 │   ├── best.pt
 │   ├── last.pt
-│   └── <optional user checkpoint>.pt
+│   └── <optional local backup>.pt
 └── probes/
     └── epoch_XXXX/
+        ├── checkpoint.pt
         ├── probe_metrics.json
         ├── predictions.json
         ├── failure_summary.json
@@ -32,9 +33,46 @@ model/runs/<run_id>/
         └── matrix_*.png
 ~~~
 
-The `run_dir` is the primary artifact. Checkpoints, scalar metrics, probe outputs, and failure analysis all live underneath it.
+`sessionXXX` is a short identifier (e.g. `session001`) supplied via
+`--session-id` or auto-generated as a timestamped local path when running
+without S3.
 
-## Smoke run
+The per-epoch checkpoint is stored at:
+
+~~~text
+s3://spinhance-data/training/sessionXXX/probes/epoch_XXXX/checkpoint.pt
+~~~
+
+Best and last checkpoints live at:
+
+~~~text
+s3://spinhance-data/training/sessionXXX/checkpoints/best.pt
+s3://spinhance-data/training/sessionXXX/checkpoints/last.pt
+~~~
+
+## Training launch
+
+### S3 session (cloud / EC2)
+
+~~~bash
+PYTHONPATH=. python -m model.run_experiment \
+  --session-id session001 \
+  --small \
+  --epochs 60 \
+  --batch 64
+~~~
+
+Or with a full URI:
+
+~~~bash
+PYTHONPATH=. python -m model.run_experiment \
+  --session-id s3://spinhance-data/training/session001 \
+  --small --epochs 60 --batch 64
+~~~
+
+### Auto-generated session
+
+Omit `--session-id` to auto-generate a session named `session_<timestamp>`:
 
 ~~~bash
 PYTHONPATH=. python -m model.run_experiment \
@@ -42,28 +80,22 @@ PYTHONPATH=. python -m model.run_experiment \
   --epochs 2 \
   --batch 16 \
   --max-mol 128 \
-  --run-dir model/runs/diagnostics_smoke \
-  --ckpt model/runs/diagnostics_smoke/checkpoints/spinhance.pt \
   --log-every-steps 1
 ~~~
+
+Artifacts go to `s3://spinhance-data/training/session_<timestamp>/`.
 
 For longer runs, `--log-every-steps 25` is usually enough.
 
 ## Live dashboard
 
-Launch:
-
 ~~~bash
 PYTHONPATH=. streamlit run model/live_dashboard.py
 ~~~
 
-Point the dashboard at a run directory, for example:
-
-~~~text
-model/runs/diagnostics_smoke
-~~~
-
-The dashboard reads artifacts from disk. It does not require access to the active training process.
+The sidebar lists sessions from `s3://spinhance-data/training/`. Select one to
+monitor it. The dashboard reads all artifacts directly from S3 and
+auto-refreshes every 5 s when live mode is on.
 
 Expected dashboard panels:
 
@@ -77,17 +109,27 @@ Expected dashboard panels:
 - matrix plots;
 - failure-analysis summary.
 
+## Session analysis GUI
+
+~~~bash
+conda run -n spinhance streamlit run model/gui.py
+~~~
+
+The GUI lists sessions at `s3://spinhance-data/training/`, displays a
+per-epoch validation-score bar chart, and lets you browse the test set with
+ground-truth vs. predicted matrices and spectra.  Epoch checkpoints are
+downloaded from `probes/epoch_XXXX/checkpoint.pt` within the session.
+
 ## Artifact meanings
 
 ### `config.json`
 
-Static serialized training configuration. Use this to determine dataset, model options, loss settings, checkpoint path, diagnostics settings, and probe/failure-analysis settings.
+Static serialized training configuration written at run start.
 
 ### `status.json`
 
-Atomic snapshot of the current run state. This file is repeatedly overwritten during training and is the best file for live monitoring.
-
-Typical fields:
+Atomic snapshot of the current run state (repeatedly overwritten during
+training).  Checkpoint paths are absolute S3 URIs:
 
 ~~~json
 {
@@ -95,11 +137,10 @@ Typical fields:
   "epoch": 12,
   "epochs": 80,
   "stage": 1,
-  "step": 1234,
   "best_score": 0.42,
   "device": "cuda",
-  "checkpoint_best": "model/runs/<run_id>/checkpoints/best.pt",
-  "checkpoint_last": "model/runs/<run_id>/checkpoints/last.pt"
+  "checkpoint_best": "s3://spinhance-data/training/sessionXXX/checkpoints/best.pt",
+  "checkpoint_last": "s3://spinhance-data/training/sessionXXX/checkpoints/last.pt"
 }
 ~~~
 
@@ -141,7 +182,8 @@ Append-only stream of lifecycle events, warnings, and future infrastructure even
 
 ### `summary.json`
 
-Final run summary. This is the first place to look for best metrics and final checkpoint paths after a run finishes.
+Final run summary. First place to look for best metrics and final checkpoint
+paths after a run finishes.
 
 ### `checkpoints/`
 
@@ -152,14 +194,15 @@ checkpoints/best.pt
 checkpoints/last.pt
 ~~~
 
-If `--ckpt` points to another filename, that checkpoint is also written. Checkpoint parent directories are created automatically.
+Checkpoint parent directories are created automatically.
 
 ### `probes/epoch_XXXX/`
 
-Probe artifacts are fixed-example diagnostics emitted during training.
+Per-epoch probe artifacts. Written every `probe_every_epochs` epochs.
 
 Important files:
 
+- `checkpoint.pt` — model weights snapshot for this epoch
 - `probe_metrics.json`
 - `predictions.json`
 - `failure_summary.json`
@@ -172,11 +215,11 @@ Important files:
 
 The latest probe epoch is usually the most useful for AutoAI.
 
-## Reusing run directories
+## Resetting a session
 
-The diagnostics writer resets live files when a run starts. This prevents a new run from appending rows onto stale `metrics.jsonl`.
-
-Files reset at run start:
+The diagnostics writer resets live files when a run starts, preventing a
+new run from appending onto stale `metrics.jsonl` rows.  Files reset at
+run start:
 
 ~~~text
 metrics.jsonl
@@ -184,15 +227,15 @@ events.jsonl
 system.jsonl
 status.json
 summary.json
-probes/
+probes/   (entire prefix deleted from S3)
 ~~~
 
-Checkpoint files are not proactively deleted by the diagnostics reset, but checkpoint paths are overwritten when training saves.
+Checkpoint files are **not** proactively deleted.
 
-For production AutoAI runs, prefer unique directories:
+For production AutoAI runs, prefer unique session IDs:
 
 ~~~text
-model/runs/<timestamp>_<experiment_name>_<seed>
+session_<timestamp>_<experiment_name>_<seed>
 ~~~
 
 ## Failure-analysis categories
@@ -219,14 +262,13 @@ AutoAI should use these categories to guide the next experiment.
 
 ## AutoAI contract
 
-Workers that launch `model.run_experiment` should return a `WorkerResult` whose `artifact_paths` include:
+Workers that launch `model.run_experiment` should return a `WorkerResult`
+whose `artifact_paths` include:
 
 ~~~json
 {
-  "run_dir": "model/runs/<run_id>",
-  "checkpoint": "model/runs/<run_id>/checkpoints/best.pt",
-  "metrics": "autoai/runs/<cycle>/metrics.json",
-  "summary": "autoai/runs/<cycle>/summary.md"
+  "run_dir": "s3://spinhance-data/training/sessionXXX",
+  "checkpoint": "s3://spinhance-data/training/sessionXXX/checkpoints/best.pt"
 }
 ~~~
 
@@ -237,8 +279,6 @@ Workers that launch `model.run_experiment` should return a `WorkerResult` whose 
 - `status.json`
 - latest `probes/*/failure_summary.json`
 - checkpoint paths
-
-Worker prose can be useful, but AutoAI should trust these files first.
 
 ## Relevant tests
 
@@ -252,16 +292,14 @@ PYTHONPATH=. pytest -q \
   autoai/test_run_reader.py
 ~~~
 
-After AutoAI diagnostics integration, also test that:
-
-- `run_dir` can be inferred from `artifact_paths`;
-- `summary.json` and `metrics.jsonl` are parsed;
-- latest probe failure summaries are attached to AutoAI records;
-- missing diagnostics fail softly with a clear reason.
+All tests use local `tmp_path` fixtures and exercise the local-filesystem code
+path.  No AWS credentials are required to run the test suite.
 
 ## Design principle
 
-The diagnostics system is file-first.
+The diagnostics system is S3-first for cloud training, local-filesystem for
+tests and smoke runs.
 
-W&B, TensorBoard, Streamlit, or notebooks may mirror these artifacts, but the canonical source of truth is the run directory.
-
+`DiagnosticsWriter`, `ProbeEvaluator`, and `save_failure_cases` all
+auto-detect the backend from the `run_dir` prefix: an `s3://` prefix routes
+to S3 via `model.s3io`; anything else uses the local filesystem.

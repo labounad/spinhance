@@ -4,10 +4,16 @@ model.probes
 Fixed probe-set evaluator. Selects N molecules from the val set at run start
 (stratified by spectral regime), runs inference every probe_every_epochs, and
 saves per-molecule JSON + optional matrix-error PNG plots.
+
+Artifacts are written to ``run_dir/probes/epoch_XXXX/``.  When ``run_dir``
+is an ``s3://`` URI the files are uploaded directly to S3; otherwise they are
+written to the local filesystem.
 """
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -57,7 +63,8 @@ def _probe_indices(records: list[dict], n: int) -> list[int]:
 
 # ── Matrix plot ────────────────────────────────────────────────────────────────
 
-def _matrix_plot(true_mat: np.ndarray, pred_mat: np.ndarray, path: Path, title: str = "") -> None:
+def _matrix_plot(true_mat: np.ndarray, pred_mat: np.ndarray,
+                 path: Path, title: str = "") -> None:
     if not _MPL:
         return
     fig, axes = plt.subplots(1, 3, figsize=(12, 4))
@@ -68,7 +75,8 @@ def _matrix_plot(true_mat: np.ndarray, pred_mat: np.ndarray, path: Path, title: 
         (axes[1], pred_mat, "Predicted", "RdBu_r", -vmax),
         (axes[2], err,      "|Error|",   "hot_r",   0.0),
     ]:
-        im = ax.imshow(mat, cmap=cmap, vmin=lo, vmax=vmax if cmap == "RdBu_r" else float(err.max()))
+        im = ax.imshow(mat, cmap=cmap, vmin=lo,
+                       vmax=vmax if cmap == "RdBu_r" else float(err.max()))
         ax.set_title(label, fontsize=9)
         ax.axis("off")
         plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
@@ -95,17 +103,16 @@ class ProbeEvaluator:
         run_dir: str | Path | None = None,
         save_plots: bool = True,
     ) -> None:
-        self.vocab    = vocab
-        self.std      = std
-        self.device   = device
-        self.run_dir  = Path(run_dir) if run_dir else None
+        self.vocab      = vocab
+        self.std        = std
+        self.device     = device
+        self.run_dir    = str(run_dir) if run_dir is not None else None
         self.save_plots = save_plots and _MPL
 
         idxs = _probe_indices(val_records, probe_count)
         self.probe_records = [val_records[i] for i in idxs]
         self.mol_ids = [r["mol_id"] for r in self.probe_records]
 
-        # Pre-load probe items from the (non-augmented) val dataset
         items = [val_dataset[i] for i in idxs]
         tensor_keys = ("spectrum", "spectrum_ref", "shifts", "j_mag",
                        "j_presence", "deg_class", "degeneracy")
@@ -117,10 +124,16 @@ class ProbeEvaluator:
     def run(self, model, epoch: int, amp_ctx) -> dict[str, float]:
         if self.run_dir is None:
             return {}
-        model.eval()
-        epoch_dir = self.run_dir / "probes" / f"epoch_{epoch:04d}"
-        epoch_dir.mkdir(parents=True, exist_ok=True)
 
+        s3_mode      = self.run_dir.startswith("s3://")
+        epoch_tag    = f"epoch_{epoch:04d}"
+        epoch_prefix = f"{self.run_dir.rstrip('/')}/probes/{epoch_tag}"
+
+        if not s3_mode:
+            epoch_dir = Path(epoch_prefix)
+            epoch_dir.mkdir(parents=True, exist_ok=True)
+
+        model.eval()
         dev = {k: v.to(self.device) if torch.is_tensor(v) else v
                for k, v in self.batch.items()}
         with amp_ctx():
@@ -131,9 +144,9 @@ class ProbeEvaluator:
                    for k in ("shifts", "j_mag", "j_presence", "deg_class")}
 
         dec        = decode(pred_np, self.std, self.vocab)
-        tgt_shifts = self.std.inverse_shifts(tgt_np["shifts"])        # (N, G)
-        tgt_pres   = tgt_np["j_presence"] > 0.5                       # (N, P)
-        tgt_jmag   = self.std.inverse_j(tgt_np["j_mag"]) * tgt_pres  # (N, P)
+        tgt_shifts = self.std.inverse_shifts(tgt_np["shifts"])
+        tgt_pres   = tgt_np["j_presence"] > 0.5
+        tgt_jmag   = self.std.inverse_j(tgt_np["j_mag"]) * tgt_pres
 
         G  = tgt_shifts.shape[1]
         iu = np.triu_indices(G, 1)
@@ -170,20 +183,45 @@ class ProbeEvaluator:
             if self.save_plots:
                 title = (f"{mol_id}  shift_mae={met['shift_mae_ppm']:.3f}ppm  "
                          f"J_mae={met['j_mae_hz']:.2f}Hz")
-                _matrix_plot(true_mat, pred_mat,
-                             epoch_dir / f"matrix_{b:03d}_{mol_id}.png", title)
+                plot_name = f"matrix_{b:03d}_{mol_id}.png"
+                if s3_mode:
+                    from model import s3io
+                    tmp_fd, tmp_path = tempfile.mkstemp(suffix=".png")
+                    os.close(tmp_fd)
+                    try:
+                        _matrix_plot(true_mat, pred_mat, Path(tmp_path), title)
+                        with open(tmp_path, "rb") as fh:
+                            s3io.put_bytes(f"{epoch_prefix}/{plot_name}",
+                                           fh.read(), "image/png")
+                    finally:
+                        os.unlink(tmp_path)
+                else:
+                    _matrix_plot(true_mat, pred_mat,
+                                 Path(epoch_prefix) / plot_name, title)
 
-        (epoch_dir / "predictions.json").write_text(json.dumps(per_mol, indent=2))
-
+        predictions_json = json.dumps(per_mol, indent=2)
         agg: dict[str, float] = {}
         for k in ("shift_mae_ppm", "j_mae_hz", "presence_f1", "deg_acc",
                   "h_shift_mae_ppm", "h_j_mae_hz"):
             vals = [m[k] for m in per_mol if k in m]
             if vals:
                 agg[k] = float(np.mean(vals))
-        (epoch_dir / "probe_metrics.json").write_text(json.dumps(agg, indent=2))
+        probe_metrics_json = json.dumps(agg, indent=2)
 
         worst = sorted(per_mol, key=lambda m: m.get("shift_mae_ppm", 0.0), reverse=True)[:8]
-        (epoch_dir / "worst_cases.json").write_text(json.dumps(worst, indent=2))
+        worst_json = json.dumps(worst, indent=2)
+
+        if s3_mode:
+            from model import s3io
+            s3io.put_bytes(f"{epoch_prefix}/predictions.json",
+                           predictions_json.encode())
+            s3io.put_bytes(f"{epoch_prefix}/probe_metrics.json",
+                           probe_metrics_json.encode())
+            s3io.put_bytes(f"{epoch_prefix}/worst_cases.json",
+                           worst_json.encode())
+        else:
+            (Path(epoch_prefix) / "predictions.json").write_text(predictions_json)
+            (Path(epoch_prefix) / "probe_metrics.json").write_text(probe_metrics_json)
+            (Path(epoch_prefix) / "worst_cases.json").write_text(worst_json)
 
         return agg
