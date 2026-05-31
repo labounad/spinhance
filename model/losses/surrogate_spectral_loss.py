@@ -79,16 +79,20 @@ class SurrogateSpectralLoss(Loss):
             self._device = device
 
     def _physical_matrix(self, output: ModelOutput):
-        """Invert standardization + presence-gate -> (shifts ppm, couplings Hz, deg protons)."""
-        shifts = output.shifts * self.shift_std + self.shift_mean             # (B,G) ppm
-        jmag = output.coupling_matrix() * self.j_std + self.j_mean            # (B,G,G) Hz
-        pres = torch.sigmoid(output.presence_matrix())                       # (B,G,G) prob
-        couplings = jmag * pres                                              # soft physical Hz
+        """Invert standardization + presence-gate -> (shifts ppm, couplings Hz, deg protons).
+
+        Everything is cast to float32: the frozen surrogate is a physics model
+        with FFT-based broadening that must not run in the matrix model's bf16/
+        fp16 autocast dtype (FFT/index_add reject half precision)."""
+        shifts = output.shifts.float() * self.shift_std + self.shift_mean        # (B,G) ppm
+        jmag = output.coupling_matrix().float() * self.j_std + self.j_mean       # (B,G,G) Hz
+        pres = torch.sigmoid(output.presence_matrix().float())                  # (B,G,G) prob
+        couplings = jmag * pres                                                 # soft physical Hz
         G = couplings.shape[-1]
         diag = torch.eye(G, device=couplings.device, dtype=couplings.dtype)
-        couplings = couplings * (1.0 - diag)                                # zero diagonal
-        couplings = 0.5 * (couplings + couplings.transpose(-1, -2))         # enforce symmetry
-        deg = F.softmax(output.degeneracy_logits, dim=-1) @ self._vocab     # (B,G) soft protons
+        couplings = couplings * (1.0 - diag)                                    # zero diagonal
+        couplings = 0.5 * (couplings + couplings.transpose(-1, -2))             # enforce symmetry
+        deg = F.softmax(output.degeneracy_logits.float(), dim=-1) @ self._vocab.float()  # (B,G)
         return shifts, couplings, deg
 
     def __call__(self, output: ModelOutput, batch: SpinBatch) -> LossOutput:
@@ -97,12 +101,17 @@ class SurrogateSpectralLoss(Loss):
             else batch.spectrum
         target = target.to(output.shifts.device)
 
-        shifts, couplings, deg = self._physical_matrix(output)
-        pred = self.surrogate(shifts, couplings, deg, self.field)            # (B,P) unit integral
-
-        w1 = wasserstein1(pred, target, dx=self.dx).mean()
-        cos = cosine_similarity(pred, target).mean()
-        total = self.w1_weight * w1 + self.cosine_weight * (1.0 - cos)
+        # Run the frozen surrogate (and the spectral metrics) in float32 with
+        # autocast disabled — its FFT broadening can't run in bf16/fp16. Gradients
+        # still flow back to the (autocast) matrix model through the float cast.
+        dev_type = output.shifts.device.type
+        with torch.autocast(device_type=dev_type, enabled=False):
+            shifts, couplings, deg = self._physical_matrix(output)
+            target = target.float()
+            pred = self.surrogate(shifts, couplings, deg, self.field)        # (B,P) unit integral
+            w1 = wasserstein1(pred, target, dx=self.dx).mean()
+            cos = cosine_similarity(pred, target).mean()
+            total = self.w1_weight * w1 + self.cosine_weight * (1.0 - cos)
 
         return LossOutput(
             total=total,

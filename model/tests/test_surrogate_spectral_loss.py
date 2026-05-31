@@ -75,6 +75,19 @@ def test_grad_flows_to_all_heads(tmp_path):
     assert all(p.grad is None for p in loss.surrogate.parameters())
 
 
+def test_runs_under_autocast(tmp_path):
+    """Regression: the matrix trainer runs under bf16/fp16 autocast; the frozen
+    surrogate's FFT broadening must still run (it crashed with an index_add
+    BFloat16-vs-Float dtype mismatch before the float32/disable-autocast fix)."""
+    loss = _loss(tmp_path)
+    out = _output(requires_grad=True)
+    with torch.autocast(device_type="cpu", dtype=torch.bfloat16):
+        lo = loss(out, _batch())
+    assert torch.isfinite(lo.total)
+    lo.total.backward()
+    assert out.shifts.grad is not None and torch.isfinite(out.shifts.grad).all()
+
+
 def test_diagonal_zeroed_and_symmetric(tmp_path):
     loss = _loss(tmp_path)
     _, couplings, _ = loss._physical_matrix(_output(requires_grad=False))
