@@ -15,23 +15,32 @@ from __future__ import annotations
 
 # ── Primary target ─────────────────────────────────────────────────────────────
 
-#: Number of magnetically distinct ¹H spin groups the pipeline selects for.
-#: This is *the* magic number that every filter, viewer, and test consults.
-#: Change it once here; every downstream module picks up the new value.
+#: Legacy single-target spin-group count (the original ChEMBL screen selected
+#: for exactly this many groups).  Still the default when no range is given, so
+#: ``run`` with no ``--min/--max-groups`` reproduces the historical behaviour.
 N_SPIN_GROUPS: int = 8
 
-# ── ChEMBL pre-filter heuristics ──────────────────────────────────────────────
+#: Inclusive spin-group range for a *categorising* scan.  Setting the pipeline
+#: to ``[MIN_SPIN_GROUPS, MAX_SPIN_GROUPS]`` lets a single pass over the
+#: database bucket every molecule by its spin-group count instead of running
+#: one screen per count.  26 is the natural ceiling: spin groups are labelled
+#: with single letters A–Z, so ≤26 keeps one-character labels.
+MIN_SPIN_GROUPS: int = 1
+MAX_SPIN_GROUPS: int = 26
 
-#: Maximum number of carbon atoms bearing ≥1 hydrogen a molecule may have
-#: to pass the cheap first-pass filter.  A molecule with more CH carbons
-#: than N_SPIN_GROUPS would require enough symmetry to collapse them down to
-#: N_SPIN_GROUPS, which is rare in ChEMBL drug-space.  This upper bound
-#: removes the obvious over-counted molecules before the expensive 3-D test.
+# ── Pre-filter heuristics ──────────────────────────────────────────────────────
+#
+# The heuristic bounds are now derived per-run from the requested group range
+# (carbons ≤ max_groups, protons ≥ min_groups); these module constants remain
+# as the defaults for the legacy single-target path.
+
+#: Maximum number of carbon atoms bearing ≥1 hydrogen a molecule may have to
+#: pass the cheap first-pass filter.  A molecule with more CH carbons than the
+#: target maximum would need extreme symmetry to collapse to it, which is rare.
 MAX_PROTON_BEARING_C: int = N_SPIN_GROUPS
 
-#: Minimum total C-H proton count required for a molecule to have
-#: N_SPIN_GROUPS non-empty spin groups.  A molecule with fewer protons
-#: than N_SPIN_GROUPS cannot possibly fill all groups.
+#: Minimum total C-H proton count required: a molecule with fewer protons than
+#: the target minimum cannot possibly fill that many groups.
 MIN_PROTONS: int = N_SPIN_GROUPS
 
 # ── 3-D conformer generation ──────────────────────────────────────────────────

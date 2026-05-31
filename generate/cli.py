@@ -60,12 +60,17 @@ _DEFAULT_CHUNK    = 32
 
 def _cmd_run(args: argparse.Namespace) -> int:
     from generate.pipeline import run_pipeline  # noqa: PLC0415 — intentional lazy import
+    # --groups N is shorthand for --min-groups N --max-groups N; an explicit
+    # --min/--max-groups overrides it.
+    min_g = args.min_groups if args.min_groups is not None else args.n_groups
+    max_g = args.max_groups if args.max_groups is not None else args.n_groups
     _, kept = run_pipeline(
         source_path     = Path(args.chembl),
         output_path     = Path(args.output),
         source          = args.source,
         xyz_path        = None if args.no_xyz else Path(args.xyz_output),
-        target_groups   = args.n_groups,
+        min_groups      = min_g,
+        max_groups      = max_g,
         max_heavy_atoms = args.max_heavy_atoms,
         num_shards      = args.num_shards,
         shard_index     = args.shard_index,
@@ -107,6 +112,21 @@ def _cmd_dedup(args: argparse.Namespace) -> int:
     print(f"kept {kept:,} unique  (dropped {dropped:,} duplicate InChIKeys) -> {args.out_csv}")
     if args.out_xyz:
         print(f"wrote {n_xyz:,} XYZ blocks -> {args.out_xyz}")
+    return 0
+
+
+def _cmd_split(args: argparse.Namespace) -> int:
+    from generate.buckets import split_dataset  # noqa: PLC0415
+    csv_counts, xyz_counts = split_dataset(
+        Path(args.in_csv), Path(args.out_dir), args.prefix,
+        in_xyz=Path(args.xyz) if args.xyz else None,
+    )
+    total = sum(csv_counts.values())
+    print(f"split {total:,} rows into {len(csv_counts)} buckets "
+          f"-> {args.out_dir}/{args.prefix}_<n>spin.csv.gz")
+    for n in sorted(csv_counts):
+        x = f", {xyz_counts.get(n, 0):,} xyz" if xyz_counts else ""
+        print(f"  {n:>2}spin: {csv_counts[n]:>10,} rows{x}")
     return 0
 
 
@@ -191,7 +211,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_run.add_argument(
         "--n-groups", type=int, default=N_SPIN_GROUPS, metavar="N",
-        help=f"Target spin-group count  (default: {N_SPIN_GROUPS})",
+        help=f"Exact spin-group count to select  (default: {N_SPIN_GROUPS}). "
+             "Shorthand for --min-groups N --max-groups N.",
+    )
+    p_run.add_argument(
+        "--min-groups", type=int, default=None, metavar="N", dest="min_groups",
+        help="Minimum spin-group count to keep (overrides --n-groups). "
+             "Use with --max-groups for a categorising scan, e.g. 1..26.",
+    )
+    p_run.add_argument(
+        "--max-groups", type=int, default=None, metavar="N", dest="max_groups",
+        help="Maximum spin-group count to keep (overrides --n-groups).",
     )
     p_run.add_argument(
         "--max-heavy-atoms", type=int, default=50, metavar="N",
@@ -323,6 +353,23 @@ def build_parser() -> argparse.ArgumentParser:
     p_dedup.add_argument("--in-xyz",  dest="in_xyz",  default=None, metavar="IN.xyz.gz")
     p_dedup.add_argument("--out-xyz", dest="out_xyz", default=None, metavar="OUT.xyz.gz")
     p_dedup.set_defaults(func=_cmd_dedup)
+
+    # ── split ─────────────────────────────────────────────────────────────────
+    p_split = sub.add_parser(
+        "split",
+        help="Split a categorising scan into per-spin-count datasets.",
+        description=(
+            "Partition a combined range-scan CSV (+ XYZ) into "
+            "<prefix>_<n>spin.{csv,xyz.gz}, one file per spin-group count."
+        ),
+    )
+    p_split.add_argument("in_csv",  metavar="COMBINED.csv")
+    p_split.add_argument("out_dir", metavar="OUT_DIR")
+    p_split.add_argument("--prefix", default="pubchem", metavar="NAME",
+                         help="Output filename prefix (default: pubchem).")
+    p_split.add_argument("--xyz", default=None, metavar="COMBINED.xyz.gz",
+                         help="Also split this combined multi-XYZ to match.")
+    p_split.set_defaults(func=_cmd_split)
 
     return parser
 

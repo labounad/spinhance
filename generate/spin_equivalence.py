@@ -101,21 +101,30 @@ def _count_ch_protons(mol: Chem.Mol) -> int:
     )
 
 
-def passes_heuristic(mol: Chem.Mol) -> tuple[bool, int, int]:
+def passes_heuristic(
+    mol: Chem.Mol,
+    max_carbons: int = MAX_PROTON_BEARING_C,
+    min_protons: int = MIN_PROTONS,
+) -> tuple[bool, int, int]:
     """Return whether *mol* passes the fast proton-count pre-filter.
 
     A molecule passes when both conditions hold:
 
-    * ``n_proton_bearing_c ≤ MAX_PROTON_BEARING_C`` — at most the target
-      number of CH carbons.  A molecule with more would need extreme symmetry
-      to reach exactly the target spin-group count.
-    * ``n_protons ≥ MIN_PROTONS`` — enough C-H protons to fill every group.
+    * ``n_proton_bearing_c ≤ max_carbons`` — at most the target maximum number
+      of CH carbons.  A molecule with more would need extreme symmetry to
+      collapse to the target spin-group count.
+    * ``n_protons ≥ min_protons`` — enough C-H protons to fill every group.
+
+    *max_carbons* and *min_protons* default to the legacy single-target
+    constants; a categorising scan passes the range bounds
+    (``max_carbons=max_groups``, ``min_protons=min_groups``) so one pass keeps
+    every molecule that could fall anywhere in the requested range.
 
     Returns ``(passes, n_proton_bearing_c, n_protons)``.
     """
     n_c = _count_proton_bearing_carbons(mol)
     n_h = _count_ch_protons(mol)
-    return (n_c <= MAX_PROTON_BEARING_C) and (n_h >= MIN_PROTONS), n_c, n_h
+    return (n_c <= max_carbons) and (n_h >= min_protons), n_c, n_h
 
 
 # ── 3-D conformer generation ──────────────────────────────────────────────────

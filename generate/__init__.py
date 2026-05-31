@@ -34,6 +34,8 @@ Or call the Python API directly::
 
 from .config import (
     N_SPIN_GROUPS,
+    MIN_SPIN_GROUPS,
+    MAX_SPIN_GROUPS,
     MAX_PROTON_BEARING_C,
     MIN_PROTONS,
     EMBED_RANDOM_SEED,
@@ -51,6 +53,8 @@ from .pipeline import run_pipeline
 __all__ = [
     # config
     "N_SPIN_GROUPS",
+    "MIN_SPIN_GROUPS",
+    "MAX_SPIN_GROUPS",
     "MAX_PROTON_BEARING_C",
     "MIN_PROTONS",
     "EMBED_RANDOM_SEED",
