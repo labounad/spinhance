@@ -1,0 +1,42 @@
+# Larger, longer surrogate run — push for the best matrix->spectrum fidelity.
+# vs surrogate.yaml: ~3-4M params (was 0.54M), 120-epoch cosine schedule (so the
+# LR doesn't floor early — the prior run was still improving when the schedule
+# ended), and early-stopping so we stop at the real plateau instead of guessing.
+run:
+  name: surrogate_large
+  output_dir: model/runs
+
+data:
+  records: mol_to_spin_system/data/spin_systems_chembl_8spin_randomized.json
+  spectra: simulation/data/spectra
+  fields: [90, 600]
+  split: none
+
+model:
+  name: surrogate
+  dim: 256
+  depth: 6
+  heads: 8
+  sticks_per_group: 64
+  linewidth_hz: 1.0
+
+loss:
+  mse_weight: 0.3
+
+training:
+  epochs: 120
+  batch_size: 256
+  lr: 0.0003
+  weight_decay: 0.01
+  amp: bf16
+  warmup_frac: 0.03
+  grad_clip: 1.0
+  num_workers: 4          # match g6e.xlarge vCPUs (the 8 in surrogate.yaml oversubscribed)
+  val_every: 1
+  save_every: 5           # bigger checkpoints; per-epoch isn't needed (best/last kept)
+  patience: 15            # stop if val W1 hasn't improved in 15 epochs
+  seed: 0
+
+diagnostics:
+  enabled: true
+  log_every_steps: 50

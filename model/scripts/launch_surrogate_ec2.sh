@@ -14,7 +14,7 @@ PROFILE="${AWS_PROFILE:-hack-scripps}"
 REGION="${AWS_REGION:-us-west-2}"
 INSTANCE_TYPE="${1:-g6e.xlarge}"; shift 2>/dev/null || true
 EXTRA_SET="$*"
-CONFIG="model/configs/surrogate.yaml"
+CONFIG="${SURROGATE_CONFIG:-model/configs/surrogate.yaml}"   # override: SURROGATE_CONFIG=...
 JSON_NAME="spin_systems_chembl_8spin_randomized.json"
 
 BUCKET="spinhance-data"

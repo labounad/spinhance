@@ -151,7 +151,8 @@ class SurrogateTrainer:
               f"train {len(ds['train'])} val {len(ds['val'])} | "
               f"params {sum(p.numel() for p in model.parameters())/1e6:.2f}M")
 
-        best, best_epoch, step = float("inf"), 0, 0
+        best, best_epoch, step, bad = float("inf"), 0, 0, 0
+        patience = int(_g(cfg, "training.patience", 0))   # 0 = disabled (run all epochs)
         va = {}
         for epoch in range(epochs):
             model.train()
@@ -194,8 +195,10 @@ class SurrogateTrainer:
             score = va.get("w1", float("inf"))
             is_best = score < best
             if is_best:
-                best, best_epoch = score, epoch
+                best, best_epoch, bad = score, epoch, 0
                 diag.log_event("best_checkpoint", {"epoch": epoch, "w1": float(score)})
+            else:
+                bad += 1
 
             self._save(ckpt_dir / "last.pt", model, epoch, va)
             if is_best:
@@ -213,7 +216,14 @@ class SurrogateTrainer:
             print(f"epoch {epoch:3d} | train {running.get('loss_total',0)/n:.4f}"
                   + (f" | val W1 {va.get('w1',0):.4f} "
                      f"(90 {va.get('w1_90',0):.4f} / 600 {va.get('w1_600',0):.4f}) "
-                     f"cos90 {va.get('cosine_90',0):.3f}" if va else ""))
+                     f"cos90 {va.get('cosine_90',0):.3f}" if va else "")
+                  + (f" | no-improve {bad}/{patience}" if patience else ""))
+
+            if patience and bad >= patience:
+                diag.log_event("early_stop", {"epoch": epoch, "patience": patience,
+                                              "best_epoch": best_epoch})
+                print(f"early stop at epoch {epoch} (best epoch {best_epoch}, W1 {best:.4f})")
+                break
 
         summary = {"run_id": run_dir.name, "state": "finished", "best_epoch": best_epoch,
                    "best_score": (float(best) if best != float("inf") else None),
