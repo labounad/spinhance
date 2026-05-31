@@ -61,6 +61,7 @@ Notes
 """
 from __future__ import annotations
 
+import base64
 import json
 import math
 import subprocess
@@ -93,6 +94,15 @@ METRICS_CACHE_V = 2  # bump to invalidate stale disk caches
 
 st.set_page_config(page_title="SpinHance Viewer", layout="wide",
                    initial_sidebar_state="collapsed")
+
+# Suppress Streamlit's whole-page fade/dim during reruns; individual spinners
+# placed near active controls serve as loading indicators instead.
+st.markdown("""
+<style>
+[data-stale] { opacity: 1 !important; transition: none !important; }
+[data-stale] * { transition: none !important; }
+</style>
+""", unsafe_allow_html=True)
 
 
 # ─── AWS credential helpers ───────────────────────────────────────────────────
@@ -414,10 +424,36 @@ def _fig_matrix(shifts: np.ndarray, couplings: np.ndarray,
     return fig
 
 
-# ─── JSMol ────────────────────────────────────────────────────────────────────
+# ─── Molecule structure viewers ───────────────────────────────────────────────
 
-def _jsmol_html(smiles: str, width: int = 230, height: int = 230) -> str:
+@st.cache_data(show_spinner=False)
+def _mol2d_svg(smiles: str, width: int = 200, height: int = 200) -> str:
+    """ChemDraw-style 2D structure as an SVG string."""
     try:
+        from rdkit import Chem
+        from rdkit.Chem import rdDepictor
+        from rdkit.Chem.Draw import rdMolDraw2D
+        mol = Chem.MolFromSmiles(smiles)
+        if mol is None:
+            raise ValueError("Invalid SMILES")
+        rdDepictor.Compute2DCoords(mol)
+        drawer = rdMolDraw2D.MolDraw2DSVG(width, height)
+        opts = drawer.drawOptions()
+        opts.addStereoAnnotation = True
+        opts.bondLineWidth = 1.8
+        opts.padding = 0.14
+        drawer.DrawMolecule(mol)
+        drawer.FinishDrawing()
+        return drawer.GetDrawingText()
+    except Exception as exc:
+        return f"<p style='color:#888;font-size:11px;padding:4px;'>2D error: {exc}</p>"
+
+
+@st.cache_data(show_spinner=False)
+def _mol3d_html(smiles: str, width: int = 200, height: int = 200) -> str:
+    """Spinning 3D ball-and-stick via py3Dmol (uses 3Dmol.js CDN)."""
+    try:
+        import py3Dmol
         from rdkit import Chem
         from rdkit.Chem import AllChem
         mol = Chem.MolFromSmiles(smiles)
@@ -427,29 +463,18 @@ def _jsmol_html(smiles: str, width: int = 230, height: int = 230) -> str:
         if AllChem.EmbedMolecule(mol, AllChem.ETKDGv3()) != 0:
             AllChem.EmbedMolecule(mol, randomSeed=42)
         AllChem.MMFFOptimizeMolecule(mol)
-        mol_block_json = json.dumps(Chem.MolToMolBlock(mol))
+        mol_block = Chem.MolToMolBlock(mol)
+        view = py3Dmol.view(width=width, height=height)   # keyword args required
+        view.addModel(mol_block, "mol")
+        view.setStyle({"stick": {"colorscheme": "grayCarbon", "radius": 0.12},
+                       "sphere": {"colorscheme": "grayCarbon", "radius": 0.28}})
+        view.setBackgroundColor("#f3f4f6")
+        view.spin(True)
+        view.zoomTo()
+        return view._make_html()   # _repr_html_ returns None outside Jupyter
     except Exception as exc:
-        return (f"<p style='color:#888;font-size:11px;padding:8px;'>"
-                f"3D unavailable: {exc}</p>")
-
-    return f"""<!DOCTYPE html>
-<html><head><meta charset='utf-8'>
-<script src='https://chemapps.stolaf.edu/jmol/jmol.js'></script>
-</head>
-<body style='margin:0;padding:0;background:#f3f4f6;'>
-<div id='jd'></div>
-<script>
-Jmol.setDocument(false);
-var md = {mol_block_json};
-var Info = {{
-  width:{width}, height:{height},
-  script: "data 'mol'\\n" + md + "\\nend 'mol'\\nspin on; background [243,244,246];",
-  use: "HTML5",
-  j2sPath: "https://chemapps.stolaf.edu/jmol/j2s",
-  disableJ2SLoadMonitor: true, disableInitialConsole: true
-}};
-document.getElementById('jd').innerHTML = Jmol.getAppletHtml("jsmolApp0", Info);
-</script></body></html>"""
+        return (f"<p style='color:#888;font-size:11px;padding:4px;'>"
+                f"3D error: {exc}</p>")
 
 
 # ─── Page 1 — Session browser ─────────────────────────────────────────────────
@@ -479,7 +504,8 @@ def _page_select() -> None:
     if st.button("Open session →", type="primary"):
         st.session_state["session"] = selected
         st.session_state["page"] = "analysis"
-        st.session_state.pop("mol_pred", None)
+        for k in ("mol_pred", "epoch_sel", "loaded_epoch"):
+            st.session_state.pop(k, None)
         st.rerun()
 
 
@@ -495,6 +521,8 @@ def _page_analysis() -> None:
     nav_col, title_col = st.columns([1, 8])
     if nav_col.button("← Sessions"):
         st.session_state["page"] = "select"
+        for k in ("epoch_sel", "loaded_epoch"):
+            st.session_state.pop(k, None)
         st.rerun()
     title_col.title(f"Session: `{session}`")
 
@@ -548,49 +576,122 @@ def _page_analysis() -> None:
 
     best = min(valid_rows, key=lambda r: r["score"])
     best_epoch: int = best["epoch"]
+    valid_ep_set = {r["epoch"] for r in valid_rows}
+    epoch_by_num = {r["epoch"]: r for r in valid_rows}
 
-    # ── Epoch bar chart ───────────────────────────────────────────────────────
+    # Resolve selected and loaded epochs
+    if st.session_state.get("epoch_sel") not in valid_ep_set:
+        st.session_state.pop("epoch_sel", None)
+    sel_epoch: int = st.session_state.get("epoch_sel", best_epoch)
+    loaded_epoch = st.session_state.get("loaded_epoch")
+    is_loading = (sel_epoch != loaded_epoch)
+
+    # ── Epoch bar chart (click-only; all pan/zoom/select disabled) ────────────
     st.subheader("Validation score across epochs")
     st.caption("Score = shift_MAE (ppm) + J_MAE (Hz) / 10  ·  lower is better  ·  "
-               "best epoch highlighted in red")
+               "click a bar to load that checkpoint")
 
     xs = [r["epoch"] for r in valid_rows]
     ys = [r["score"] for r in valid_rows]
-    bar_colors = ["#DC2626" if r["epoch"] == best_epoch else "#93C5FD"
-                  for r in valid_rows]
+
+    # Color scheme:
+    #   best (not sel) → red      sel loading → pale yellow      sel loaded → gold
+    #   other          → blue
+    bar_colors = []
+    for r in valid_rows:
+        ep = r["epoch"]
+        if ep == sel_epoch and is_loading:
+            bar_colors.append("#FEF08A")   # pale yellow — clicked, loading
+        elif ep == sel_epoch:
+            bar_colors.append("#EAB308")   # gold — loaded / active
+        elif ep == best_epoch:
+            bar_colors.append("#DC2626")   # red — best (not currently selected)
+        else:
+            bar_colors.append("#93C5FD")   # blue — other
+
+    hover = [
+        f"<b>ep{r['epoch']}"
+        + (" ★best" if r["epoch"] == best_epoch else "")
+        + "</b><br>"
+        + f"Score: {r['score']:.4f}<br>"
+        + f"Shift MAE: {r['shift_mae_ppm']:.3f} ppm<br>"
+        + f"J MAE: {r['j_mae_hz']:.2f} Hz"
+        for r in valid_rows
+    ]
 
     fig_bar = go.Figure(go.Bar(
         x=xs, y=ys, marker_color=bar_colors,
         text=[f"{s:.3f}" for s in ys],
-        textposition="outside", textfont=dict(size=8)))
+        textposition="outside", textfont=dict(size=8),
+        hovertemplate="%{customdata}<extra></extra>",
+        customdata=hover,
+    ))
     fig_bar.add_annotation(
         x=best_epoch, y=best["score"],
-        text=f"Best ep {best_epoch}",
+        text=f"★ best ep{best_epoch}",
         showarrow=True, arrowhead=2, arrowsize=1, ax=0, ay=-44,
         font=dict(color="#DC2626", size=11))
+    if sel_epoch != best_epoch:
+        sel_row = epoch_by_num[sel_epoch]
+        label = "loading…" if is_loading else "loaded"
+        fig_bar.add_annotation(
+            x=sel_epoch, y=sel_row["score"],
+            text=f"ep{sel_epoch} ({label})",
+            showarrow=True, arrowhead=2, arrowsize=1, ax=0, ay=-28,
+            font=dict(color="#854D0E", size=11))
     fig_bar.update_layout(
         xaxis=dict(title="Epoch", dtick=max(1, len(valid_rows) // 20)),
         yaxis=dict(title="Score (lower = better)"),
         height=320, margin=dict(l=50, r=20, t=20, b=40),
-        plot_bgcolor="white", showlegend=False)
-    st.plotly_chart(fig_bar, use_container_width=True)
+        plot_bgcolor="white", showlegend=False,
+        dragmode=False,   # disable pan / zoom / box-select / lasso
+    )
 
-    # ── Best-epoch summary ────────────────────────────────────────────────────
+    event = st.plotly_chart(
+        fig_bar, use_container_width=True,
+        on_select="rerun", selection_mode=("points",), key="epoch_chart",
+        config={"displayModeBar": False, "scrollZoom": False},
+    )
+    # Apply click immediately (in this render pass) so the rest of the page uses
+    # the new sel_epoch; bar colours update on the next rerun.
+    pts = event.selection.points if hasattr(event, "selection") else []
+    if pts:
+        clicked = int(pts[0]["x"])
+        if clicked in valid_ep_set and clicked != sel_epoch:
+            st.session_state["epoch_sel"] = clicked
+            sel_epoch = clicked
+            is_loading = (sel_epoch != loaded_epoch)
+
+    sel = epoch_by_num[sel_epoch]
+
+    # ── Lower half: blank out (spinner) while the checkpoint downloads ─────────
     st.divider()
-    st.subheader(f"Best epoch: {best_epoch}")
-    bm1, bm2, bm3, bm4 = st.columns(4)
-    bm1.metric("Score", f"{best['score']:.4f}")
-    bm2.metric("Shift MAE", f"{best['shift_mae_ppm']:.3f} ppm")
-    bm3.metric("J MAE", f"{best['j_mae_hz']:.2f} Hz")
-    bm4.metric("Presence F1", f"{best['presence_f1']:.3f}"
-               if not np.isnan(best['presence_f1']) else "—")
+    if is_loading:
+        with st.spinner(f"Loading checkpoint for epoch {sel_epoch}…"):
+            try:
+                model, std, vocab, cfg_dict = _load_model(session, sel_epoch)
+            except Exception as exc:
+                st.error(f"Failed to load epoch {sel_epoch}: {exc}")
+                return
+        st.session_state["loaded_epoch"] = sel_epoch
+        st.rerun()   # re-render so bar chart turns gold and content appears
 
-    # ── Load best-epoch model ─────────────────────────────────────────────────
-    try:
-        model, std, vocab, cfg_dict = _load_model(session, best_epoch)
-    except Exception as exc:
-        st.error(f"Failed to load epoch {best_epoch} model: {exc}")
-        return
+    # Model is loaded; fetch from cache (instant)
+    model, std, vocab, cfg_dict = _load_model(session, sel_epoch)
+
+    # ── Selected-epoch summary ────────────────────────────────────────────────
+    header = f"Epoch {sel_epoch}"
+    if sel_epoch == best_epoch:
+        header += "  ★ best"
+    st.subheader(header)
+    bm1, bm2, bm3, bm4 = st.columns(4)
+    bm1.metric("Score", f"{sel['score']:.4f}",
+               delta=f"{sel['score'] - best['score']:+.4f}" if sel_epoch != best_epoch else None,
+               delta_color="inverse")
+    bm2.metric("Shift MAE", f"{sel['shift_mae_ppm']:.3f} ppm")
+    bm3.metric("J MAE", f"{sel['j_mae_hz']:.2f} Hz")
+    bm4.metric("Presence F1", f"{sel['presence_f1']:.3f}"
+               if not np.isnan(sel['presence_f1']) else "—")
 
     # ── Test set ──────────────────────────────────────────────────────────────
     if not Path(json_path).exists():
@@ -610,17 +711,17 @@ def _page_analysis() -> None:
 
     st.caption(f"Test set: {len(test_recs)} molecules (split seed={seed})")
 
-    # ── Molecule selector row: [JSMol | dropdown + info + button] ─────────────
-    jsmol_col, sel_col = st.columns([1, 3])
+    # ── Molecule selector row: [2D] [3D] | [dropdown + info + button] ──────────
+    draw_col, mol3d_col, sel_col = st.columns([1, 1, 3])
 
     with sel_col:
         mol_idx = st.selectbox(
-            "Select molecule (SMILES)",
+            "Select molecule",
             range(len(test_recs)),
             format_func=lambda i: (
                 f"{test_recs[i]['mol_id']}"
                 + (f"  ·  {test_recs[i]['chembl_id']}" if test_recs[i]["chembl_id"] else "")
-                + (f"  ·  {test_recs[i]['smiles'][:55]}…" if len(test_recs[i].get("smiles", "")) > 55
+                + (f"  ·  {test_recs[i]['smiles'][:50]}…" if len(test_recs[i].get("smiles", "")) > 50
                    else f"  ·  {test_recs[i]['smiles']}" if test_recs[i].get("smiles") else "")
             ),
             key="mol_selector",
@@ -649,11 +750,25 @@ def _page_analysis() -> None:
                 "mol_id": rec["mol_id"], "field": field_mhz,
             }
 
-    with jsmol_col:
+    with draw_col:
         if rec.get("smiles"):
-            components.html(_jsmol_html(rec["smiles"]), height=242, scrolling=False)
+            svg = _mol2d_svg(rec["smiles"], width=210, height=210)
+            b64 = base64.b64encode(svg.encode()).decode()
+            st.markdown(
+                f'<div style="background:white;border-radius:8px;padding:4px;">'
+                f'<img src="data:image/svg+xml;base64,{b64}" '
+                f'style="width:100%;display:block;"/></div>',
+                unsafe_allow_html=True)
         else:
-            st.info("No SMILES available")
+            st.info("No SMILES")
+
+    with mol3d_col:
+        if rec.get("smiles"):
+            with st.spinner(""):
+                html3d = _mol3d_html(rec["smiles"], width=210, height=210)
+            components.html(html3d, height=222, scrolling=False)
+        else:
+            st.info("No SMILES")
 
     # ── Ground truth + prediction panes ──────────────────────────────────────
     rec = test_recs[mol_idx]  # re-read in case it changed
