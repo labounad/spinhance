@@ -57,10 +57,19 @@ def _add_bytes(tar: tarfile.TarFile, arcname: str, data: bytes) -> None:
     tar.addfile(info, io.BytesIO(data))
 
 
-def export_spectra(spectra_dir, out, sparsify_data: bool = True,
+def export_spectra(spectra_dir, out, field=None, sparsify_data: bool = True,
                    cutoff: float = 0.001, renormalize: bool = True) -> dict:
     """Pack ``spectra_dir`` into a single ``.tar.gz`` at ``out``.
 
+    ``index.csv`` is always taken from ``spectra_dir`` root.  If ``field`` is
+    given (e.g. ``"90"`` or ``"90MHz"``), only that field's subdirectory is
+    packed, yielding the canonical layout::
+
+        index.csv
+        90MHz/ppm_axis.npy
+        90MHz/mol_<i>.npy   (or .npz)
+
+    With ``field=None`` (default) all ``<n>MHz/`` subdirectories are packed.
     Returns a small summary dict (counts and sizes).
     """
     spectra_dir = Path(spectra_dir)
@@ -71,10 +80,18 @@ def export_spectra(spectra_dir, out, sparsify_data: bool = True,
     if tmp_tar.suffix != ".tar":
         tmp_tar = tmp_tar.with_suffix(".tar")
 
-    mol_files = sorted(spectra_dir.rglob("mol_*.npy")) + sorted(spectra_dir.rglob("mol_*.npz"))
+    # Determine which subdirectory to scan for spectra.
+    if field is not None:
+        digits = "".join(c for c in str(field) if c.isdigit())
+        scan_dir = spectra_dir / f"{digits}MHz"
+    else:
+        scan_dir = spectra_dir
+
+    mol_files = sorted(scan_dir.rglob("mol_*.npy")) + sorted(scan_dir.rglob("mol_*.npz"))
     if not mol_files:
-        raise FileNotFoundError(f"No spectra (mol_*.np[yz]) under {spectra_dir}")
-    aux = sorted(spectra_dir.rglob("ppm_axis.npy")) + sorted(spectra_dir.glob("index.csv"))
+        raise FileNotFoundError(f"No spectra (mol_*.np[yz]) under {scan_dir}")
+    # ppm_axis lives inside the field dir; index.csv lives at spectra_dir root.
+    aux = sorted(scan_dir.rglob("ppm_axis.npy")) + list(spectra_dir.glob("index.csv"))
 
     manifest = (
         "SpinHance spectra export\n"

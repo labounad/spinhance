@@ -243,8 +243,9 @@ python -m simulation.cli plot --spectra_dir data/processed/spectra --stem mol_00
 
 ```bash
 python -m simulation.cli export --spectra_dir simulation/data/spectra \
-    --out simulation/data/spectra.tar.gz        # sparsified (default), cutoff 0.001
+    --out simulation/data/spectra/90MHz.tar.gz --field 90  # sparsified (default), cutoff 0.001
 # options: --no-sparsify (store dense), --cutoff 0.001, --no-renormalize
+# omit --field to pack all field subdirectories
 ```
 
 Sparsify drops points ≤ `cutoff × max` per spectrum (the long Lorentzian tails;

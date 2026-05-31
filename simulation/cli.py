@@ -77,9 +77,12 @@ def _add_plot(sub: argparse._SubParsersAction) -> None:
 def _add_export(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser("export", help="Pack a spectra/ dir into one .tar.gz")
     p.add_argument("--spectra_dir", type=Path, required=True,
-                   help="Dir containing <field>MHz/<stem>.npy subfolders")
+                   help="Dir containing <field>MHz/<stem>.npy subfolders and index.csv")
     p.add_argument("--out", type=Path, required=True,
-                   help="Output tarball path (e.g. spectra.tar.gz)")
+                   help="Output tarball path (e.g. simulation/data/spectra/90MHz.tar.gz)")
+    p.add_argument("--field", default="90",
+                   help="Field to pack, e.g. 90 or 90MHz (default: 90); "
+                        "omit to pack all fields")
     p.add_argument("--no-sparsify", action="store_true",
                    help="Store dense spectra instead of sparsifying")
     p.add_argument("--cutoff", type=float, default=0.001,
@@ -148,6 +151,7 @@ def main(argv: list[str] | None = None) -> int:
         from simulation.export import export_spectra
         export_spectra(
             args.spectra_dir, args.out,
+            field=args.field or None,
             sparsify_data=not args.no_sparsify,
             cutoff=args.cutoff,
             renormalize=not args.no_renormalize,
