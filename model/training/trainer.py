@@ -29,6 +29,17 @@ from model.training.optimizer import amp_context, build_optimizer_and_scheduler
 from model.training.seed import seed_everything
 
 
+# Coarse next-experiment hints keyed by the dominant failure tag (mirrors
+# autoai/run_reader); surfaced in summary.json for the dashboard + AutoAI.
+_FAILURE_HINTS = {
+    "large_shift_error": "Increase shift loss weight or use the Hungarian graph loss",
+    "false_negative_couplings": "Increase presence_pos_weight",
+    "false_positive_couplings": "Lower presence threshold or up-weight the absence class",
+    "bad_j_magnitude": "Increase j_mag loss weight",
+    "wrong_degeneracy": "Try integration-aware features or check the degeneracy vocab",
+}
+
+
 def _resolve_device(d):
     if d:
         return d
@@ -75,14 +86,14 @@ class Trainer:
         loss_fn = build_composite(cfg.loss["terms"],
                                   deg_class_weight=cb["deg_weights"],
                                   presence_pos_weight=cb["presence_pos_weight"])
-        return ds, std, vocab, model, loss_fn, cb
+        return ds, std, vocab, model, loss_fn, cb, by_fold["val"]
 
     # ── fit ────────────────────────────────────────────────────────────────────
 
     def fit(self):
         cfg = self.cfg
         seed_everything(cfg.training.seed)
-        ds, std, vocab, model, loss_fn, cb = self._build()
+        ds, std, vocab, model, loss_fn, cb, val_records = self._build()
 
         nw = cfg.training.num_workers
         pin = self.device != "cpu"
@@ -110,6 +121,18 @@ class Trainer:
                                      "deg_counts": cb["deg_counts"].tolist()})
         print(f"[trainer] run {run_id} | device {self.device} | "
               f"train {len(ds['train'])} val {len(ds['val'])} | params {model.n_params/1e6:.2f}M")
+
+        # Probe evaluator (fixed stratified val molecules). Guarded so a probe
+        # failure never kills training.
+        probe_eval = None
+        if cfg.diagnostics.enabled and cfg.diagnostics.probe_count > 0 and val_records:
+            try:
+                from model.evaluation.probes import ProbeEvaluator
+                probe_eval = ProbeEvaluator(val_records, ds["val"], vocab, std,
+                                            probe_count=cfg.diagnostics.probe_count,
+                                            device=self.device, run_dir=run_dir)
+            except Exception as e:
+                print(f"[trainer] ProbeEvaluator init failed ({e}) — skipping probes")
 
         best, best_epoch, bad = float("inf"), 0, 0
         global_step = 0
@@ -156,15 +179,49 @@ class Trainer:
                      f"J {va.get('j_mae_hz', 0):.2f}Hz f1 {va.get('presence_f1', 0):.3f} "
                      f"deg {va.get('deg_acc_balanced', 0):.3f}" if do_val else " | val skipped"))
 
+            # ── Probes + failure analysis (every probe_every_epochs + last) ──────
+            run_probe = (cfg.diagnostics.enabled
+                         and (epoch % cfg.diagnostics.probe_every_epochs == 0
+                              or epoch == cfg.training.epochs - 1))
+            if run_probe and probe_eval is not None:
+                try:
+                    pagg = probe_eval.run(model, epoch, amp_ctx)
+                    if pagg:
+                        diag.log_metrics(split="probe", epoch=epoch, step=global_step, metrics=pagg)
+                    from model.evaluation.failure_analysis import (
+                        per_sample_evaluate, save_failure_cases)
+                    per_sample = per_sample_evaluate(
+                        model, val_records, ds["val"], cfg.training.batch_size,
+                        std, vocab, self.device, amp_ctx)
+                    fsummary = save_failure_cases(per_sample, run_dir, epoch)
+                    diag.log_event("failure_analysis", {"epoch": epoch, **fsummary})
+                except Exception as e:
+                    print(f"[trainer] probe/failure analysis failed at epoch {epoch}: {e}")
+
             if bad >= cfg.training.patience:
                 diag.log_event("early_stop", {"epoch": epoch, "patience": cfg.training.patience})
                 print(f"early stop at epoch {epoch}")
                 break
 
+        # Latest failure summary -> summary.json + a coarse recommendation.
+        failure_summary, recommendation = {}, ""
+        probe_dir = run_dir / "probes"
+        if probe_dir.exists():
+            eps = sorted((d for d in probe_dir.iterdir() if d.is_dir()), reverse=True)
+            for d in eps:
+                fp = d / "failure_summary.json"
+                if fp.exists():
+                    import json as _json
+                    failure_summary = _json.loads(fp.read_text())
+                    recommendation = _FAILURE_HINTS.get(
+                        failure_summary.get("dominant_failure", ""), "")
+                    break
+
         summary = {
             "run_id": run_id, "state": "finished", "best_epoch": best_epoch,
             "best_score": (float(best) if best != float("inf") else None),
             "best_metrics": va, "score_formula": "shift_mae_ppm + j_mae_hz / 10.0",
+            "failure_summary": failure_summary, "recommendation": recommendation,
         }
         diag.finalize(summary)
         diag.update_status({
