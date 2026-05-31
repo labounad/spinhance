@@ -1,19 +1,72 @@
 """
-model/gui.py — SpinHance training session viewer.
+model/gui.py — SpinHance training session viewer
+=================================================
 
-Two-page Streamlit app:
-  Page 1 "Session browser"  → select a session from S3
-  Page 2 "Session analysis" → epoch bar chart + best-epoch molecule inspector
+A two-page Streamlit dashboard for inspecting EC2 training runs stored on S3.
 
-Run from the repo root:
+Quick start
+-----------
+Run from the repo root (requires the `spinhance` conda env):
+
     conda run -n spinhance streamlit run model/gui.py
+
+The app opens at http://localhost:8501 in your browser.
+
+AWS credentials
+---------------
+The app uses the `hack-scripps` SSO profile.  On first launch it writes the
+profile stanzas to ~/.aws/config automatically.  If the token has expired you
+will see a login gate — click "Login with AWS SSO" (a browser window opens)
+or run the helper script manually:
+
+    bash context/setup_aws_login.sh
+
+Tokens last ~8 hours; re-run the script or click the login button when you see
+"Token has expired and refresh failed."
+
+Page 1 — Session browser
+-------------------------
+Lists all training sessions at s3://spinhance-data/training/.  Sessions are
+named session001, session002, … in the order they were launched by train.sh.
+Select one and click "Open session →".
+
+Page 2 — Session analysis
+--------------------------
+Epoch bar chart
+  Shows the composite validation score (shift_MAE ppm + J_MAE Hz / 10) for
+  every saved epoch.  Lower is better; the best epoch is highlighted in red.
+  Epoch metrics are cached to /tmp/spinhance_viewer/<session>/epoch_metrics.json
+  after the first load so subsequent visits are instant.  Use "↺ Reload metrics"
+  to force a fresh pull (e.g. while a run is still in progress).
+
+Best-epoch molecule inspector
+  Loads the best epoch's model weights, reconstructs the 70/20/10 test split
+  using the training seed stored in the checkpoint, and lets you browse test-set
+  molecules.  For each molecule:
+    • JSMol rotating 3D structure (requires internet for the St. Olaf CDN)
+    • Ground-truth spin matrix and simulated ¹H NMR spectrum
+    • Click "▶ Run Inference" to see the model's predicted matrix and spectrum
+      side-by-side with ground truth
+
+Sidebar options (Page 2)
+  spin_systems.json  path to the molecule dataset (default: mol_to_spin_system/data/)
+  Field (MHz)        90 or 600 MHz for spectrum simulation
+
+Notes
+-----
+* Checkpoint files are downloaded to /tmp/spinhance_viewer/<session>/ and reused
+  on subsequent loads — no repeated S3 traffic.
+* The JSMol widget needs internet access to load from chemapps.stolaf.edu.
+* If RDKit is unavailable the 3D widget is replaced with a plain text fallback.
 """
 from __future__ import annotations
 
 import json
+import math
 import subprocess
 import sys
 import tempfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import numpy as np
@@ -35,6 +88,8 @@ AWS_REGION     = "us-west-2"
 SSO_SESSION    = "scripps-hackathon"
 SSO_START_URL  = "https://d-9267e96a16.awsapps.com/start"
 ACCOUNT_ID     = "127696279288"
+
+METRICS_CACHE_V = 2  # bump to invalidate stale disk caches
 
 st.set_page_config(page_title="SpinHance Viewer", layout="wide",
                    initial_sidebar_state="collapsed")
@@ -158,17 +213,88 @@ def _rebuild_model(sd: dict):
     return model
 
 
-@st.cache_data(show_spinner=False)
-def _epoch_meta(session: str, epoch: int) -> dict:
-    """Download checkpoint and return only epoch, metrics, cfg (no model weights)."""
+def _metrics_cache_path(session: str) -> Path:
+    return CACHE_DIR / session / "epoch_metrics.json"
+
+
+def _load_session_metrics(session: str) -> tuple[list[dict], dict[int, str]]:
+    """Return (rows, errors).
+
+    rows  — list of {epoch, score, shift_mae_ppm, j_mae_hz, presence_f1, deg_acc}
+            sorted by epoch.  NaN values are float('nan').
+    errors — {epoch: error_string} for any epochs that failed.
+
+    Strategy:
+      1. Read from disk cache if present (instant).
+      2. Otherwise download all epoch checkpoints in parallel (6 workers),
+         extract just the metrics dict, then write a compact disk cache so the
+         next call is instant.
+    """
     import torch
-    local = _download_epoch(session, epoch)
-    ckpt = torch.load(str(local), map_location="cpu", weights_only=False)
-    return {
-        "epoch": ckpt.get("epoch", epoch),
-        "metrics": ckpt.get("metrics") or {},
-        "cfg": ckpt.get("cfg") or {},
-    }
+
+    cache = _metrics_cache_path(session)
+
+    # ── Fast path: disk cache ─────────────────────────────────────────────────
+    if cache.exists():
+        try:
+            data = json.loads(cache.read_text())
+            if data.get("v") == METRICS_CACHE_V:
+                rows = [
+                    {k: (float("nan") if v is None else v) for k, v in r.items()}
+                    for r in data["rows"]
+                ]
+                return rows, {}
+        except Exception:
+            cache.unlink(missing_ok=True)
+
+    # ── Slow path: parallel S3 download ──────────────────────────────────────
+    epoch_list = _list_epoch_numbers(session)
+    if not epoch_list:
+        return [], {}
+
+    def _fetch(ep: int) -> dict:
+        local = _download_epoch(session, ep)
+        ckpt = torch.load(str(local), map_location="cpu", weights_only=False)
+        m = ckpt.get("metrics") or {}
+        shift_mae = float(m.get("shift_mae_ppm", float("nan")))
+        j_mae     = float(m.get("j_mae_hz",      float("nan")))
+        score = (shift_mae + j_mae / 10.0
+                 if not (math.isnan(shift_mae) or math.isnan(j_mae))
+                 else float("nan"))
+        return {
+            "epoch":        ep,
+            "score":        score,
+            "shift_mae_ppm": shift_mae,
+            "j_mae_hz":      j_mae,
+            "presence_f1":   float(m.get("presence_f1",   float("nan"))),
+            "deg_acc":       float(m.get("deg_acc_balanced",
+                                         m.get("deg_acc", float("nan")))),
+        }
+
+    rows_map: dict[int, dict] = {}
+    errors:   dict[int, str]  = {}
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        futures = {pool.submit(_fetch, ep): ep for ep in epoch_list}
+        for fut in as_completed(futures):
+            ep = futures[fut]
+            try:
+                rows_map[ep] = fut.result()
+            except Exception as exc:
+                errors[ep] = str(exc)
+
+    sorted_rows = [rows_map[ep] for ep in sorted(rows_map)]
+
+    # ── Write compact disk cache (NaN → null for JSON) ────────────────────────
+    def _nan_safe(v):
+        return None if isinstance(v, float) and math.isnan(v) else v
+
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    cache.write_text(json.dumps({
+        "v": METRICS_CACHE_V,
+        "rows": [{k: _nan_safe(v) for k, v in r.items()} for r in sorted_rows],
+    }))
+
+    return sorted_rows, errors
 
 
 @st.cache_resource(show_spinner="Loading model weights…")
@@ -390,40 +516,30 @@ def _page_analysis() -> None:
         st.warning("No `epoch_XXX.pt` files found in this session.")
         return
 
-    st.caption(f"{len(epoch_list)} epoch checkpoints: "
-               f"ep{epoch_list[0]} → ep{epoch_list[-1]}")
-
-    # ── Load metrics for all epochs ───────────────────────────────────────────
-    rows: list[dict] = []
-    prog = st.progress(0.0, text="Loading epoch metrics…")
-    errors = []
-    for i, ep in enumerate(epoch_list):
-        prog.progress((i + 1) / len(epoch_list), text=f"Epoch {ep}…")
+    # ── Load metrics (disk cache → parallel S3 download) ─────────────────────
+    cached = _metrics_cache_path(session).exists()
+    spinner_msg = ("Reading cached metrics…" if cached
+                   else f"Downloading {len(epoch_list)} epoch checkpoints in parallel…")
+    with st.spinner(spinner_msg):
         try:
-            meta = _epoch_meta(session, ep)
-            m = meta["metrics"]
-            shift_mae = m.get("shift_mae_ppm", float("nan"))
-            j_mae = m.get("j_mae_hz", float("nan"))
-            if not (np.isnan(shift_mae) or np.isnan(j_mae)):
-                score = shift_mae + j_mae / 10.0
-            else:
-                score = float("nan")
-            rows.append({
-                "epoch": ep,
-                "score": score,
-                "shift_mae_ppm": shift_mae,
-                "j_mae_hz": j_mae,
-                "presence_f1": m.get("presence_f1", float("nan")),
-                "deg_acc": m.get("deg_acc_balanced", m.get("deg_acc", float("nan"))),
-                "cfg": meta["cfg"],
-            })
+            rows, errors = _load_session_metrics(session)
         except Exception as exc:
-            errors.append(f"ep{ep}: {exc}")
-    prog.empty()
+            st.error(f"Failed to load session metrics: {exc}")
+            return
+
+    n_ep = len(epoch_list)
+    n_loaded = len(rows)
+    cache_note = " (cached)" if cached else f" — {n_loaded}/{n_ep} loaded"
+    st.caption(f"{n_ep} epoch checkpoints: ep{epoch_list[0]} → ep{epoch_list[-1]}{cache_note}")
+
+    reload_col, _ = st.columns([1, 6])
+    if reload_col.button("↺  Reload metrics"):
+        _metrics_cache_path(session).unlink(missing_ok=True)
+        st.rerun()
 
     if errors:
-        with st.expander(f"{len(errors)} epoch load error(s)", expanded=False):
-            st.text("\n".join(errors))
+        with st.expander(f"{len(errors)} epoch error(s)", expanded=False):
+            st.text("\n".join(f"ep{ep}: {err}" for ep, err in sorted(errors.items())))
 
     valid_rows = [r for r in rows if not np.isnan(r["score"])]
     if not valid_rows:
