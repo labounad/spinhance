@@ -1,24 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
   <defs>
     <radialGradient id="ball" cx="32%" cy="30%" r="75%">
-      <stop offset="0%" stop-color="#5be3c8"/>
-      <stop offset="100%" stop-color="#4f86ff"/>
+      <stop offset="0%" stop-color="#34e3c4"/>
+      <stop offset="100%" stop-color="#5b8cff"/>
     </radialGradient>
     <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
-      <feGaussianBlur stdDeviation="1.8" result="blur"/>
-      <feMerge>
-        <feMergeNode in="blur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
+      <feDropShadow dx="0" dy="0" stdDeviation="2.2" flood-color="#5b8cff" flood-opacity="0.75"/>
     </filter>
   </defs>
-  <!-- spin vector: white arrow with a dark outline so it reads on light or dark tabs -->
-  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
-    <line x1="5" y1="27" x2="27" y2="5" stroke="#0a0e16" stroke-width="5.5"/>
-    <polyline points="19,5 27,5 27,13" stroke="#0a0e16" stroke-width="5.5"/>
-    <line x1="5" y1="27" x2="27" y2="5" stroke="#ffffff" stroke-width="2.6"/>
-    <polyline points="19,5 27,5 27,13" stroke="#ffffff" stroke-width="2.6"/>
+  <g filter="url(#glow)">
+    <!-- spin vector, drawn first so the sphere occludes its middle -->
+    <g fill="none" stroke="#eaf2ff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="5" y1="27" x2="27" y2="5"/>
+      <polyline points="20,5 27,5 27,12"/>
+    </g>
+    <!-- proton: glowing gradient sphere in front -->
+    <circle cx="16" cy="16" r="7" fill="url(#ball)"/>
   </g>
-  <!-- proton: glowing gradient sphere, drawn last so it sits in front of the arrow -->
-  <circle cx="16" cy="16" r="9" fill="url(#ball)" filter="url(#glow)"/>
 </svg>
