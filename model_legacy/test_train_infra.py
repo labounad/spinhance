@@ -3,9 +3,9 @@
 Run: PYTHONPATH=<repo root> python3 model/test_train_infra.py
 """
 import numpy as np
-from model import schedules as SCH
-from model import metrics as M
-from model import targets as T
+from model_legacy import schedules as SCH
+from model_legacy import metrics as M
+from model_legacy import targets as T
 
 rng = np.random.default_rng(3)
 G = 8

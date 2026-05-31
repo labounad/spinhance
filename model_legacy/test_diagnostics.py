@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from model.diagnostics import DiagnosticsWriter
+from model_legacy.diagnostics import DiagnosticsWriter
 
 
 # ── DiagnosticsWriter ──────────────────────────────────────────────────────────
@@ -155,7 +155,7 @@ def test_multiple_appends_survive_multiple_writers(tmp_path):
 # ── _probe_indices (non-torch) ─────────────────────────────────────────────────
 
 def test_probe_indices_length(tmp_path):
-    from model.probes import _probe_indices
+    from model_legacy.probes import _probe_indices
     rng = np.random.default_rng(0)
     records = [
         {"shifts": rng.uniform(0, 10, 8),
@@ -167,7 +167,7 @@ def test_probe_indices_length(tmp_path):
 
 
 def test_probe_indices_no_duplicates(tmp_path):
-    from model.probes import _probe_indices
+    from model_legacy.probes import _probe_indices
     rng = np.random.default_rng(0)
     records = [
         {"shifts": rng.uniform(0, 10, 8),
@@ -179,7 +179,7 @@ def test_probe_indices_no_duplicates(tmp_path):
 
 
 def test_probe_indices_valid_range(tmp_path):
-    from model.probes import _probe_indices
+    from model_legacy.probes import _probe_indices
     rng = np.random.default_rng(1)
     n = 50
     records = [{"shifts": rng.uniform(0, 10, 8), "degeneracy": np.array([1]*8)} for _ in range(n)]
@@ -188,7 +188,7 @@ def test_probe_indices_valid_range(tmp_path):
 
 
 def test_probe_indices_small_dataset_returns_all():
-    from model.probes import _probe_indices
+    from model_legacy.probes import _probe_indices
     records = [{"shifts": np.array([1.0, 7.5]), "degeneracy": np.array([1, 3])}
                for _ in range(4)]
     idxs = _probe_indices(records, 20)
@@ -197,7 +197,7 @@ def test_probe_indices_small_dataset_returns_all():
 
 def test_probe_indices_covers_aromatic_and_aliphatic():
     """Probe set should include both aromatic (max_shift>median) and aliphatic molecules."""
-    from model.probes import _probe_indices
+    from model_legacy.probes import _probe_indices
     rng = np.random.default_rng(7)
     records = (
         [{"shifts": rng.uniform(0.5, 3.0, 8), "degeneracy": np.array([1]*8)} for _ in range(40)]

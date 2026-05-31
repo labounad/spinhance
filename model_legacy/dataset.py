@@ -13,7 +13,7 @@ torch-free transforms in ``model.targets``.
                               and bucket key for the renderer.
 
 Verify in your env:
-    python3 -m model.dataset      # runs a tiny smoke test on synthetic data
+    python3 -m model_legacy.dataset      # runs a tiny smoke test on synthetic data
 Cross-check encoding against the torch-free oracle: targets.encode_target(...).
 """
 
@@ -23,7 +23,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset, Sampler
 
-from model.targets import (DegeneracyVocab, Standardizer, encode_target,
+from model_legacy.targets import (DegeneracyVocab, Standardizer, encode_target,
                               augment_spectrum, bucket_key)
 
 # Worker-level RNG seed — set once per worker by worker_init_fn
@@ -63,7 +63,7 @@ class SpectrumMatrixDataset(Dataset):
         self.seed = seed
         # Precompute canonical orders once — reused in every __getitem__ call to
         # avoid an O(G log G) lexsort per sample per epoch.
-        from model.splits import canonical_order
+        from model_legacy.splits import canonical_order
         self._orders = [canonical_order(r["shifts"], r["couplings"], r["degeneracy"])
                         for r in self.records]
         self.bucket_keys = [bucket_key(r["shifts"], r["couplings"], r["degeneracy"],

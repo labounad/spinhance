@@ -53,7 +53,7 @@ class DiagnosticsWriter:
         if not self.enabled:
             return
         if self._s3:
-            from model import s3io
+            from model_legacy import s3io
             s3io.put_json(self._uri(name), payload)
         else:
             path = Path(self.run_dir) / name
@@ -67,7 +67,7 @@ class DiagnosticsWriter:
             return
         record = {"time": time.time(), **payload}
         if self._s3:
-            from model import s3io
+            from model_legacy import s3io
             line = json.dumps(record, sort_keys=True)
             buf = self._buffers.setdefault(name, [])
             buf.append(line)
@@ -124,7 +124,7 @@ class DiagnosticsWriter:
             return
 
         if self._s3:
-            from model import s3io
+            from model_legacy import s3io
             self._buffers.clear()
             for name in ("metrics.jsonl", "events.jsonl", "system.jsonl",
                          "status.json", "summary.json"):

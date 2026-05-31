@@ -78,5 +78,5 @@ def renderable_mask(records, max_block=2048):
     actual eigh size) is <= ``max_block``. With manifold reduction this covers
     ~100% of the preliminary set (vs ~89% for the old explicit 2^N renderer);
     the threshold just caps per-step Stage-2 cost. Uses composite_diff.max_block_dim."""
-    from model.composite_diff import max_block_dim
+    from model_legacy.composite_diff import max_block_dim
     return [max_block_dim(r["degeneracy"]) <= max_block for r in records]

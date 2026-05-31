@@ -24,7 +24,7 @@ st.set_page_config(page_title="SpinHance Training", layout="wide")
 
 def _s3_read_json(uri: str, default=None):
     try:
-        from model import s3io
+        from model_legacy import s3io
         return s3io.get_json(uri, default)
     except Exception:
         return default
@@ -32,7 +32,7 @@ def _s3_read_json(uri: str, default=None):
 
 def _s3_read_jsonl(uri: str) -> pd.DataFrame:
     try:
-        from model import s3io
+        from model_legacy import s3io
         text = s3io.get_text(uri, "")
         if not text:
             return pd.DataFrame()
@@ -49,7 +49,7 @@ def _s3_read_jsonl(uri: str) -> pd.DataFrame:
 
 def _list_sessions() -> list[str]:
     try:
-        from model import s3io
+        from model_legacy import s3io
         return sorted(s3io.list_prefixes(S3_TRAINING), reverse=True)
     except Exception:
         return []
@@ -176,7 +176,7 @@ def _dashboard():
 
     # Probe inspector
     try:
-        from model import s3io
+        from model_legacy import s3io
         probes_prefix = f"{run_uri}/probes"
         epoch_names   = sorted(s3io.list_prefixes(probes_prefix), reverse=True)
     except Exception:

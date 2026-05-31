@@ -2,7 +2,7 @@
 Verify the Task 4 pipeline against the real preliminary dataset (1072 molecules).
 
 Run from repo root:
-    PYTHONPATH=. python3 -m model.verify_real_data
+    PYTHONPATH=. python3 -m model_legacy.verify_real_data
 
 Torch-free: exercises the adapter, splits, target encoding/standardizer, and the
 numpy reference renderer vs the stored pyspin 90 MHz spectra. (Scaffold split
@@ -12,10 +12,10 @@ from pathlib import Path
 
 import numpy as np
 
-from model.data_adapter import load_records, renderable_mask
-from model.splits import make_splits
-from model.targets import DegeneracyVocab, Standardizer, encode_target
-from model import diff_renderer_ref as R
+from model_legacy.data_adapter import load_records, renderable_mask
+from model_legacy.splits import make_splits
+from model_legacy.targets import DegeneracyVocab, Standardizer, encode_target
+from model_legacy import diff_renderer_ref as R
 
 REPO = Path(__file__).resolve().parents[1]
 JSON = REPO / "mol_to_spin_system/data/spin_systems.json"

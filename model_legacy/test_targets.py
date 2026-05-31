@@ -3,8 +3,8 @@
 Run: PYTHONPATH=<repo root> python3 model/test_targets.py
 """
 import numpy as np
-from model import targets as T
-from model.splits import canonical_order, reorder
+from model_legacy import targets as T
+from model_legacy.splits import canonical_order, reorder
 
 rng = np.random.default_rng(7)
 G = 8

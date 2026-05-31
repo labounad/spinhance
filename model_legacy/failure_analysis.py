@@ -19,8 +19,8 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
-from model.dataset import collate_fn
-from model.metrics import compute_metrics
+from model_legacy.dataset import collate_fn
+from model_legacy.metrics import compute_metrics
 
 
 # ── Failure tagging ────────────────────────────────────────────────────────────
@@ -130,7 +130,7 @@ def save_failure_cases(
     }
 
     if s3_mode:
-        from model import s3io
+        from model_legacy import s3io
         for metric, fname, descending in case_files:
             worst = sorted(tagged, key=lambda r: r.get(metric, 0.0),
                            reverse=descending)[:n_worst]

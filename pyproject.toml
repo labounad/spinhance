@@ -41,4 +41,4 @@ packages = [
 simulation = ["mnova_scripts/*.qs"]
 
 [tool.pytest.ini_options]
-testpaths = ["simulation/tests", "generate/tests", "model", "autoai"]
+testpaths = ["simulation/tests", "generate/tests", "model", "model_legacy", "autoai"]

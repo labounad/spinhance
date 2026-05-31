@@ -19,7 +19,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from model.metrics import decode, compute_metrics
+from model_legacy.metrics import decode, compute_metrics
 
 try:
     import matplotlib
@@ -185,7 +185,7 @@ class ProbeEvaluator:
                          f"J_mae={met['j_mae_hz']:.2f}Hz")
                 plot_name = f"matrix_{b:03d}_{mol_id}.png"
                 if s3_mode:
-                    from model import s3io
+                    from model_legacy import s3io
                     tmp_fd, tmp_path = tempfile.mkstemp(suffix=".png")
                     os.close(tmp_fd)
                     try:
@@ -212,7 +212,7 @@ class ProbeEvaluator:
         worst_json = json.dumps(worst, indent=2)
 
         if s3_mode:
-            from model import s3io
+            from model_legacy import s3io
             s3io.put_bytes(f"{epoch_prefix}/predictions.json",
                            predictions_json.encode())
             s3io.put_bytes(f"{epoch_prefix}/probe_metrics.json",

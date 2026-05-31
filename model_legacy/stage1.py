@@ -17,9 +17,9 @@ import time
 
 import torch
 
-from model.losses import matrix_loss
-from model.metrics import compute_metrics
-from model.schedules import curriculum_weights
+from model_legacy.losses import matrix_loss
+from model_legacy.metrics import compute_metrics
+from model_legacy.schedules import curriculum_weights
 
 
 def train_epoch(

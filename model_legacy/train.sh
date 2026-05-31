@@ -59,7 +59,7 @@ fi
 
 # ── Train ─────────────────────────────────────────────────────────────────────
 LOG="$HOME/train_session${SESSION}.log"
-TRAIN_CMD="cd $REPO && PYTHONPATH=. $PYTHON -m model.run_experiment \
+TRAIN_CMD="cd $REPO && PYTHONPATH=. $PYTHON -m model_legacy.run_experiment \
   --json mol_to_spin_system/data/spin_systems_chembl.json \
   --spectra simulation/data/spectra \
   --fields 90 \

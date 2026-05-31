@@ -1,4 +1,4 @@
-from model.diagnostics import DiagnosticsWriter
+from model_legacy.diagnostics import DiagnosticsWriter
 
 
 def test_reset_live_files_clears_append_only_and_probe_artifacts(tmp_path):

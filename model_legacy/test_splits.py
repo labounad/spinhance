@@ -5,7 +5,7 @@ Checks: canonical ordering, no scaffold/near-dup leakage across folds,
 target ratios, and stratification balance.
 """
 import numpy as np
-from model import splits as S
+from model_legacy import splits as S
 
 rng = np.random.default_rng(42)
 G = 8

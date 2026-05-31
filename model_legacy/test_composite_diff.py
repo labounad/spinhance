@@ -1,7 +1,7 @@
 """Verify the composite differentiable renderer oracle (model.composite_diff).
 
 Run from repo root:
-    PYTHONPATH=. python3 -m model.test_composite_diff
+    PYTHONPATH=. python3 -m model_legacy.test_composite_diff
 
 Checks:
   1. forward vs pyspin.simulate_spectrum_composite (corr ~1, areas match),
@@ -11,7 +11,7 @@ Checks:
 """
 import numpy as np
 
-from model import composite_diff as C
+from model_legacy import composite_diff as C
 from simulation.pyspin.composite import simulate_spectrum_composite as PYSPIN
 from simulation.pyspin.simulator import lorentzian_broaden
 

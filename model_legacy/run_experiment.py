@@ -7,18 +7,18 @@ fit. Stage-1 (matrix loss) by default; --stage2 enables the curriculum blend.
 Examples
 --------
 # validate the whole non-torch data path (no training, no torch needed):
-PYTHONPATH=. python3 -m model.run_experiment --dry-run --no-scaffold
+PYTHONPATH=. python3 -m model_legacy.run_experiment --dry-run --no-scaffold
 
 # Stage-1 training writing artifacts to S3 session001:
-PYTHONPATH=. python3 -m model.run_experiment --small --epochs 60 --batch 64 \\
+PYTHONPATH=. python3 -m model_legacy.run_experiment --small --epochs 60 --batch 64 \\
     --session-id session001
 
 # Or pass a full S3 URI:
-PYTHONPATH=. python3 -m model.run_experiment --small --epochs 60 --batch 64 \\
+PYTHONPATH=. python3 -m model_legacy.run_experiment --small --epochs 60 --batch 64 \\
     --session-id s3://spinhance-data/training/session001
 
 # Local smoke run (no S3):
-PYTHONPATH=. python3 -m model.run_experiment --small --epochs 2 --batch 16 \\
+PYTHONPATH=. python3 -m model_legacy.run_experiment --small --epochs 2 --batch 16 \\
     --max-mol 128 --log-every-steps 1
 """
 
@@ -33,9 +33,9 @@ os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
 import numpy as np
 
-from model.data_adapter import load_records, renderable_mask
-from model.splits import make_splits
-from model.targets import DegeneracyVocab, Standardizer, encode_target
+from model_legacy.data_adapter import load_records, renderable_mask
+from model_legacy.splits import make_splits
+from model_legacy.targets import DegeneracyVocab, Standardizer, encode_target
 
 REPO        = Path(__file__).resolve().parents[1]
 DEF_JSON    = REPO / "mol_to_spin_system/data/spin_systems.json"
@@ -85,8 +85,8 @@ def dry_run(args):
 
 def full_run(args):
     import torch
-    from model.model import SpinHanceModel, ResNet1DEncoder
-    from model.train import TrainConfig, fit
+    from model_legacy.model import SpinHanceModel, ResNet1DEncoder
+    from model_legacy.train import TrainConfig, fit
 
     recs, assignment, report = _load(args)
     print(f"records: {len(recs)} | split {report['counts']} | "

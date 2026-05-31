@@ -23,7 +23,7 @@ from __future__ import annotations
 import torch
 import torch.nn.functional as F
 
-from model.schedules import curriculum_weights  # re-export convenience
+from model_legacy.schedules import curriculum_weights  # re-export convenience
 
 __all__ = ["matrix_loss", "wasserstein1", "spectral_loss", "curriculum_weights"]
 

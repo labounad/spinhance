@@ -32,13 +32,13 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
-import model.stage1 as stage1
-import model.stage2 as stage2
-from model.dataset import (SpectrumMatrixDataset, BucketByDegeneracySampler,
+import model_legacy.stage1 as stage1
+import model_legacy.stage2 as stage2
+from model_legacy.dataset import (SpectrumMatrixDataset, BucketByDegeneracySampler,
                             collate_fn, worker_init_fn)
-from model.diagnostics import DiagnosticsWriter
-from model.model import SpinHanceModel
-from model.targets import DegeneracyVocab, Standardizer
+from model_legacy.diagnostics import DiagnosticsWriter
+from model_legacy.model import SpinHanceModel
+from model_legacy.targets import DegeneracyVocab, Standardizer
 
 
 @dataclass
@@ -170,7 +170,7 @@ def _save_checkpoint_file(ckpt, path: str) -> None:
     if not path:
         return
     if path.startswith("s3://"):
-        from model import s3io
+        from model_legacy import s3io
         buf = io.BytesIO()
         torch.save(ckpt, buf)
         s3io.put_bytes(path, buf.getvalue())
@@ -251,7 +251,7 @@ def fit(records, assignment, cfg: TrainConfig, model=None):
 
     model = (model or SpinHanceModel(n_groups=8, n_deg_classes=len(vocab))).to(device)
 
-    from model.targets import class_balance
+    from model_legacy.targets import class_balance
     train_recs = [r for r in records if assignment.get(r["mol_id"]) == "train"]
     val_recs   = [r for r in records if assignment.get(r["mol_id"]) == "val"]
     cb = class_balance(train_recs, vocab)
@@ -266,7 +266,7 @@ def fit(records, assignment, cfg: TrainConfig, model=None):
     probe_eval = None
     if cfg.diagnostics_enabled and cfg.probe_count > 0 and len(val_recs) > 0:
         try:
-            from model.probes import ProbeEvaluator
+            from model_legacy.probes import ProbeEvaluator
             probe_eval = ProbeEvaluator(
                 val_recs, ds["val"], vocab, std,
                 probe_count=cfg.probe_count, device=device,
@@ -280,7 +280,7 @@ def fit(records, assignment, cfg: TrainConfig, model=None):
     steps_per  = max(1, len(plain))
     total_steps = steps_per * cfg.epochs
     warmup     = int(cfg.warmup_frac * total_steps)
-    from model.schedules import lr_factor
+    from model_legacy.schedules import lr_factor
     sched      = torch.optim.lr_scheduler.LambdaLR(opt, lambda s: lr_factor(s, warmup, total_steps))
     amp_ctx, scaler = _amp_context(cfg, device)
 
@@ -409,7 +409,7 @@ def fit(records, assignment, cfg: TrainConfig, model=None):
 
             if cfg.save_failure_tables and val_recs:
                 try:
-                    from model.failure_analysis import per_sample_evaluate, save_failure_cases
+                    from model_legacy.failure_analysis import per_sample_evaluate, save_failure_cases
                     per_sample = per_sample_evaluate(
                         model, val_recs, ds["val"], cfg, std, vocab, device, amp_ctx, balance)
                     fsummary = save_failure_cases(per_sample, run_dir, epoch)
@@ -425,7 +425,7 @@ def fit(records, assignment, cfg: TrainConfig, model=None):
     dominant = ""
     if s3_mode:
         try:
-            from model import s3io
+            from model_legacy import s3io
             probes_prefix = f"{run_dir.rstrip('/')}/probes"
             epoch_names   = sorted(s3io.list_prefixes(probes_prefix), reverse=True)
             if epoch_names:
@@ -491,7 +491,7 @@ def fit(records, assignment, cfg: TrainConfig, model=None):
 # ── Synthetic smoke test ───────────────────────────────────────────────────────
 
 def _smoke():
-    from model.splits import make_splits
+    from model_legacy.splits import make_splits
     rng = np.random.default_rng(0)
     G, P = 8, 2048
     recs = []

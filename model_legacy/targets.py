@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from model.splits import canonical_order, reorder
+from model_legacy.splits import canonical_order, reorder
 
 __all__ = ["DegeneracyVocab", "encode_target", "Standardizer",
            "augment_spectrum", "bucket_key", "DEFAULT_DEG_VOCAB", "class_balance"]

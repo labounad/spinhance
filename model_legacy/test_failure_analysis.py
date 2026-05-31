@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from model.failure_analysis import _tag_failure, save_failure_cases
+from model_legacy.failure_analysis import _tag_failure, save_failure_cases
 
 
 # ── _tag_failure ───────────────────────────────────────────────────────────────

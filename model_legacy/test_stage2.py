@@ -31,8 +31,8 @@ import unittest.mock as mock
 import numpy as np
 import torch
 
-from model import diff_renderer_torch as renderer
-from model.stage2 import (
+from model_legacy import diff_renderer_torch as renderer
+from model_legacy.stage2 import (
     _MAX_SPEC_K, _SPEC_CHUNK, _spectral_term, decode_physical,
 )
 
@@ -402,7 +402,7 @@ def test_chunked_gradient_matches_unchunked():
     """The chunked loop in _spectral_term must produce the same gradients as a
     single un-chunked call to simulate_batch.  If it doesn't, chunking broke
     the training signal even before any OOM occurs."""
-    from model.losses import spectral_loss
+    from model_legacy.losses import spectral_loss
     import model.stage2 as s2_module
 
     deg_list = [1, 1, 1, 1]
@@ -462,7 +462,7 @@ def test_chunked_gradient_matches_unchunked():
 
 def test_bf16_autocast_does_not_crash_eigh():
     """RegularizedEigh must stay fp32 under bf16 autocast (regression for session-003 bug)."""
-    from model.diff_renderer_torch import regularized_eigh
+    from model_legacy.diff_renderer_torch import regularized_eigh
 
     for (n, dtype_str) in [(4, "bf16"), (6, "fp16"), (8, "none")]:
         H = torch.randn(2, n, n, dtype=torch.float32)
@@ -554,9 +554,9 @@ def test_no_memory_growth_across_optimizer_steps():
         print("test_no_memory_growth_across_optimizer_steps: SKIP (no CUDA)")
         return
 
-    from model.model import SpinHanceModel
-    from model.schedules import curriculum_weights
-    from model.losses import matrix_loss
+    from model_legacy.model import SpinHanceModel
+    from model_legacy.schedules import curriculum_weights
+    from model_legacy.losses import matrix_loss
     import model.stage2 as s2_module
 
     cfg = _Cfg()
@@ -566,7 +566,7 @@ def test_no_memory_growth_across_optimizer_steps():
 
     G = len(deg_list); B = 8
 
-    from model.targets import DegeneracyVocab
+    from model_legacy.targets import DegeneracyVocab
     vocab = DegeneracyVocab()
     model = SpinHanceModel(n_groups=G, n_deg_classes=len(vocab)).to(DEVICE)
     opt = torch.optim.Adam(model.parameters(), lr=1e-3)
@@ -642,7 +642,7 @@ def test_memory_freed_after_backward():
     with torch.autocast("cuda", enabled=False):
         spec = renderer.simulate_batch(shifts, couplings, deg_t, cfg.field_low,
                                        points=cfg.points, struct=struct)
-    from model.losses import wasserstein1
+    from model_legacy.losses import wasserstein1
     loss = wasserstein1(spec, ref).mean()
     loss.backward()
 

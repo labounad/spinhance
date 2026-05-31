@@ -28,9 +28,9 @@ import time
 
 import torch
 
-from model import diff_renderer_torch as renderer
-from model.losses import matrix_loss, spectral_loss
-from model.schedules import curriculum_weights
+from model_legacy import diff_renderer_torch as renderer
+from model_legacy.losses import matrix_loss, spectral_loss
+from model_legacy.schedules import curriculum_weights
 
 
 # K = total spectral lines per molecule across all spin-manifold combos.

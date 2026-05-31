@@ -218,7 +218,7 @@ def _download_epoch(session: str, epoch: int) -> Path:
 # ─── Checkpoint helpers ───────────────────────────────────────────────────────
 
 def _rebuild_model(sd: dict):
-    from model.model import SpinHanceModel, ResNet1DEncoder
+    from model_legacy.model import SpinHanceModel, ResNet1DEncoder
     stem_c = sd["encoder.stem.0.weight"].shape[0]
     head_hidden = sd["shift_head.0.weight"].shape[0]
     G = sd["shift_head.3.weight"].shape[0]
@@ -323,7 +323,7 @@ def _load_session_metrics(session: str) -> tuple[list[dict], dict[int, str]]:
 def _load_model(session: str, epoch: int):
     """Load model + standardizer from a checkpoint. Returns (model, std, vocab, cfg)."""
     import torch
-    from model.targets import DegeneracyVocab, Standardizer
+    from model_legacy.targets import DegeneracyVocab, Standardizer
     local = _download_epoch(session, epoch)
     ckpt = torch.load(str(local), map_location="cpu", weights_only=False)
     std_d = ckpt["standardizer"]
@@ -345,8 +345,8 @@ def _load_model(session: str, epoch: int):
 @st.cache_data(show_spinner="Loading molecules (filtering by 90 MHz spectra)…")
 def _load_all_records(json_path: str, spectra_root: str) -> list[dict]:
     """Load records using the same pipeline as training: requires 90 MHz .npy files."""
-    from model.data_adapter import load_records
-    from model.splits import canonical_order, reorder
+    from model_legacy.data_adapter import load_records
+    from model_legacy.splits import canonical_order, reorder
     raw = load_records(json_path, spectra_root, fields=(90,), require_spectra=True)
     records = []
     for r in raw:
@@ -358,7 +358,7 @@ def _load_all_records(json_path: str, spectra_root: str) -> list[dict]:
 
 @st.cache_data(show_spinner="Computing test split…")
 def _test_records(json_path: str, spectra_root: str, seed: int) -> list[dict]:
-    from model.splits import make_splits
+    from model_legacy.splits import make_splits
     records = _load_all_records(json_path, spectra_root)
     assignment, _ = make_splits(records, seed=seed, compute_scaffold=False)
     return [r for r in records if assignment.get(r["mol_id"]) == "test"]
@@ -375,7 +375,7 @@ def _simulate(shifts_t: tuple, couplings_t: tuple, degeneracy_t: tuple,
 
 def _run_inference(model, intensity: np.ndarray, std, vocab) -> dict:
     import torch
-    from model.metrics import decode
+    from model_legacy.metrics import decode
     x = torch.from_numpy(intensity.astype(np.float32)).unsqueeze(0)
     with torch.no_grad():
         pred = model(x)

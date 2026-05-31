@@ -4,7 +4,7 @@ Run:  PYTHONPATH=<repo root> python3 model/test_diff_renderer.py
 (torch-free; this is the oracle that the torch renderer must match.)
 """
 import numpy as np
-from model import diff_renderer_ref as R
+from model_legacy import diff_renderer_ref as R
 from simulation.pyspin.composite import simulate_spectrum_composite
 
 FIELD = 90.0

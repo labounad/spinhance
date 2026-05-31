@@ -2,7 +2,7 @@ from pathlib import Path
 
 import torch
 
-from model.train import _do_checkpoint
+from model_legacy.train import _do_checkpoint
 
 
 def test_checkpoint_worker_creates_missing_parent_dirs(tmp_path):

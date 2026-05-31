@@ -22,7 +22,7 @@ pattern by ``_structure`` (cached). Autograd handles the gradient; the sole
 custom backward is RegularizedEigh.
 
 VERIFY IN YOUR ENV (no torch in the prototyping sandbox):
-    python3 -m model.diff_renderer_torch
+    python3 -m model_legacy.diff_renderer_torch
 runs (a) parity vs the numpy oracle and (b) torch.autograd.gradcheck.
 """
 
@@ -31,7 +31,7 @@ from __future__ import annotations
 import numpy as np
 import torch
 
-from model.composite_diff import build_static_plan
+from model_legacy.composite_diff import build_static_plan
 
 DEFAULT_EIGH_EPS = 1.0   # Hz
 
@@ -289,7 +289,7 @@ def _broaden_fft(centers, amps, points, ppm_from, ppm_to, dx, hwhm, device, dtyp
 # -----------------------------------------------------------------------------
 
 def _selftest():
-    from model import composite_diff as C
+    from model_legacy import composite_diff as C
     F = 90.0
     cases = {
         "A3X[3,1]": ([3.0, 6.5], [[0.0, 6.8], [6.8, 0.0]], [3, 1]),
