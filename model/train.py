@@ -130,6 +130,9 @@ def build_datasets(records, assignment, cfg: TrainConfig):
 
 # ── Spectral term ──────────────────────────────────────────────────────────────
 
+_SPEC_CHUNK = 4   # samples per spectral-sim call; limits peak (chunk, K) tensor size
+
+
 def _spectral_term(pred_phys, batch, cfg, device):
     deg = batch["shared_degeneracy"]
     if deg is None:
@@ -140,14 +143,24 @@ def _spectral_term(pred_phys, batch, cfg, device):
     sel = torch.randperm(B, device=device)[:k]
     deg_list = [int(x) for x in deg.tolist()]
     struct   = renderer._structure(deg_list, device, pred_phys["shifts"].dtype)
-    sub      = {"shifts": pred_phys["shifts"][sel].float(), "couplings": pred_phys["couplings"][sel].float()}
-    ref      = batch["spectrum_ref"][sel]
-    with torch.autocast(device_type="cuda", enabled=False):
-        loss, w1 = spectral_loss(
-            sub, ref, batch["degeneracy"][sel], cfg.field_low, renderer, struct=struct,
-            points=cfg.points, ppm_from=cfg.ppm_from, ppm_to=cfg.ppm_to,
-            linewidth_hz=cfg.linewidth_hz, eigh_eps=cfg.eigh_eps)
-    return loss, w1.mean()
+
+    # Process in small chunks so the (chunk, K) broadening tensors stay bounded.
+    # A single (k, K) batch can OOM for large spin systems with many spectral lines.
+    chunk_losses, chunk_w1s = [], []
+    for start in range(0, k, _SPEC_CHUNK):
+        idx = sel[start : start + _SPEC_CHUNK]
+        sub = {"shifts":    pred_phys["shifts"][idx].float(),
+               "couplings": pred_phys["couplings"][idx].float()}
+        ref = batch["spectrum_ref"][idx]
+        with torch.autocast(device_type="cuda", enabled=False):
+            loss, w1 = spectral_loss(
+                sub, ref, batch["degeneracy"][idx], cfg.field_low, renderer, struct=struct,
+                points=cfg.points, ppm_from=cfg.ppm_from, ppm_to=cfg.ppm_to,
+                linewidth_hz=cfg.linewidth_hz, eigh_eps=cfg.eigh_eps)
+        chunk_losses.append(loss)
+        chunk_w1s.append(w1)
+
+    return torch.stack(chunk_losses).mean(), torch.cat(chunk_w1s).mean()
 
 
 # ── Epoch loops ────────────────────────────────────────────────────────────────
