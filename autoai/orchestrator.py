@@ -28,6 +28,7 @@ import botocore.exceptions as _bce
 from autoai.config import Role, get_role_config
 from autoai.contract import TaskSpec, WorkerResult
 from autoai.experiment_log import ExperimentRecord, append_record, summarize_for_context
+from autoai.run_reader import analyze_artifact_paths, analyze_run, find_latest_run
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
@@ -397,8 +398,24 @@ def _auto_lesson(result: WorkerResult) -> str:
     if result.status == "failure":
         err = (result.errors or "unknown error")[:80]
         return f"failed — {err}"
+
+    diagnostics = result.metrics.get("diagnostics") if isinstance(result.metrics, dict) else None
+    if isinstance(diagnostics, dict) and diagnostics.get("available"):
+        compact = diagnostics.get("compact_best_metrics") or {}
+        dominant = diagnostics.get("dominant_failure", "none")
+        pieces = []
+        for key in ("shift_mae_ppm", "h_shift_mae_ppm", "j_mae_hz", "presence_f1", "deg_acc"):
+            value = compact.get(key)
+            if isinstance(value, float):
+                pieces.append(f"{key}={value:.4g}")
+            elif value is not None:
+                pieces.append(f"{key}={value}")
+        metric_text = "  ".join(pieces[:3]) or "diagnostics available"
+        return f"{result.status} — {metric_text}; dominant_failure={dominant}"
+
     if not result.metrics:
         return f"{result.status} — no metrics recorded"
+
     top = list(result.metrics.items())[:2]
     return f"{result.status} — " + "  ".join(
         f"{k}={v:.4g}" if isinstance(v, float) else f"{k}={v}"
@@ -438,6 +455,16 @@ def tool_delegate_to_worker(task_spec_dict: dict) -> str:
     eval_metrics = run_eval(result.artifact_paths.get("checkpoint"))
     if eval_metrics:
         result.metrics["eval"] = eval_metrics
+
+    diagnostics = analyze_artifact_paths(result.artifact_paths, repo_root=REPO_ROOT)
+    if diagnostics.get("available"):
+        result.metrics["diagnostics"] = diagnostics
+        analysis_path = _current_run_dir / "diagnostics_analysis.json"
+        analysis_path.write_text(json.dumps(diagnostics, indent=2, sort_keys=True))
+        result.artifact_paths["diagnostics_analysis"] = str(analysis_path.relative_to(REPO_ROOT))
+        _log("info", f"Diagnostics: run={diagnostics.get('run_id')} dominant={diagnostics.get('dominant_failure')}")
+    else:
+        _log("warn", f"No canonical diagnostics found: {diagnostics.get('reason')}")
 
     # Append to the persistent experiment log
     append_record(ExperimentRecord(
@@ -900,7 +927,7 @@ On each turn call any combination of:
 == TaskSpec contract ==
 Your task_spec must be unambiguous enough that the worker can implement it without asking questions.
 Required fields: objective, loss_function, output_artifacts, success_criteria.
-The worker returns a WorkerResult with artifact_paths and metrics read from those files.
+The worker returns a WorkerResult with artifact_paths and metrics read from those files. When using model.run_experiment, require artifact_paths to include `run_dir` pointing to the canonical model/runs/<run_id> directory.
 
 == WorkerResult contract ==
 {
@@ -932,6 +959,7 @@ Your job:
    - status: "success" | "failure" | "partial"
    - artifact_paths: map of artifact name → repo-relative path you actually wrote
      (required key: "metrics" → path to a JSON file with your metrics)
+     Include `run_dir` when model.run_experiment creates a canonical model/runs/<run_id> directory.
    - errors: null on success, otherwise a description
    - notes: optional prose (the orchestrator treats this as untrusted)
 
@@ -954,10 +982,29 @@ def _opening_message(cycle: int) -> str:
     ideas   = IDEAS_FILE.read_text() if IDEAS_FILE.exists() else "_(IDEAS.md missing)_"
     history = summarize_for_context(n=MAX_SUMMARIES)
     tree    = tool_list_directory(".")
+
+    latest_model_run = find_latest_run()
+    if latest_model_run is not None:
+        latest_analysis = analyze_run(latest_model_run)
+        latest_context = json.dumps({
+            "run_dir": str(latest_model_run.relative_to(REPO_ROOT)),
+            "state": latest_analysis.get("state"),
+            "best_epoch": latest_analysis.get("best_epoch"),
+            "best_score": latest_analysis.get("best_score"),
+            "best_metrics": latest_analysis.get("best_metrics"),
+            "dominant_failure": (
+                latest_analysis.get("failure_summary") or {}
+            ).get("dominant_failure", "none"),
+            "recommendation": latest_analysis.get("recommendation"),
+        }, indent=2, sort_keys=True)
+    else:
+        latest_context = "_No model/runs diagnostics found yet._"
+
     return (
         f"## Cycle {cycle}\n\n"
         f"### IDEAS.md\n{ideas}\n\n"
         f"### Experiment log (last {MAX_SUMMARIES} runs)\n{history}\n\n"
+        f"### Latest model diagnostics\n```json\n{latest_context}\n```\n\n"
         f"### Repo root\n```\n{tree}\n```\n\n"
         "Begin."
     )
