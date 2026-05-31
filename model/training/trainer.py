@@ -165,6 +165,9 @@ class Trainer:
             save_checkpoint(ckpt_dir / "last.pt", model, std, cfg.raw, epoch, va)
             if is_best:
                 save_checkpoint(ckpt_dir / "best.pt", model, std, cfg.raw, epoch, va)
+            # Per-epoch snapshots so the viewer can inspect any epoch's weights.
+            if cfg.training.save_every and epoch % cfg.training.save_every == 0:
+                save_checkpoint(ckpt_dir / f"epoch_{epoch:04d}.pt", model, std, cfg.raw, epoch, va)
 
             diag.update_status({
                 "state": "running", "run_id": run_id, "epoch": epoch,

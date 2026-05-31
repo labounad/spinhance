@@ -41,6 +41,7 @@ class TrainingCfg:
     patience: int = 10
     num_workers: int = 0
     val_every: int = 1
+    save_every: int = 1          # also save checkpoints/epoch_NNNN.pt every N epochs (0 = best/last only)
     seed: int = 0
     device: str | None = None
 

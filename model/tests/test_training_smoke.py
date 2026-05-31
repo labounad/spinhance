@@ -60,6 +60,9 @@ def test_smoke_train_produces_canonical_run_dir(tmp_path):
         assert (run_dir / name).exists(), f"missing {name}"
     assert (run_dir / "checkpoints" / "best.pt").exists()
     assert (run_dir / "checkpoints" / "last.pt").exists()
+    # per-epoch snapshots (save_every default = 1) so the viewer can load any epoch
+    assert (run_dir / "checkpoints" / "epoch_0000.pt").exists()
+    assert (run_dir / "checkpoints" / "epoch_0001.pt").exists()
 
 
 def test_smoke_status_and_summary_contents(tmp_path):

@@ -158,6 +158,19 @@ def _load_val_metrics(run_prefix: str) -> list[dict]:
     return sorted(rows, key=lambda r: r["epoch"])
 
 
+@st.cache_data(ttl=30)
+def _list_checkpoints(run_prefix: str) -> list[str]:
+    """Available checkpoint names under the run (best, last, epoch_NNNN), ordered."""
+    try:
+        names = [p.strip().split()[-1][:-3] for p in _s3_ls(f"{run_prefix}/checkpoints")
+                 if p.strip().endswith(".pt")]
+    except Exception:
+        return ["best", "last"]
+    epochs = sorted(n for n in names if n.startswith("epoch_"))
+    head = [n for n in ("best", "last") if n in names]
+    return head + epochs
+
+
 def _download_ckpt(session: str, run_prefix: str, which: str) -> Path:
     local = CACHE_DIR / session / f"{which}.pt"
     local.parent.mkdir(parents=True, exist_ok=True)
@@ -380,7 +393,10 @@ def _page_analysis() -> None:
         st.header("Data")
         json_path = st.text_input("Molecules JSON", value=DEF_JSON)
         spectra_root = st.text_input("Spectra root", value=DEF_SPECTRA)
-        which = st.radio("Checkpoint", ["best", "last"], index=0, horizontal=True)
+        ckpt_opts = _list_checkpoints(run_prefix)
+        which = st.selectbox("Checkpoint", ckpt_opts,
+                             index=ckpt_opts.index("best") if "best" in ckpt_opts else 0,
+                             help="best / last / any saved epoch_NNNN")
 
         json_ok = Path(json_path).exists()
         spectra_ok = (Path(spectra_root) / "90MHz").exists()
