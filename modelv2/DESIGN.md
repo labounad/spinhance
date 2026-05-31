@@ -49,7 +49,7 @@ Everything that touches molecules before the model sees them, in one file.
 
 - There are two ground truth files available to the model:
     - `mol_to_spin_system/data/spin_systems_pubchem.json.tar.gz` — json file containing chemical identifiers, spin groups, and coupling constants for over 2 million molecules
-    - `simulation/data/spectra/90MHz/mol_all.tar.gz` — physically realistic generated spectra for the entire molecule set
+    - `simulation/data/spectra/90MHz.tar.gz` — physically realistic generated spectra for the entire molecule set (spectra under `90MHz/` inside the archive, `index.csv` at the tar root)
 - These files need to be set as non-optional command line arguments
 
 **Target encoding:**
@@ -75,7 +75,7 @@ Everything that touches molecules before the model sees them, in one file.
 
 **Spectra cache:**
 
-- `SpectraCache(records, archive=".../mol_all.tar.gz")` — at construction,
+- `SpectraCache(records, archive=".../90MHz.tar.gz")` — at construction,
   streams the archive once into a single fp16 array held in RAM and indexes it
   by `mol_id`. Defined at module level so it is picklable. The full set is a few
   GB against 512 GiB of host RAM, so this is the default path; `np.load` is never
@@ -389,7 +389,7 @@ class TrainConfig:
     device: str = "cuda"
     amp_dtype: str = "bf16"
     ckpt_path: str = "checkpoint.pt"
-    cache_spectra: bool = True      # stream mol_all.tar.gz into RAM at startup
+    cache_spectra: bool = True      # stream 90MHz.tar.gz into RAM at startup
     gpu_augment: bool = True        # vectorized augmentation on-GPU per batch
     num_workers: int = 0            # RAM cache + GPU aug: no CPU loader needed
     compile: bool = False           # opt-in torch.compile; falls back to eager
@@ -408,7 +408,7 @@ constraint.
 
 **Keep the GPU fed (avoid CPU blocking).**
 
-- **Spectra RAM cache** (`cache_spectra`): stream `mol_all.tar.gz` once into a
+- **Spectra RAM cache** (`cache_spectra`): stream `90MHz.tar.gz` once into a
   single fp16 array at startup and serve slices from RAM. Zero per-epoch disk
   I/O; never `np.load` per item.
 - **GPU-side augmentation** (`gpu_augment`): apply `augment_spectrum`
@@ -487,7 +487,7 @@ fail-fast); the speed items are defaults.
 PYTHONPATH=. python -m modelv2.train --dry-run
 
 # Train
-PYTHONPATH=. python -m modelv2.train --spin_systems=mol_to_spin_system/data/spin_systems_pubchem.json.tar.gz --spectra=simulation/data/spectra/90MHz/mol_all.tar.gz
+PYTHONPATH=. python -m modelv2.train --spin_systems=mol_to_spin_system/data/spin_systems_pubchem.json.tar.gz --spectra=simulation/data/spectra/90MHz.tar.gz
 
 # Visualize (Streamlit app)
 PYTHONPATH=. streamlit run modelv2/gui.py

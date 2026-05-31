@@ -49,7 +49,6 @@ __all__ = [
     "encode_target",
     "Standardizer",
     "class_balance",
-    "bemis_murcko_scaffold",
     "make_splits",
     "record_to_arrays",
     "load_records",
@@ -325,25 +324,6 @@ def class_balance(train_records, vocab: DegeneracyVocab, power=0.5, cap=8.0):
 
 
 # =============================================================================
-# Scaffold (RDKit, lazy + optional)
-# =============================================================================
-
-def bemis_murcko_scaffold(smiles):
-    """Bemis-Murcko scaffold SMILES via RDKit (a hard dependency on the training
-    box). Returns None for a missing or unparseable SMILES, in which case the
-    caller leaves that molecule a singleton and relies on matrix-dedup grouping
-    (the design's SMILES-free fallback)."""
-    if not smiles:
-        return None
-    from rdkit import Chem
-    from rdkit.Chem.Scaffolds import MurckoScaffold
-    mol = Chem.MolFromSmiles(smiles)
-    if mol is None:
-        return None
-    return MurckoScaffold.MurckoScaffoldSmiles(mol=mol)
-
-
-# =============================================================================
 # Molecule-level scaffold + near-duplicate split
 # =============================================================================
 
@@ -381,7 +361,7 @@ def make_splits(records, ratios=(0.7, 0.2, 0.1), seed=0,
                 shift_tol=0.02, j_tol=0.5, compute_scaffold=True):
     """Assign each molecule to ``train`` / ``val`` / ``test``.
 
-    Molecules that share a Bemis-Murcko scaffold (if RDKit is available) or a
+    Molecules that are a
     near-duplicate (shift_tol, j_tol) matrix are unioned into one group; whole
     groups land in a single fold so no spin-system near-relative straddles the
     split. Groups are assigned with a stratified, size-aware greedy rule.
@@ -397,8 +377,6 @@ def make_splits(records, ratios=(0.7, 0.2, 0.1), seed=0,
     for r in recs:
         if r.get("scaffold") is not None:
             scaffolds.append(r["scaffold"])
-        elif compute_scaffold:
-            scaffolds.append(bemis_murcko_scaffold(r.get("smiles")))
         else:
             scaffolds.append(None)
         keys.append(dedup_key(r["shifts"], r["couplings"], r["degeneracy"],
@@ -604,16 +582,18 @@ def renderable_mask(records, vocab: DegeneracyVocab, n_groups=8):
 # =============================================================================
 
 class SpectraCache:
-    """Hold every needed spectrum in one fp16 array in RAM, indexed by mol_id.
+    """Hold every needed spectrum in one fp16 array in RAM, indexed by molecule identity.
 
-    At construction the ``mol_all.tar.gz`` archive is streamed once: each
-    ``mol_<idx>.npy`` member is decoded and copied into row ``idx`` of a single
-    ``(N, points)`` fp16 array. Per-item ``np.load`` is never called afterwards;
-    the dataset serves zero-copy slices. The full set is a few GB against the
-    host's 512 GiB, so this is the default path.
+    At construction ``simulation/data/spectra/90MHz.tar.gz`` is streamed once.
+    ``index.csv`` inside the archive maps ``mol_<idx>`` filenames to molecule
+    identity strings (first non-empty of chembl_id / smiles / inchikey, same
+    priority as the simulation pipeline).  Spectra are stored and retrieved by
+    that identity string — not by filename position — so the association is
+    robust to any reordering of the source JSON.
 
-    ``archive`` may also be a directory containing ``mol_*.npy`` (optionally under
-    a ``<field>MHz/`` subfolder), which is handy for local development.
+    ``archive`` may also be a directory containing ``mol_*.npy`` under a
+    ``<field>MHz/`` subfolder with ``index.csv`` at the directory root, which
+    is handy for local development.
 
     Defined at module level (no closures) so it is picklable for DataLoader.
     """
@@ -622,8 +602,8 @@ class SpectraCache:
                  verbose=True):
         self.points = int(points)
         self.spectrum_field = spectrum_field
-        want = {r["mol_id"] for r in records}
-        self.row = {}  # mol_id -> row in self.data
+        want = {_record_mol_id(r) for r in records if _record_mol_id(r)}
+        self.row = {}  # identity_string -> row in self.data
         self.data = np.zeros((len(want), self.points), dtype=np.float16)
         self.ppm_axis = None
         self.n_loaded = 0
@@ -638,8 +618,6 @@ class SpectraCache:
             print(f"[SpectraCache] loaded {self.n_loaded}/{len(want)} spectra "
                   f"({self.data.nbytes / 1e9:.2f} GB fp16); missing {self.n_missing}")
 
-    # -- name -> mol_id --------------------------------------------------------
-
     @staticmethod
     def _mol_id_from_name(name):
         stem = Path(name).name
@@ -650,21 +628,28 @@ class SpectraCache:
             return None
         return stem
 
-    def _store(self, mol_id, arr, want):
-        if mol_id not in want or mol_id in self.row:
+    def _store(self, id_str, arr, want):
+        if not id_str or id_str not in want or id_str in self.row:
             return
         arr = np.asarray(arr, dtype=np.float32).ravel()
         if arr.shape[0] != self.points:
             arr = _resample(arr, self.points)
         r = len(self.row)
-        self.row[mol_id] = r
+        self.row[id_str] = r
         self.data[r] = arr.astype(np.float16)
         self.n_loaded += 1
 
     def _load_tar(self, archive, want, verbose):
+        import csv as _csv
         name = archive.name.lower()
         mode = "r:gz" if name.endswith((".tar.gz", ".tgz")) else (
             "r:" if name.endswith(".tar") else "r:*")
+        # index.csv maps mol_<idx> filenames -> identity strings.
+        # Canonical archive order: MANIFEST → ppm_axis → index.csv → mol_*.npy,
+        # so the buffer below is normally empty. Spectra encountered before
+        # index.csv is read are buffered by mol_id and resolved once it arrives.
+        mol_id_to_id: dict[str, str] = {}
+        pending: dict[str, bytes] = {}  # mol_id -> raw .npy bytes (pre-index)
         with tarfile.open(archive, mode) as tf:
             for m in tf:
                 if not m.isfile():
@@ -673,36 +658,53 @@ class SpectraCache:
                 if base == "ppm_axis.npy" and self.ppm_axis is None:
                     self.ppm_axis = np.load(io.BytesIO(tf.extractfile(m).read()))
                     continue
+                if base == "index.csv":
+                    raw = tf.extractfile(m).read().decode("utf-8")
+                    for row in _csv.DictReader(io.StringIO(raw)):
+                        mol_id_to_id[row["index"]] = row.get("id", "").strip()
+                    for mid, data in pending.items():
+                        self._store(mol_id_to_id.get(mid, ""),
+                                    np.load(io.BytesIO(data)), want)
+                    pending.clear()
+                    continue
                 mol_id = self._mol_id_from_name(m.name)
                 if mol_id is None:
-                    # A single stacked (N, P) array is also tolerated.
-                    if base.lower().endswith(".npy"):
-                        arr = np.load(io.BytesIO(tf.extractfile(m).read()))
-                        if arr.ndim == 2:
-                            for i in range(arr.shape[0]):
-                                self._store(f"mol_{i:06d}", arr[i], want)
                     continue
-                self._store(mol_id, np.load(io.BytesIO(tf.extractfile(m).read())), want)
+                raw = tf.extractfile(m).read()
+                if mol_id_to_id:
+                    self._store(mol_id_to_id.get(mol_id, ""),
+                                np.load(io.BytesIO(raw)), want)
+                else:
+                    pending[mol_id] = raw
 
     def _load_dir(self, root, want, spectrum_field, verbose):
+        import csv as _csv
         field = "".join(ch for ch in spectrum_field if ch.isdigit())
         search = root / f"{field}MHz" if field and (root / f"{field}MHz").is_dir() else root
         ax = search / "ppm_axis.npy"
         if ax.exists():
             self.ppm_axis = np.load(ax)
+        mol_id_to_id: dict[str, str] = {}
+        for csv_path in [root / "index.csv", search / "index.csv"]:
+            if csv_path.exists():
+                with csv_path.open(newline="") as fh:
+                    for row in _csv.DictReader(fh):
+                        mol_id_to_id[row["index"]] = row.get("id", "").strip()
+                break
         for p in sorted(search.glob("mol_*.npy")):
             mol_id = self._mol_id_from_name(p.name)
-            if mol_id is not None:
-                self._store(mol_id, np.load(p), want)
+            if mol_id is None:
+                continue
+            self._store(mol_id_to_id.get(mol_id, ""), np.load(p), want)
 
     # -- access ----------------------------------------------------------------
 
-    def __contains__(self, mol_id):
-        return mol_id in self.row
+    def __contains__(self, id_str):
+        return id_str in self.row
 
-    def get(self, mol_id):
-        """Return the fp32 spectrum for ``mol_id`` (zeros if it was missing)."""
-        r = self.row.get(mol_id)
+    def get(self, id_str):
+        """Return the fp32 spectrum for the molecule with this identity string."""
+        r = self.row.get(id_str)
         if r is None:
             return np.zeros(self.points, dtype=np.float32)
         return self.data[r].astype(np.float32)
@@ -715,6 +717,16 @@ def _resample(arr, points):
     xp = np.linspace(0.0, 1.0, arr.shape[0])
     x = np.linspace(0.0, 1.0, points)
     return np.interp(x, xp, arr)
+
+
+def _record_mol_id(rec):
+    """First non-empty value from (chembl_id, smiles, inchikey) — mirrors
+    simulation.graph_io.molecule_id so the comparison is apples-to-apples."""
+    for k in ID_KEYS:
+        v = rec.get(k)
+        if v:
+            return str(v).strip()
+    return ""
 
 
 # =============================================================================
@@ -753,8 +765,10 @@ class SpinDataset:
         return len(self.records)
 
     def _spectrum(self, r):
-        if self.cache is not None and r["mol_id"] in self.cache:
-            return self.cache.get(r["mol_id"])
+        if self.cache is not None:
+            id_str = _record_mol_id(r)
+            if id_str and id_str in self.cache:
+                return self.cache.get(id_str)
         if r.get(self.spectrum_field) is not None:
             return np.asarray(r[self.spectrum_field], dtype=np.float32)
         path = r.get(self.spectrum_field + "_path")
@@ -958,6 +972,26 @@ def _selftest():
     spec = np.abs(rng.normal(size=1024)); spec /= spec.sum() * (12.0 / 1024)
     aug = augment_spectrum_np(spec, rng=rng)
     assert (aug >= 0).all() and abs(aug.sum() * (12.0 / 1024) - 1.0) < 1e-3
+
+    # SpectraCache: chembl_id-based identity lookup via directory
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmpdir:
+        cache_root = Path(tmpdir)
+        (cache_root / "90MHz").mkdir()
+        (cache_root / "index.csv").write_text(
+            "index,id\n" + "".join(f"mol_{i:06d},CHEMBL{i:04d}\n" for i in range(5))
+        )
+        for i in range(5):
+            np.save(cache_root / "90MHz" / f"mol_{i:06d}.npy",
+                    np.ones(16, dtype=np.float32) * i)
+        id_recs = [dict(mol(i), chembl_id=f"CHEMBL{i:04d}") for i in range(5)]
+        sc = SpectraCache(id_recs, cache_root, points=16, spectrum_field="spec90", verbose=False)
+        assert sc.n_loaded == 5, f"expected 5 loaded, got {sc.n_loaded}"
+        for i in range(5):
+            s = sc.get(f"CHEMBL{i:04d}")
+            assert abs(float(s.mean()) - i) < 0.01, f"CHEMBL{i:04d}: got {s.mean()}, want {i}"
+        # unknown chembl_id returns zeros, not an error
+        assert sc.get("CHEMBL9999").sum() == 0
 
     print("data.py self-test PASSED",
           {k: (round(v, 3) if isinstance(v, float) else v) for k, v in rep["ratios"].items()})

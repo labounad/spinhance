@@ -86,7 +86,7 @@ class TrainConfig:
     device: str = "cuda"
     amp_dtype: str = "bf16"
     ckpt_path: str = "checkpoint.pt"
-    cache_spectra: bool = True      # stream mol_all.tar.gz into RAM at startup
+    cache_spectra: bool = True      # stream 90MHz.tar.gz into RAM at startup
     gpu_augment: bool = True        # vectorized augmentation on-GPU per batch
     num_workers: int = 0            # RAM cache + GPU aug: no CPU loader needed
     compile: bool = False           # opt-in torch.compile; falls back to eager
@@ -1288,7 +1288,7 @@ def run_smoke(args):
 def build_argparser():
     ap = argparse.ArgumentParser(description="modelv2 training / data-path CLI")
     ap.add_argument("--spin_systems", help="spin_systems json or .json.tar.gz (ground truth)")
-    ap.add_argument("--spectra", help="mol_all.tar.gz (or a dir of mol_*.npy)")
+    ap.add_argument("--spectra", help="90MHz.tar.gz (or a dir of mol_*.npy)")
     ap.add_argument("--out", default="", help="session root (local dir or s3:// URI)")
     ap.add_argument("--epochs", type=int, default=None)
     ap.add_argument("--batch", type=int, default=None)

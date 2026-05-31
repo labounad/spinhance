@@ -20,7 +20,7 @@ aws s3 cp "$REPO/mol_to_spin_system/data/spin_systems_chembl.json" \
 
 echo "[2/2] Creating and uploading 90MHz spectra tar (may take a few minutes)..."
 TMP=$(mktemp /tmp/spectra-90MHz-XXXXX.tar.gz)
-tar czf "$TMP" -C "$REPO/simulation/data/spectra/90MHz" .
+tar czf "$TMP" -C "$REPO/simulation/data/index/csv" "$REPO/simulation/data/spectra/90MHz" .
 aws s3 cp "$TMP" "s3://$BUCKET/spectra/90MHz/mol_all.tar.gz" \
   --profile "$PROFILE" --region "$REGION"
 rm "$TMP"
