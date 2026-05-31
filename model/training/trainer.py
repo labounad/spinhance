@@ -112,7 +112,8 @@ class Trainer:
 
         opt, sched = build_optimizer_and_scheduler(
             model, cfg.training.lr, cfg.training.weight_decay, cfg.training.warmup_frac,
-            max(1, len(train_dl)), cfg.training.epochs)
+            max(1, len(train_dl)), cfg.training.epochs,
+            min_factor=cfg.training.lr_min_factor, stable_frac=cfg.training.lr_stable_frac)
         amp_ctx, scaler = amp_context(cfg.training.amp, self.device)
 
         run_dir = _make_run_dir(cfg)

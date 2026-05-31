@@ -7,12 +7,15 @@ from model.training.schedules import lr_factor
 
 
 def build_optimizer_and_scheduler(model, lr, weight_decay, warmup_frac,
-                                  steps_per_epoch, epochs):
+                                  steps_per_epoch, epochs,
+                                  min_factor=0.05, stable_frac=0.0):
     opt = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
     total_steps = max(1, steps_per_epoch * epochs)
     warmup = int(warmup_frac * total_steps)
+    stable = int(stable_frac * total_steps)
     sched = torch.optim.lr_scheduler.LambdaLR(
-        opt, lambda s: lr_factor(s, warmup, total_steps))
+        opt, lambda s: lr_factor(s, warmup, total_steps,
+                                 min_factor=min_factor, stable_steps=stable))
     return opt, sched
 
 
