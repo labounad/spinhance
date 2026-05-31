@@ -30,7 +30,7 @@ fi
 
 # ── Session number (auto-increment from S3) ───────────────────────────────────
 LAST=$(aws s3 ls "s3://$BUCKET/training/" 2>/dev/null \
-  | grep -oE 'session[0-9]+' | grep -oE '[0-9]+' | sort -n | tail -1)
+  | grep -oE 'session[0-9]+' | grep -oE '[0-9]+' | sort -n | tail -1 || true)
 SESSION=$(printf "%03d" $(( ${LAST:-0} + 1 )))
 S3_PREFIX="s3://$BUCKET/training/session$SESSION"
 echo "=== SpinHance training — session $SESSION ==="
