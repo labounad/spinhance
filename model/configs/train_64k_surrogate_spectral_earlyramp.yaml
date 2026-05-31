@@ -1,0 +1,60 @@
+# Run C2 — 64k ChEMBL, EARLY-RAMP + heavier spectral mix (Branch 6).
+# Curriculum: matrix anchor alone for 20 epochs to establish spin-system
+# structure, then ramp the surrogate spectral-consistency term in over epochs
+# 20->30 up to weight 0.6 (2x the A/B peak of 0.3), then hold matrix + 0.6*spectral
+# for the remainder, out to 100 epochs. Replaces the failed Stage-2-only run (C):
+# this keeps the matrix anchor (which C lacked) but leans much harder on the
+# spectral term, earlier, than Runs A/B.
+#   - vs A (ramp 40-50 to 0.3, hold): earlier ramp (20-30), 2x weight (0.6)
+#   - vs baseline (matrix only): adds the spectral refinement
+# Early-stop score is matrix-only (shift_mae + j_mae/10), so the spectral term's
+# magnitude never triggers a premature stop; patience raised to 20 for the
+# longer schedule. Identical data/seed/model to the other arms.
+run:
+  name: rebuild64k_surrogate_spectral_earlyramp
+  output_dir: model/runs
+
+data:
+  records: mol_to_spin_system/data/spin_systems_chembl.json   # 64,476 molecules
+  spectra: simulation/data/spectra
+  field: 90
+  split: none
+
+model:
+  name: resnet1d_attention_pool
+  size: medium
+  dropout: 0.1
+
+loss:
+  name: composite
+  terms:
+    - name: matrix
+      weight: 1.0                 # anchor, always on
+    - name: surrogate_spectral
+      weight: 0.6                 # peak weight (2x A/B)
+      start_epoch: 20             # matrix-only for the first 20 epochs
+      ramp_epochs: 10             # ramp 0 -> 0.6 over epochs 20..30, then hold
+      checkpoint: model_artifacts/surrogate/session012_best.pt
+      field: 90
+      w1_weight: 1.0
+      cosine_weight: 0.5
+      use_clean_target: true
+
+training:
+  epochs: 100
+  batch_size: 256
+  lr: 0.0003
+  weight_decay: 0.01
+  amp: bf16
+  warmup_frac: 0.03
+  grad_clip: 1.0
+  patience: 20                    # raised for the longer schedule (survive the ramp)
+  num_workers: 8
+  val_every: 1
+  seed: 0
+
+diagnostics:
+  enabled: true
+  log_every_steps: 50
+  probe_every_epochs: 5
+  probe_count: 16
