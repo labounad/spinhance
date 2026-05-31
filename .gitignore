@@ -20,34 +20,45 @@ venv/
 .ipynb_checkpoints/
 *.ipynb
 
-# Data / outputs (large files — store externally or use DVC)
-outputs/
-*.sdf
-*.mol2
-*.log
+# ── Large data files — live in S3 (s3://spinhance-data/), not in git ──────────
 
-# MNova outputs (keep XMLs committed if small; ignore large batch dirs)
+# Raw source datasets (re-download from ChEMBL / PubChem as needed)
+generate/chembl/
+
+# Computed pipeline outputs
+generate/data/*.csv
+generate/data/*.gz
+generate/data/buckets/
+
+# Spin-system JSON outputs (large ones are in S3; spin_systems.json is kept)
+mol_to_spin_system/data/spin_systems_chembl.json
+mol_to_spin_system/data/spin_systems_pubchem.json.tar.gz
+mol_to_spin_system/data/buckets/
+
+# Generated spectra (regenerate from spin_systems.json + simulation CLI)
+simulation/data/spectra/
+
+# MNova batch outputs
 simulation/mnova_outputs/
 
-# ML checkpoints
-model/checkpoints/*
+# ── ML artifacts — stored in S3 sessions (s3://spinhance-data/training/) ───────
+model/checkpoints/
 model/runs/
 *.pt
 *.pth
 *.ckpt
-!model/checkpoints/spinhance-epoch44.pt
 
-# OS
+# Smoke test output PNGs
+smoke_*.png
+
+# ── Misc ───────────────────────────────────────────────────────────────────────
+outputs/
+*.sdf
+*.mol2
+*.log
 .DS_Store
 Thumbs.db
-
-# IDEs
 .vscode/
 .idea/
 *.swp
-
-# pyspin validation overlay artifacts
 simulation/examples/*.cmp_*.png
-
-# Generated spectra dataset (large binaries; regenerate from spin_systems.json)
-simulation/data/spectra/

@@ -1,11 +1,2 @@
-*.mol2 filter=lfs diff=lfs merge=lfs -text
-*.smi filter=lfs diff=lfs merge=lfs -text
-generate/**/*.txt filter=lfs diff=lfs merge=lfs -text
-data/**/*.txt filter=lfs diff=lfs merge=lfs -text
-data/**/*.csv filter=lfs diff=lfs merge=lfs -text
-generate/data/*.csv filter=lfs diff=lfs merge=lfs -text
-*.gz filter=lfs diff=lfs merge=lfs -text
-*.sdf filter=lfs diff=lfs merge=lfs -text
-mol_to_spin_system/data/*.json filter=lfs diff=lfs merge=lfs -text
-*.pt filter=lfs diff=lfs merge=lfs -text
-generate/data/buckets/*.csv filter=lfs diff=lfs merge=lfs -text
+# No Git LFS — large data files live in S3 (s3://spinhance-data/) and are
+# listed in .gitignore.  See docs/training_diagnostics.md for data locations.
