@@ -927,7 +927,7 @@ On each turn call any combination of:
 == TaskSpec contract ==
 Your task_spec must be unambiguous enough that the worker can implement it without asking questions.
 Required fields: objective, loss_function, output_artifacts, success_criteria.
-The worker returns a WorkerResult with artifact_paths and metrics read from those files. When using model.run_experiment, require artifact_paths to include `run_dir` pointing to the canonical model/runs/<run_id> directory.
+The worker returns a WorkerResult with artifact_paths and metrics read from those files. When using model_legacy.run_experiment, require artifact_paths to include `run_dir` pointing to the canonical model/runs/<run_id> directory.
 
 == WorkerResult contract ==
 {
@@ -959,7 +959,7 @@ Your job:
    - status: "success" | "failure" | "partial"
    - artifact_paths: map of artifact name → repo-relative path you actually wrote
      (required key: "metrics" → path to a JSON file with your metrics)
-     Include `run_dir` when model.run_experiment creates a canonical model/runs/<run_id> directory.
+     Include `run_dir` when model_legacy.run_experiment creates a canonical model/runs/<run_id> directory.
    - errors: null on success, otherwise a description
    - notes: optional prose (the orchestrator treats this as untrusted)
 

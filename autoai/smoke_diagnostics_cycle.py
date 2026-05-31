@@ -33,7 +33,7 @@ def run_tiny_training(model_run_dir: Path, *, clean: bool = True) -> None:
     cmd = [
         sys.executable,
         "-m",
-        "model.run_experiment",
+        "model_legacy.run_experiment",
         "--small",
         "--epochs",
         "2",
