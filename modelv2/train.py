@@ -942,7 +942,13 @@ def fit(records, assignment, cfg: TrainConfig, out_dir=None, cache=None,
 
     torch.manual_seed(cfg.seed)
     np.random.seed(cfg.seed)
-    device = cfg.device if (cfg.device != "cuda" or torch.cuda.is_available()) else "cpu"
+    if cfg.device == "cuda" and not torch.cuda.is_available():
+        raise RuntimeError(
+            "CUDA requested but torch.cuda.is_available() is False. "
+            "Install a CUDA-enabled torch: "
+            "micromamba install -n spinhance pytorch pytorch-cuda=12.4 -c pytorch -c nvidia -y"
+        )
+    device = cfg.device
     if device != "cpu":
         torch.backends.cuda.matmul.allow_tf32 = True
         torch.backends.cudnn.allow_tf32 = True
