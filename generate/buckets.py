@@ -4,8 +4,8 @@ A range scan (``run --min-groups 1 --max-groups 26``) produces one combined CSV
 and one combined multi-XYZ tagged by spin-group count.  This partitions them
 into per-count files::
 
-    <out_dir>/<prefix>_1spin.csv   <out_dir>/<prefix>_1spin.xyz.gz
-    <out_dir>/<prefix>_2spin.csv   <out_dir>/<prefix>_2spin.xyz.gz
+    <out_dir>/<prefix>_1spin.csv.gz   <out_dir>/<prefix>_1spin.xyz.gz
+    <out_dir>/<prefix>_2spin.csv.gz   <out_dir>/<prefix>_2spin.xyz.gz
     ...
 
 so each spin-group count is a standalone, ready-to-use dataset.
@@ -49,19 +49,31 @@ def _block_n_groups(comment_atoms: list[str]) -> int:
     return len(labels)
 
 
+def _open_text(path: Path, mode: str):
+    """Open *path* as text, gzip-transparent for ``.gz`` (read or write)."""
+    if Path(path).suffix == ".gz":
+        return gzip.open(path, mode, encoding="utf-8", newline="",
+                         **({"compresslevel": 6} if "w" in mode else {}))
+    return open(path, mode, newline="", encoding="utf-8")
+
+
 def split_csv(in_csv: Path, out_dir: Path, prefix: str) -> Counter:
-    """Split *in_csv* into ``<prefix>_<n>spin.csv`` by the ``n_groups`` column."""
+    """Split *in_csv* into ``<prefix>_<n>spin.csv.gz`` by the ``n_groups`` column.
+
+    Outputs are gzip-compressed (CSV text compresses ~5-8x); *in_csv* may be
+    plain or ``.gz``.
+    """
     out_dir.mkdir(parents=True, exist_ok=True)
     writers: dict[int, csv.writer] = {}
     handles: dict[int, object] = {}
     counts: Counter = Counter()
-    with open(in_csv, newline="") as f:
+    with _open_text(in_csv, "rt") as f:
         reader = csv.reader(f)
         header = next(reader, None)
         for row in reader:
             n = int(row[N_GROUPS_COL])
             if n not in writers:
-                fh = open(out_dir / f"{prefix}_{n}spin.csv", "w", newline="")
+                fh = _open_text(out_dir / f"{prefix}_{n}spin.csv.gz", "wt")
                 handles[n] = fh
                 writers[n] = csv.writer(fh)
                 if header is not None:
@@ -129,7 +141,7 @@ def main() -> None:
     in_xyz = args[3] if len(args) == 4 else None
     csv_counts, xyz_counts = split_dataset(in_csv, out_dir, prefix, in_xyz)
     total = sum(csv_counts.values())
-    print(f"split {total:,} rows into {len(csv_counts)} buckets -> {out_dir}/{prefix}_<n>spin.csv")
+    print(f"split {total:,} rows into {len(csv_counts)} buckets -> {out_dir}/{prefix}_<n>spin.csv.gz")
     for n in sorted(csv_counts):
         x = f", {xyz_counts.get(n, 0):,} xyz" if xyz_counts else ""
         print(f"  {n:>2}spin: {csv_counts[n]:>10,} rows{x}")

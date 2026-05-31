@@ -123,7 +123,7 @@ def _cmd_split(args: argparse.Namespace) -> int:
     )
     total = sum(csv_counts.values())
     print(f"split {total:,} rows into {len(csv_counts)} buckets "
-          f"-> {args.out_dir}/{args.prefix}_<n>spin.csv")
+          f"-> {args.out_dir}/{args.prefix}_<n>spin.csv.gz")
     for n in sorted(csv_counts):
         x = f", {xyz_counts.get(n, 0):,} xyz" if xyz_counts else ""
         print(f"  {n:>2}spin: {csv_counts[n]:>10,} rows{x}")
