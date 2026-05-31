@@ -321,14 +321,27 @@ class _Prefetcher:
 
 # ── Background checkpoint worker ───────────────────────────────────────────────
 
+def _save_checkpoint_file(ckpt, path: str) -> None:
+    """Save a checkpoint after ensuring the parent directory exists."""
+    if not path:
+        return
+
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    torch.save(ckpt, p)
+
+
 def _do_checkpoint(ckpt, last_path: str, s3_dest: str, best_path: str, legacy_path: str) -> None:
-    torch.save(ckpt, last_path)
+    _save_checkpoint_file(ckpt, last_path)
+
     if s3_dest:
         subprocess.run(["aws", "s3", "cp", last_path, s3_dest], capture_output=True)
+
     if best_path:
-        torch.save(ckpt, best_path)
+        _save_checkpoint_file(ckpt, best_path)
+
     if legacy_path:
-        torch.save(ckpt, legacy_path)
+        _save_checkpoint_file(ckpt, legacy_path)
 
 
 def _ckpt_worker(q: "_queue.Queue"):
