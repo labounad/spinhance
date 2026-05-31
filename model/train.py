@@ -374,6 +374,8 @@ def fit(records, assignment, cfg: TrainConfig, model=None):
     run_id   = run_dir.name
 
     diag = DiagnosticsWriter(run_dir, enabled=cfg.diagnostics_enabled)
+    if diag is not None:
+        diag.reset_live_files()
     diag.write_config(vars(cfg))
     diag.log_event("run_start", {"run_id": run_id, "device": device, "epochs": cfg.epochs})
 
