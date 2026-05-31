@@ -179,16 +179,17 @@ def _list_sessions() -> list[str]:
 
 @st.cache_data(ttl=60)
 def _list_epoch_numbers(session: str) -> list[int]:
-    lines = _s3_ls(f"{S3_TRAINING}/{session}")
+    # Epochs are stored as probes/epoch_XXXX/ subdirectories inside the session
+    lines = _s3_ls(f"{S3_TRAINING}/{session}/probes")
     epochs = []
     for line in lines:
         parts = line.strip().split()
         if not parts:
             continue
-        fname = parts[-1]
-        if fname.startswith("epoch_") and fname.endswith(".pt"):
+        name = parts[-1].rstrip("/")
+        if name.startswith("epoch_"):
             try:
-                epochs.append(int(fname[6:-3]))
+                epochs.append(int(name[6:]))
             except ValueError:
                 pass
     return sorted(epochs)
@@ -197,13 +198,13 @@ def _list_epoch_numbers(session: str) -> list[int]:
 def _epoch_local(session: str, epoch: int) -> Path:
     d = CACHE_DIR / session
     d.mkdir(parents=True, exist_ok=True)
-    return d / f"epoch_{epoch:03d}.pt"
+    return d / f"epoch_{epoch:04d}.pt"
 
 
 def _download_epoch(session: str, epoch: int) -> Path:
     local = _epoch_local(session, epoch)
     if not local.exists():
-        s3_uri = f"{S3_TRAINING}/{session}/epoch_{epoch:03d}.pt"
+        s3_uri = f"{S3_TRAINING}/{session}/probes/epoch_{epoch:04d}/checkpoint.pt"
         r = subprocess.run(
             ["aws", "s3", "cp", s3_uri, str(local),
              "--profile", AWS_PROFILE, "--region", AWS_REGION],

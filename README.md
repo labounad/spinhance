@@ -221,25 +221,30 @@ vars(std).update(ckpt["standardizer"])
 
 ## Training diagnostics
 
-Current model training writes a canonical diagnostics directory under `model/runs/<run_id>/`. This directory is the source of truth for live dashboards, probe diagnostics, failure analysis, and AutoAI integration.
+Model training writes all artifacts — config, metrics, probes, checkpoints — to an S3 session under `s3://spinhance-data/training/<session>/`. This session is the source of truth for live dashboards, probe diagnostics, failure analysis, and AutoAI integration.
 
-Smoke run:
+Launch a training run (artifacts go to `s3://spinhance-data/training/session001/`):
 
 ~~~bash
 PYTHONPATH=. python -m model.run_experiment \
+  --session-id session001 \
   --small \
-  --epochs 2 \
-  --batch 16 \
-  --max-mol 128 \
-  --run-dir model/runs/diagnostics_smoke \
-  --ckpt model/runs/diagnostics_smoke/checkpoints/spinhance.pt \
-  --log-every-steps 1
+  --epochs 60 \
+  --batch 64
 ~~~
 
-Live dashboard:
+Omit `--session-id` to auto-generate a session named `session_<timestamp>`.
+
+Live dashboard (reads directly from S3):
 
 ~~~bash
 PYTHONPATH=. streamlit run model/live_dashboard.py
 ~~~
 
-See `docs/training_diagnostics.md` for the full artifact contract used by collaborators and AutoAI agents.
+Session analysis GUI:
+
+~~~bash
+conda run -n spinhance streamlit run model/gui.py
+~~~
+
+See `docs/training_diagnostics.md` for the full S3 artifact layout used by collaborators and AutoAI agents.

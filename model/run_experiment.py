@@ -9,12 +9,17 @@ Examples
 # validate the whole non-torch data path (no training, no torch needed):
 PYTHONPATH=. python3 -m model.run_experiment --dry-run --no-scaffold
 
-# Stage-1 training on the 1072-mol set (small model for small data):
-PYTHONPATH=. python3 -m model.run_experiment --small --epochs 60 --batch 64
+# Stage-1 training writing artifacts to S3 session001:
+PYTHONPATH=. python3 -m model.run_experiment --small --epochs 60 --batch 64 \\
+    --session-id session001
 
-# add Stage-2 spectral consistency (curriculum blend) after epoch 40:
-PYTHONPATH=. python3 -m model.run_experiment --small --epochs 80 \
-    --stage1-epochs 40 --ramp-epochs 10 --stage2 --batch 64
+# Or pass a full S3 URI:
+PYTHONPATH=. python3 -m model.run_experiment --small --epochs 60 --batch 64 \\
+    --session-id s3://spinhance-data/training/session001
+
+# Local smoke run (no S3):
+PYTHONPATH=. python3 -m model.run_experiment --small --epochs 2 --batch 16 \\
+    --max-mol 128 --log-every-steps 1
 """
 
 from __future__ import annotations
@@ -24,9 +29,6 @@ import json
 import os
 from pathlib import Path
 
-# Allow PyTorch to release unused CUDA memory segments back to the driver instead
-# of holding them in the caching pool. Prevents fragmentation OOM when the
-# allocator has reserved GiBs but can't satisfy a large contiguous request.
 os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
 import numpy as np
@@ -35,9 +37,10 @@ from model.data_adapter import load_records, renderable_mask
 from model.splits import make_splits
 from model.targets import DegeneracyVocab, Standardizer, encode_target
 
-REPO = Path(__file__).resolve().parents[1]
-DEF_JSON = REPO / "mol_to_spin_system/data/spin_systems.json"
+REPO        = Path(__file__).resolve().parents[1]
+DEF_JSON    = REPO / "mol_to_spin_system/data/spin_systems.json"
 DEF_SPECTRA = REPO / "simulation/data/spectra"
+S3_TRAINING = "s3://spinhance-data/training"
 
 
 def _load(args):
@@ -91,23 +94,34 @@ def full_run(args):
 
     vocab = DegeneracyVocab()
     enc = None
-    if args.small:                       # lighter encoder for the small prelim set
+    if args.small:
         enc = ResNet1DEncoder(stem_channels=24, stage_channels=(32, 64, 128, 192),
                               blocks_per_stage=(1, 1, 1, 1))
     model = SpinHanceModel(n_groups=8, n_deg_classes=len(vocab), encoder=enc,
                            head_hidden=256 if args.small else 512,
                            dropout=0.2 if args.small else 0.1)
 
+    # Resolve session/run directory — always S3; auto-generate if not given
+    session = args.session_id
+    if not session:
+        from datetime import datetime
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        session = f"{S3_TRAINING}/session_{ts}"
+    elif not session.startswith("s3://"):
+        session = f"{S3_TRAINING}/{session}"
+
     cfg = TrainConfig(
         batch_size=args.batch, lr=args.lr, epochs=args.epochs,
         stage1_epochs=args.epochs if not args.stage2 else args.stage1_epochs,
         ramp_epochs=args.ramp_epochs, render_subset_frac=args.render_frac,
         weight_decay=args.weight_decay, patience=args.patience, seed=args.seed,
-        device=args.device, amp_dtype=args.amp, ckpt_path=args.ckpt,
-        s3_ckpt_prefix=args.s3_ckpt_prefix, num_workers=args.workers,
+        device=args.device, amp_dtype=args.amp,
+        ckpt_path=args.ckpt,
+        run_dir=session,
+        run_name=args.run_name,
+        num_workers=args.workers,
         val_every=args.val_every,
         diagnostics_enabled=not args.no_diagnostics,
-        run_dir=args.run_dir, run_name=args.run_name,
         log_every_steps=args.log_every_steps,
         probe_every_epochs=args.probe_every_epochs,
         probe_count=args.probe_count,
@@ -120,52 +134,58 @@ def full_run(args):
           f"stage2 {'ON' if args.stage2 else 'OFF'}")
 
     fit(recs, assignment, cfg, model=model)
-    print("TRAINING COMPLETE — best checkpoint at", cfg.ckpt_path)
 
 
 def build_parser():
     p = argparse.ArgumentParser(description="SpinHance Task 4 experiment runner")
-    p.add_argument("--json", default=str(DEF_JSON))
+    p.add_argument("--json",    default=str(DEF_JSON))
     p.add_argument("--spectra", default=str(DEF_SPECTRA))
-    p.add_argument("--dry-run", action="store_true", help="validate data path only (no torch)")
-    p.add_argument("--scaffold", action="store_true", help="enable Bemis-Murcko scaffold split (requires RDKit)")
-    p.add_argument("--fields", default="90,600", help="comma-separated MHz fields to require, e.g. 90 or 90,600")
-    p.add_argument("--max-mol", type=int, default=0, help="subset N molecules (smoke)")
-    p.add_argument("--small", action="store_true", help="lighter encoder for small data")
-    p.add_argument("--stage2", action="store_true", help="enable Stage-2 spectral loss")
-    p.add_argument("--epochs", type=int, default=60)
-    p.add_argument("--stage1-epochs", type=int, default=40)
-    p.add_argument("--ramp-epochs", type=int, default=10)
-    p.add_argument("--render-frac", type=float, default=0.2)
-    p.add_argument("--batch", type=int, default=64)
-    p.add_argument("--lr", type=float, default=3e-4)
-    p.add_argument("--weight-decay", type=float, default=1e-2)
-    p.add_argument("--patience", type=int, default=12)
-    p.add_argument("--max-block", type=int, default=2048)
-    p.add_argument("--device", default=None)
-    p.add_argument("--amp", default="bf16", choices=["bf16", "fp16", "none"])
-    p.add_argument("--ckpt", default="model/checkpoints/spinhance.pt")
-    p.add_argument("--s3-ckpt-prefix", default="", help="S3 prefix for per-epoch checkpoints, e.g. s3://bucket/training/session001")
-    p.add_argument("--workers", type=int, default=-1, help="DataLoader num_workers (-1 = auto)")
-    p.add_argument("--val-every", type=int, default=1, help="validate every N epochs")
-    p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--dry-run", action="store_true",
+                   help="validate data path only (no torch)")
+    p.add_argument("--scaffold", action="store_true",
+                   help="enable Bemis-Murcko scaffold split (requires RDKit)")
+    p.add_argument("--fields", default="90,600",
+                   help="comma-separated MHz fields to require, e.g. 90 or 90,600")
+    p.add_argument("--max-mol", type=int, default=0,
+                   help="subset N molecules (smoke)")
+    p.add_argument("--small", action="store_true",
+                   help="lighter encoder for small data")
+    p.add_argument("--stage2", action="store_true",
+                   help="enable Stage-2 spectral loss")
+    p.add_argument("--epochs",        type=int,   default=60)
+    p.add_argument("--stage1-epochs", type=int,   default=40)
+    p.add_argument("--ramp-epochs",   type=int,   default=10)
+    p.add_argument("--render-frac",   type=float, default=0.2)
+    p.add_argument("--batch",         type=int,   default=64)
+    p.add_argument("--lr",            type=float, default=3e-4)
+    p.add_argument("--weight-decay",  type=float, default=1e-2)
+    p.add_argument("--patience",      type=int,   default=12)
+    p.add_argument("--max-block",     type=int,   default=2048)
+    p.add_argument("--device",        default=None)
+    p.add_argument("--amp",           default="bf16",
+                   choices=["bf16", "fp16", "none"])
+    p.add_argument("--ckpt", default="",
+                   help="optional local path for a backup copy of the best checkpoint")
+    p.add_argument("--workers",   type=int, default=-1,
+                   help="DataLoader num_workers (-1 = auto)")
+    p.add_argument("--val-every", type=int, default=1,
+                   help="validate every N epochs")
+    p.add_argument("--seed",      type=int, default=0)
+    # Session / storage
+    p.add_argument("--session-id", default="",
+                   help="S3 session ID (e.g. 'session001') or full s3:// URI. "
+                        "Auto-generates session_<timestamp> under "
+                        "s3://spinhance-data/training/ if not given.")
+    p.add_argument("--run-name", default="",
+                   help="label suffix for auto-generated session or run ID")
     # Diagnostics
     p.add_argument("--no-diagnostics", action="store_true",
-                   help="disable structured run artifacts (status.json, metrics.jsonl, …)")
-    p.add_argument("--run-dir", default="",
-                   help="explicit run directory (auto-generated if empty)")
-    p.add_argument("--run-name", default="",
-                   help="label suffix for auto-generated run_id")
-    p.add_argument("--log-every-steps", type=int, default=25,
-                   help="step-level metric logging frequency")
-    p.add_argument("--probe-every-epochs", type=int, default=5,
-                   help="run probe evaluator every N epochs")
-    p.add_argument("--probe-count", type=int, default=16,
-                   help="number of fixed probe molecules")
-    p.add_argument("--no-probe-plots", action="store_true",
-                   help="skip PNG matrix plots in probe output")
-    p.add_argument("--no-failure-tables", action="store_true",
-                   help="skip per-sample failure-case tables")
+                   help="disable structured run artifacts")
+    p.add_argument("--log-every-steps",    type=int, default=25)
+    p.add_argument("--probe-every-epochs", type=int, default=5)
+    p.add_argument("--probe-count",        type=int, default=16)
+    p.add_argument("--no-probe-plots",     action="store_true")
+    p.add_argument("--no-failure-tables",  action="store_true")
     return p
 
 

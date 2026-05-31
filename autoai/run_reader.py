@@ -4,6 +4,9 @@ autoai.run_reader
 Read structured run artifacts from model/diagnostics.py.
 Gives the AutoAI orchestrator machine-readable access to training runs
 instead of parsing raw log text.
+
+Supports both local run directories (plain filesystem paths) and S3-backed
+sessions (``s3://`` URIs).  All public functions accept either form.
 """
 from __future__ import annotations
 
@@ -12,11 +15,21 @@ from pathlib import Path
 
 import numpy as np
 
-REPO = Path(__file__).resolve().parents[1]
+REPO      = Path(__file__).resolve().parents[1]
 RUNS_ROOT = REPO / "model" / "runs"
 
 
-# ── Primitive readers ──────────────────────────────────────────────────────────
+# ── Backend detection ──────────────────────────────────────────────────────────
+
+def _is_s3(run_dir) -> bool:
+    return str(run_dir).startswith("s3://")
+
+
+def _run_uri(run_dir, name: str) -> str:
+    return f"{str(run_dir).rstrip('/')}/{name}"
+
+
+# ── Primitive readers (local) ──────────────────────────────────────────────────
 
 def _json(path: Path, default=None):
     try:
@@ -38,55 +51,120 @@ def _jsonl(path: Path) -> list[dict]:
     return rows
 
 
+# ── Primitive readers (S3) ─────────────────────────────────────────────────────
+
+def _json_s3(uri: str, default=None):
+    try:
+        from model import s3io
+        return s3io.get_json(uri, default)
+    except Exception:
+        return default
+
+
+def _jsonl_s3(uri: str) -> list[dict]:
+    try:
+        from model import s3io
+        text = s3io.get_text(uri, "")
+        if not text:
+            return []
+        rows: list[dict] = []
+        for line in text.splitlines():
+            try:
+                rows.append(json.loads(line))
+            except json.JSONDecodeError:
+                pass
+        return rows
+    except Exception:
+        return []
+
+
 # ── Per-file accessors ─────────────────────────────────────────────────────────
 
 def read_status(run_dir) -> dict:
+    if _is_s3(run_dir):
+        return _json_s3(_run_uri(run_dir, "status.json"), {})
     return _json(Path(run_dir) / "status.json", {})
 
 
 def read_summary(run_dir) -> dict:
+    if _is_s3(run_dir):
+        return _json_s3(_run_uri(run_dir, "summary.json"), {})
     return _json(Path(run_dir) / "summary.json", {})
 
 
 def read_config(run_dir) -> dict:
+    if _is_s3(run_dir):
+        return _json_s3(_run_uri(run_dir, "config.json"), {})
     return _json(Path(run_dir) / "config.json", {})
 
 
 def read_metrics(run_dir) -> list[dict]:
+    if _is_s3(run_dir):
+        return _jsonl_s3(_run_uri(run_dir, "metrics.jsonl"))
     return _jsonl(Path(run_dir) / "metrics.jsonl")
 
 
 def read_events(run_dir) -> list[dict]:
+    if _is_s3(run_dir):
+        return _jsonl_s3(_run_uri(run_dir, "events.jsonl"))
     return _jsonl(Path(run_dir) / "events.jsonl")
 
 
 def read_failure_summary(run_dir, epoch: int | None = None) -> dict:
     """Return the most recent (or specified) epoch's failure_summary.json."""
-    probes = Path(run_dir) / "probes"
-    if not probes.exists():
-        return {}
-    dirs = sorted(probes.iterdir(), reverse=True)
-    if epoch is not None:
-        dirs = [d for d in dirs if d.name == f"epoch_{epoch:04d}"]
-    if not dirs:
-        return {}
-    return _json(dirs[0] / "failure_summary.json", {})
+    if _is_s3(run_dir):
+        try:
+            from model import s3io
+            probes_prefix = _run_uri(run_dir, "probes")
+            names = sorted(s3io.list_prefixes(probes_prefix), reverse=True)
+        except Exception:
+            return {}
+        if epoch is not None:
+            names = [n for n in names if n == f"epoch_{epoch:04d}"]
+        if not names:
+            return {}
+        return _json_s3(f"{probes_prefix}/{names[0]}/failure_summary.json", {})
+    else:
+        probes = Path(run_dir) / "probes"
+        if not probes.exists():
+            return {}
+        dirs = sorted(probes.iterdir(), reverse=True)
+        if epoch is not None:
+            dirs = [d for d in dirs if d.name == f"epoch_{epoch:04d}"]
+        if not dirs:
+            return {}
+        return _json(dirs[0] / "failure_summary.json", {})
 
 
 def read_worst_cases(run_dir, metric: str = "shift", epoch: int | None = None) -> list[dict]:
     """Load worst_<metric>_cases.json from the most recent (or given) probe epoch."""
     fname = f"worst_{metric}_cases.json"
-    probes = Path(run_dir) / "probes"
-    if not probes.exists():
+    if _is_s3(run_dir):
+        try:
+            from model import s3io
+            probes_prefix = _run_uri(run_dir, "probes")
+            names = sorted(s3io.list_prefixes(probes_prefix), reverse=True)
+        except Exception:
+            return []
+        if epoch is not None:
+            names = [n for n in names if n == f"epoch_{epoch:04d}"]
+        for name in names:
+            cases = _json_s3(f"{probes_prefix}/{name}/{fname}")
+            if cases is not None:
+                return cases
         return []
-    dirs = sorted(probes.iterdir(), reverse=True)
-    if epoch is not None:
-        dirs = [d for d in dirs if d.name == f"epoch_{epoch:04d}"]
-    for d in dirs:
-        cases = _json(d / fname)
-        if cases is not None:
-            return cases
-    return []
+    else:
+        probes = Path(run_dir) / "probes"
+        if not probes.exists():
+            return []
+        dirs = sorted(probes.iterdir(), reverse=True)
+        if epoch is not None:
+            dirs = [d for d in dirs if d.name == f"epoch_{epoch:04d}"]
+        for d in dirs:
+            cases = _json(d / fname)
+            if cases is not None:
+                return cases
+        return []
 
 
 # ── Run analysis ───────────────────────────────────────────────────────────────
@@ -104,7 +182,7 @@ _FAILURE_HINTS: dict[str, str] = {
 
 def analyze_run(run_dir) -> dict:
     """Return a machine-readable analysis dict for the AutoAI orchestrator."""
-    run_dir = Path(run_dir)
+    run_id  = str(run_dir).rstrip("/").rsplit("/", 1)[-1]
     status  = read_status(run_dir)
     summary = read_summary(run_dir)
     failure = read_failure_summary(run_dir)
@@ -136,7 +214,7 @@ def analyze_run(run_dir) -> dict:
     hint        = _FAILURE_HINTS.get(dominant, _FAILURE_HINTS["ok"])
 
     return {
-        "run_id":         run_dir.name,
+        "run_id":         run_id,
         "state":          status.get("state", "unknown"),
         "best_epoch":     status.get("best_epoch"),
         "best_score":     status.get("best_score"),
@@ -161,6 +239,8 @@ def list_runs(runs_root: str | Path | None = None) -> list[Path]:
         return []
     return sorted([d for d in root.iterdir() if d.is_dir()],
                   key=lambda d: d.stat().st_mtime, reverse=True)
+
+
 # ── Artifact-path integration ─────────────────────────────────────────────────
 
 def _repo_path(path: str | Path, repo_root: str | Path | None = None) -> Path:
@@ -172,8 +252,10 @@ def _repo_path(path: str | Path, repo_root: str | Path | None = None) -> Path:
 def infer_run_dir_from_artifacts(
     artifact_paths: dict,
     repo_root: str | Path | None = None,
-) -> Path | None:
-    """Infer a model/runs/<run_id> directory from worker artifact paths.
+) -> str | Path | None:
+    """Infer a run directory or S3 session URI from worker artifact paths.
+
+    Returns a string for S3 URIs, a Path for local directories, or None.
 
     Preferred explicit keys:
       - run_dir
@@ -181,23 +263,35 @@ def infer_run_dir_from_artifacts(
       - diagnostics_run_dir
 
     Fallbacks:
-      - checkpoint path inside a checkpoints/ directory
+      - S3 checkpoint path inside a checkpoints/ key
+      - checkpoint path inside a local checkpoints/ directory
       - metrics/status/summary path inside a canonical run directory
     """
     root = Path(repo_root) if repo_root is not None else REPO
 
     for key in ("run_dir", "train_run", "diagnostics_run_dir"):
         value = artifact_paths.get(key)
-        if value:
-            candidate = _repo_path(value, root)
-            if candidate.exists() and candidate.is_dir():
-                return candidate
+        if not value:
+            continue
+        if str(value).startswith("s3://"):
+            return str(value).rstrip("/")
+        candidate = _repo_path(value, root)
+        if candidate.exists() and candidate.is_dir():
+            return candidate
 
     for key in ("checkpoint", "best_checkpoint", "last_checkpoint"):
         value = artifact_paths.get(key)
         if not value:
             continue
-
+        if str(value).startswith("s3://"):
+            uri = str(value)
+            # s3://bucket/training/session001/checkpoints/best.pt
+            if "/checkpoints/" in uri:
+                return uri.rsplit("/checkpoints/", 1)[0]
+            # s3://bucket/training/session001/probes/epoch_XXXX/checkpoint.pt
+            if "/probes/" in uri:
+                return uri.rsplit("/probes/", 1)[0]
+            continue
         p = _repo_path(value, root)
         parts = p.parts
         if "checkpoints" in parts:
@@ -210,15 +304,18 @@ def infer_run_dir_from_artifacts(
         value = artifact_paths.get(key)
         if not value:
             continue
-
+        if str(value).startswith("s3://"):
+            uri = str(value)
+            if any(uri.endswith(n) for n in
+                   ("metrics.jsonl", "summary.json", "status.json")):
+                return uri.rsplit("/", 1)[0]
+            continue
         p = _repo_path(value, root)
         if p.name in {"metrics.jsonl", "summary.json", "status.json"}:
             candidate = p.parent
             if candidate.exists() and (candidate / "metrics.jsonl").exists():
                 return candidate
-
         if p.name == "metrics.json" and p.parent.exists():
-            # AutoAI cycle metrics file, not necessarily the training run.
             nested = p.parent / "train_run"
             if nested.exists() and (nested / "metrics.jsonl").exists():
                 return nested
@@ -227,12 +324,20 @@ def infer_run_dir_from_artifacts(
 
 
 def latest_probe_epoch(run_dir: str | Path) -> str | None:
-    probes = Path(run_dir) / "probes"
-    if not probes.exists():
-        return None
-
-    dirs = sorted([d for d in probes.iterdir() if d.is_dir()])
-    return dirs[-1].name if dirs else None
+    if _is_s3(run_dir):
+        try:
+            from model import s3io
+            probes_prefix = _run_uri(run_dir, "probes")
+            names = sorted(s3io.list_prefixes(probes_prefix))
+            return names[-1] if names else None
+        except Exception:
+            return None
+    else:
+        probes = Path(run_dir) / "probes"
+        if not probes.exists():
+            return None
+        dirs = sorted([d for d in probes.iterdir() if d.is_dir()])
+        return dirs[-1].name if dirs else None
 
 
 def summarize_metrics_for_agent(metrics: dict) -> dict:

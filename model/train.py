@@ -18,10 +18,10 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
 import os
 import queue as _queue
-import subprocess
 import threading
 import time
 from dataclasses import dataclass, field
@@ -68,13 +68,15 @@ class TrainConfig:
     seed: int = 0
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
     amp_dtype: str = "bf16"
-    ckpt_path: str = "model/checkpoints/spinhance.pt"
-    s3_ckpt_prefix: str = ""
+    # Primary storage location: local path or s3:// URI.
+    # If set to an s3:// URI all artifacts (diagnostics, checkpoints) go to S3.
+    # If empty, auto-generated as a local path under model/runs/.
+    ckpt_path: str = ""
+    run_dir: str = ""
     num_workers: int = -1
     val_every: int = 1
     # ── Diagnostics ────────────────────────────────────────────────────────────
     diagnostics_enabled: bool = True
-    run_dir: str = ""
     run_name: str = ""
     log_every_steps: int = 25
     probe_every_epochs: int = 5
@@ -83,19 +85,22 @@ class TrainConfig:
     save_failure_tables: bool = True
 
 
-# ── Run directory ──────────────────────────────────────────────────────────────
+# ── Run directory / session prefix ────────────────────────────────────────────
 
-def _make_run_dir(cfg: TrainConfig) -> Path:
+def _make_run_dir(cfg: TrainConfig) -> str:
+    """Return the run directory as a string (local path or s3:// URI)."""
     if cfg.run_dir:
-        return Path(cfg.run_dir)
+        return cfg.run_dir
+    # Auto-generate a local path for smoke tests and local development
     ts     = datetime.now().strftime("%Y%m%d_%H%M%S")
-    suffix = cfg.run_name or Path(cfg.ckpt_path).stem
+    suffix = cfg.run_name or (Path(cfg.ckpt_path).stem if cfg.ckpt_path
+                               else "run")
     cfg_s  = json.dumps(
         {k: v for k, v in vars(cfg).items() if k not in ("run_dir", "run_name")},
         sort_keys=True, default=str,
     ).encode()
     h = hashlib.sha256(cfg_s).hexdigest()[:6]
-    return Path(__file__).parent / "runs" / f"{ts}_{suffix}_{h}"
+    return str(Path(__file__).parent / "runs" / f"{ts}_{suffix}_{h}")
 
 
 # ── Datasets ───────────────────────────────────────────────────────────────────
@@ -158,27 +163,30 @@ class _Prefetcher:
         return self._n
 
 
-# ── Background checkpoint worker ───────────────────────────────────────────────
+# ── Checkpoint helpers ─────────────────────────────────────────────────────────
 
 def _save_checkpoint_file(ckpt, path: str) -> None:
-    """Save a checkpoint after ensuring the parent directory exists."""
+    """Save a checkpoint to a local path or S3 URI."""
     if not path:
         return
+    if path.startswith("s3://"):
+        from model import s3io
+        buf = io.BytesIO()
+        torch.save(ckpt, buf)
+        s3io.put_bytes(path, buf.getvalue())
+    else:
+        p = Path(path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        torch.save(ckpt, p)
 
-    p = Path(path)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    torch.save(ckpt, p)
 
-
-def _do_checkpoint(ckpt, last_path: str, s3_dest: str, best_path: str, legacy_path: str) -> None:
+def _do_checkpoint(ckpt, last_path: str, epoch_path: str,
+                   best_path: str, legacy_path: str) -> None:
     _save_checkpoint_file(ckpt, last_path)
-
-    if s3_dest:
-        subprocess.run(["aws", "s3", "cp", last_path, s3_dest], capture_output=True)
-
+    if epoch_path:
+        _save_checkpoint_file(ckpt, epoch_path)
     if best_path:
         _save_checkpoint_file(ckpt, best_path)
-
     if legacy_path:
         _save_checkpoint_file(ckpt, legacy_path)
 
@@ -208,17 +216,23 @@ def fit(records, assignment, cfg: TrainConfig, model=None):
     torch.manual_seed(cfg.seed)
     device = cfg.device
 
-    # ── Run directory + diagnostics ────────────────────────────────────────────
+    # ── Run directory + mode ───────────────────────────────────────────────────
     run_dir  = _make_run_dir(cfg)
-    ckpt_dir = run_dir / "checkpoints"
-    ckpt_dir.mkdir(parents=True, exist_ok=True)
-    run_id   = run_dir.name
+    s3_mode  = run_dir.startswith("s3://")
+    run_id   = run_dir.rstrip("/").rsplit("/", 1)[-1]
+
+    if s3_mode:
+        ckpt_dir = f"{run_dir.rstrip('/')}/checkpoints"
+    else:
+        ckpt_dir_path = Path(run_dir) / "checkpoints"
+        ckpt_dir_path.mkdir(parents=True, exist_ok=True)
+        ckpt_dir = str(ckpt_dir_path)
 
     diag = DiagnosticsWriter(run_dir, enabled=cfg.diagnostics_enabled)
-    if diag is not None:
-        diag.reset_live_files()
+    diag.reset_live_files()
     diag.write_config(vars(cfg))
-    diag.log_event("run_start", {"run_id": run_id, "device": device, "epochs": cfg.epochs})
+    diag.log_event("run_start", {"run_id": run_id, "device": device,
+                                 "epochs": cfg.epochs})
 
     # ── Datasets + loaders ─────────────────────────────────────────────────────
     ds, std, vocab = build_datasets(records, assignment, cfg)
@@ -281,6 +295,10 @@ def fit(records, assignment, cfg: TrainConfig, model=None):
 
     global_step = 0
     last_stage  = 1
+
+    # Pre-compute status checkpoint path strings
+    status_ckpt_best = f"{ckpt_dir}/best.pt"
+    status_ckpt_last = f"{ckpt_dir}/last.pt"
 
     for epoch in range(cfg.epochs):
         cur_stage = 1 if epoch < cfg.stage1_epochs else 2
@@ -349,8 +367,8 @@ def fit(records, assignment, cfg: TrainConfig, model=None):
             "best_epoch":       best_epoch,
             "last_update_time": time.time(),
             "device":           cfg.device,
-            "checkpoint_best":  "checkpoints/best.pt",
-            "checkpoint_last":  "checkpoints/last.pt",
+            "checkpoint_best":  status_ckpt_best,
+            "checkpoint_last":  status_ckpt_last,
         })
 
         print(f"epoch {epoch:3d} | stage {cur_stage} | w_spec {tr['w_spec']:.2f} "
@@ -369,11 +387,13 @@ def fit(records, assignment, cfg: TrainConfig, model=None):
             "epoch":        epoch,
             "metrics":      va,
         }
-        last_path = str(ckpt_dir / "last.pt")
-        best_path = str(ckpt_dir / "best.pt") if is_best else ""
-        legacy    = cfg.ckpt_path if is_best else ""
-        s3_dest   = f"{cfg.s3_ckpt_prefix}/epoch_{epoch:03d}.pt" if cfg.s3_ckpt_prefix else ""
-        ckpt_q.put((ckpt, last_path, s3_dest, best_path, legacy))
+        last_path  = f"{ckpt_dir}/last.pt"
+        best_path  = f"{ckpt_dir}/best.pt" if is_best else ""
+        # Per-epoch checkpoint stored alongside probe artifacts
+        epoch_path = (f"{run_dir.rstrip('/')}/probes/epoch_{epoch:04d}/checkpoint.pt"
+                      if s3_mode else "")
+        legacy     = cfg.ckpt_path if (is_best and cfg.ckpt_path) else ""
+        ckpt_q.put((ckpt, last_path, epoch_path, best_path, legacy))
 
         # ── Probes + failure analysis ──────────────────────────────────────────
         run_probe = (epoch % cfg.probe_every_epochs == 0) or (epoch == cfg.epochs - 1)
@@ -403,17 +423,29 @@ def fit(records, assignment, cfg: TrainConfig, model=None):
     # ── Finalize ───────────────────────────────────────────────────────────────
     failure_summary: dict = {}
     dominant = ""
-    probe_dir = run_dir / "probes"
-    if probe_dir.exists():
-        epoch_dirs = sorted([d for d in probe_dir.iterdir() if d.is_dir()], reverse=True)
-        if epoch_dirs:
-            fs_path = epoch_dirs[0] / "failure_summary.json"
-            if fs_path.exists():
-                try:
-                    failure_summary = json.loads(fs_path.read_text())
-                    dominant = failure_summary.get("dominant_failure", "")
-                except Exception:
-                    pass
+    if s3_mode:
+        try:
+            from model import s3io
+            probes_prefix = f"{run_dir.rstrip('/')}/probes"
+            epoch_names   = sorted(s3io.list_prefixes(probes_prefix), reverse=True)
+            if epoch_names:
+                fs_uri = f"{probes_prefix}/{epoch_names[0]}/failure_summary.json"
+                failure_summary = s3io.get_json(fs_uri, {})
+                dominant = failure_summary.get("dominant_failure", "")
+        except Exception:
+            pass
+    else:
+        probe_dir = Path(run_dir) / "probes"
+        if probe_dir.exists():
+            epoch_dirs = sorted([d for d in probe_dir.iterdir() if d.is_dir()], reverse=True)
+            if epoch_dirs:
+                fs_path = epoch_dirs[0] / "failure_summary.json"
+                if fs_path.exists():
+                    try:
+                        failure_summary = json.loads(fs_path.read_text())
+                        dominant = failure_summary.get("dominant_failure", "")
+                    except Exception:
+                        pass
 
     _HINTS = {
         "large_shift_error":        "Increase shift loss weight or use Hungarian matching loss",
@@ -445,12 +477,13 @@ def fit(records, assignment, cfg: TrainConfig, model=None):
         "best_epoch":       best_epoch,
         "last_update_time": time.time(),
         "device":           cfg.device,
-        "checkpoint_best":  "checkpoints/best.pt",
-        "checkpoint_last":  "checkpoints/last.pt",
+        "checkpoint_best":  status_ckpt_best,
+        "checkpoint_last":  status_ckpt_last,
     })
     diag.log_event("run_end", {"run_id": run_id, "best_epoch": best_epoch,
                                "best_score": float(best) if best != float("inf") else None})
     print(f"Run complete → {run_dir}")
+    print(f"Best checkpoint → {status_ckpt_best}")
 
     return model, std, vocab
 

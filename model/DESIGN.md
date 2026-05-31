@@ -198,9 +198,13 @@ Build order from DESIGN; ✅ = built, 🔬 = numeric core verified in numpy here
 
 **To train (preliminary 1072-mol set):** use `model/run_experiment.py`
 (`data_adapter.load_records` → `splits.make_splits` → `train.fit`).
-- validate the data path (torch-free): `python -m model.run_experiment --dry-run`
-- Stage-1: `python -m model.run_experiment --small --epochs 60 --batch 64`
+All artifacts go to S3 under `s3://spinhance-data/training/<session>/`.
+
+- validate data path (torch-free): `python -m model.run_experiment --dry-run`
+- Stage-1: `python -m model.run_experiment --session-id session001 --small --epochs 60 --batch 64`
 - Stage-2: add `--stage2 --stage1-epochs 40 --ramp-epochs 10`
+- Omit `--session-id` to auto-generate a timestamped session name.
+
 First run the `-m model.<...>` self-tests in your env (esp.
 `-m model.diff_renderer_torch` gradcheck). Stage-2 uses the CLEAN spectrum
 (`spectrum_ref`) as the self-consistency target, not the augmented encoder input.

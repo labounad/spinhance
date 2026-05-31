@@ -4,6 +4,10 @@ model.failure_analysis
 Per-sample validation evaluation and worst-case failure tables.
 Saved alongside probe artifacts so the live dashboard and autoai/ can
 diagnose WHY a run is underperforming, not just HOW MUCH.
+
+Artifacts are written to ``run_dir/probes/epoch_XXXX/``.  When ``run_dir``
+is an ``s3://`` URI the files are uploaded directly to S3; otherwise they are
+written to the local filesystem.
 """
 from __future__ import annotations
 
@@ -98,24 +102,23 @@ def per_sample_evaluate(
 
 def save_failure_cases(
     per_sample_results: list[dict],
-    run_dir: Path,
+    run_dir: str | Path,
     epoch: int,
     n_worst: int = 32,
 ) -> dict:
     """Save worst-case JSON tables and a failure_summary.json."""
-    epoch_dir = run_dir / "probes" / f"epoch_{epoch:04d}"
-    epoch_dir.mkdir(parents=True, exist_ok=True)
+    s3_mode      = str(run_dir).startswith("s3://")
+    epoch_tag    = f"epoch_{epoch:04d}"
+    epoch_prefix = f"{str(run_dir).rstrip('/')}/probes/{epoch_tag}"
 
     tagged = [_tag_failure(r) for r in per_sample_results]
 
-    for metric, fname, descending in [
+    case_files = [
         ("shift_mae_ppm", "worst_shift_cases.json",    True),
         ("j_mae_hz",      "worst_j_cases.json",        True),
         ("deg_acc",       "worst_deg_cases.json",      False),
         ("presence_f1",   "worst_presence_cases.json", False),
-    ]:
-        worst = sorted(tagged, key=lambda r: r.get(metric, 0.0), reverse=descending)[:n_worst]
-        (epoch_dir / fname).write_text(json.dumps(worst, indent=2))
+    ]
 
     counts   = Counter(r.get("failure_type", "unknown") for r in tagged)
     dominant = counts.most_common(1)[0][0] if counts else "none"
@@ -125,5 +128,23 @@ def save_failure_cases(
         "failure_distribution": dict(counts.most_common()),
         "n_molecules":          len(tagged),
     }
-    (epoch_dir / "failure_summary.json").write_text(json.dumps(summary, indent=2))
+
+    if s3_mode:
+        from model import s3io
+        for metric, fname, descending in case_files:
+            worst = sorted(tagged, key=lambda r: r.get(metric, 0.0),
+                           reverse=descending)[:n_worst]
+            s3io.put_bytes(f"{epoch_prefix}/{fname}",
+                           json.dumps(worst, indent=2).encode())
+        s3io.put_bytes(f"{epoch_prefix}/failure_summary.json",
+                       json.dumps(summary, indent=2).encode())
+    else:
+        epoch_dir = Path(epoch_prefix)
+        epoch_dir.mkdir(parents=True, exist_ok=True)
+        for metric, fname, descending in case_files:
+            worst = sorted(tagged, key=lambda r: r.get(metric, 0.0),
+                           reverse=descending)[:n_worst]
+            (epoch_dir / fname).write_text(json.dumps(worst, indent=2))
+        (epoch_dir / "failure_summary.json").write_text(json.dumps(summary, indent=2))
+
     return summary
