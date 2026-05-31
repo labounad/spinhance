@@ -108,7 +108,7 @@ _ssh() {
 
 # ── 4. Sync code (via S3) + data ──────────────────────────────────────────────
 echo "[3/5] Syncing code..."
-ARCHIVE=$(mktemp /tmp/spinhance-code-XXXXX.tar.gz)
+ARCHIVE="/tmp/spinhance-code-$RUN_TAG-$$.tar.gz"   # unique per run (parallel-safe)
 tar czf "$ARCHIVE" -C "$REPO" --exclude='.git' --exclude='__pycache__' --exclude='*.pyc' \
   --exclude='simulation/data' --exclude='mol_to_spin_system/data' --exclude='generate/data' \
   --exclude='model/runs' --exclude='model/checkpoints' --exclude='docs/data' .
@@ -121,8 +121,8 @@ echo "[4/5] Downloading data on instance..."
 _ssh "set -e
   mkdir -p $WORKSPACE/mol_to_spin_system/data $WORKSPACE/simulation/data/spectra/90MHz
   aws s3 cp s3://$BUCKET/spin_systems_chembl.json \
-    $WORKSPACE/mol_to_spin_system/data/spin_systems_chembl.json
-  aws s3 cp s3://$BUCKET/spectra/90MHz/mol_all.tar.gz /tmp/mol_all.tar.gz
+    $WORKSPACE/mol_to_spin_system/data/spin_systems_chembl.json --no-progress
+  aws s3 cp s3://$BUCKET/spectra/90MHz/mol_all.tar.gz /tmp/mol_all.tar.gz --no-progress
   tar xzf /tmp/mol_all.tar.gz -C $WORKSPACE/simulation/data/spectra/90MHz/ && rm /tmp/mol_all.tar.gz"
 
 # Pull the frozen surrogate checkpoint (Branch 6 spectral-consistency loss)
@@ -130,7 +130,7 @@ if [ -n "$SURROGATE_CKPT_S3" ]; then
   echo "      + surrogate checkpoint: $SURROGATE_CKPT_S3 -> $SURROGATE_CKPT_DEST"
   _ssh "set -e
     mkdir -p $WORKSPACE/$(dirname "$SURROGATE_CKPT_DEST")
-    aws s3 cp $SURROGATE_CKPT_S3 $WORKSPACE/$SURROGATE_CKPT_DEST"
+    aws s3 cp $SURROGATE_CKPT_S3 $WORKSPACE/$SURROGATE_CKPT_DEST --no-progress"
 fi
 
 # ── 5. Launch training (tmux) + S3 sync sidecar ───────────────────────────────
