@@ -77,7 +77,8 @@ DEFAULT_MAX_HEAVY_ATOMS = 50
 
 def _screen_chunk(
     chunk: list[tuple[str, str, str]],
-    target_groups: int,
+    min_groups: int,
+    max_groups: int,
     want_xyz: bool = False,
 ) -> list[tuple[tuple[str, str, str, int, str], str | None]]:
     """Classify a batch of heuristic-passing molecules in a single 3-D pass.
@@ -99,8 +100,11 @@ def _screen_chunk(
     chunk:
         List of ``(chembl_id, smiles, inchikey)`` tuples, all of which have
         already passed the heuristic pre-filter in the main process.
-    target_groups:
-        Number of magnetically distinct spin groups to select for.
+    min_groups, max_groups:
+        Inclusive spin-group range to keep.  A molecule is emitted when
+        ``min_groups <= n_groups <= max_groups``; the row's ``n_groups`` column
+        records which bucket it falls in.  Set ``min_groups == max_groups`` for
+        the legacy single-target behaviour.
     want_xyz:
         When ``True``, also render the annotated XYZ block for each kept
         molecule (the InChI computation it requires is skipped otherwise).
@@ -108,11 +112,11 @@ def _screen_chunk(
     Returns
     -------
     list of ``((chembl_id, smiles, inchikey, n_groups, group_sizes_str), xyz)``
-        One entry per molecule that has exactly *target_groups* spin groups.
-        *group_sizes_str* is a semicolon-separated string of per-group proton
-        counts sorted descending (e.g. ``"3;3;1;1;1;1;1;1"``).  *xyz* is the
-        XYZ block string when *want_xyz* is set and embedding succeeded, else
-        ``None``.
+        One entry per molecule whose spin-group count is in
+        ``[min_groups, max_groups]``.  *group_sizes_str* is a semicolon-
+        separated string of per-group proton counts sorted descending (e.g.
+        ``"3;3;1;1;1;1;1;1"``).  *xyz* is the XYZ block string when *want_xyz*
+        is set and embedding succeeded, else ``None``.
     """
     # Deferred imports — safe across fork and spawn.
     from rdkit import Chem, RDLogger  # noqa: PLC0415
@@ -135,7 +139,7 @@ def _screen_chunk(
 
         # n_groups and per-group sizes are exactly what analyze_spin_systems
         # returned: one entry per SpinGroup, sized by its proton count.
-        if len(groups) != target_groups:
+        if not (min_groups <= len(groups) <= max_groups):
             continue
 
         # Sources without an InChIKey column (PubChem, ZINC) pass "" — compute
@@ -187,7 +191,8 @@ def run_pipeline(
     *,
     source: str = "chembl",
     xyz_path: Path | None = DEFAULT_XYZ_OUTPUT,
-    target_groups: int  = N_SPIN_GROUPS,
+    min_groups: int     = N_SPIN_GROUPS,
+    max_groups: int     = N_SPIN_GROUPS,
     max_heavy_atoms: int = DEFAULT_MAX_HEAVY_ATOMS,
     num_shards: int | None = None,
     shard_index: int    = 0,
@@ -195,7 +200,14 @@ def run_pipeline(
     chunk_size: int     = DEFAULT_CHUNK_SIZE,
     verbose: bool       = True,
 ) -> tuple[int, int]:
-    """Stream a compound database for molecules with exactly *target_groups* groups.
+    """Stream a compound database, keeping molecules in a spin-group range.
+
+    Molecules whose spin-group count falls in ``[min_groups, max_groups]`` are
+    written, each row tagged with its count in the ``n_groups`` column.  With
+    ``min_groups == max_groups`` this selects exactly one count (the legacy
+    single-target screen); with a wider range (e.g. ``1..26``) a single pass
+    categorises the whole database by spin-group count instead of running one
+    screen per count.
 
     The input format is selected by *source* (see :mod:`generate.sources`):
     ``chembl`` (default), ``pubchem``, ``zinc``, or a generic ``smiles`` file.
@@ -227,9 +239,12 @@ def run_pipeline(
         Destination gzip multi-XYZ file, or ``None`` to skip XYZ generation
         (CSV only — the old ``run`` behaviour).  Parent directories are
         created if absent.
-    target_groups:
-        Number of magnetically distinct ¹H spin groups to select for.
-        Defaults to :data:`~generate.config.N_SPIN_GROUPS`.
+    min_groups, max_groups:
+        Inclusive spin-group count range to keep.  Both default to
+        :data:`~generate.config.N_SPIN_GROUPS` (legacy exact-count screen);
+        set e.g. ``1`` and ``26`` for a categorising scan.  The pre-filter
+        heuristic is derived from these (carbons ≤ max_groups, protons ≥
+        min_groups), so one pass keeps everything in range.
     max_heavy_atoms:
         Skip molecules with more than this many heavy atoms before embedding
         (peptides/polymers/macrocycles are slow and never qualify).  ``0``
@@ -324,7 +339,7 @@ def run_pipeline(
                 done, pending = _fut_wait(pending, return_when=FIRST_COMPLETED)
                 _write_done(done)
             pending.add(
-                pool.submit(_screen_chunk, list(chunk), target_groups, want_xyz)
+                pool.submit(_screen_chunk, list(chunk), min_groups, max_groups, want_xyz)
             )
             chunk.clear()
 
@@ -375,7 +390,7 @@ def run_pipeline(
                 too_large += 1
                 continue
 
-            ok, _, _ = passes_heuristic(mol)
+            ok, _, _ = passes_heuristic(mol, max_groups, min_groups)
             if not ok:
                 continue
 
@@ -404,7 +419,8 @@ def run_pipeline(
         if max_heavy_atoms:
             print(f"  too large (>{max_heavy_atoms} heavy): {too_large:>10,}")
         print(f"  heuristic pass: {heur_pass:>10,}  ({100 * heur_pass / max(total, 1):.1f}%)")
-        print(f"Kept (n={target_groups})      : {kept:>10,}  ({100 * kept / max(total, 1):.2f}%)")
+        rng = f"n={min_groups}" if min_groups == max_groups else f"{min_groups}≤n≤{max_groups}"
+        print(f"Kept ({rng})      : {kept:>10,}  ({100 * kept / max(total, 1):.2f}%)")
         print(f"Output          : {output_path}")
         if want_xyz:
             size_mb = xyz_path.stat().st_size / 1e6

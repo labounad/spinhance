@@ -11,7 +11,7 @@ import numpy as np
 from rdkit import Chem
 from rdkit.Geometry import Point3D
 
-from mol_to_spin_system.coupling import all_couplings
+from mol_to_spin_system.coupling import all_couplings_typed
 from mol_to_spin_system.shifts import DEFAULT_SOLVENT, predict_shifts
 
 # atom record from a parsed XYZ block: (symbol, x, y, z, group_label, tier_class)
@@ -26,23 +26,38 @@ class LabeledSpinSystem:
     shifts: (n_groups, 2) array of [chemical shift (ppm), number of H].
     couplings: list of (label_i, label_j, J_Hz) for distinct group pairs.
     meta: the molecule's JSON comment (smiles, chembl_id, ...).
+    shift_ranges: optional (n_groups, 2) array of [min, max] ppm — the
+        empirical spread of the matched NMRShiftDB HOSE environment, used to
+        sample randomized shifts downstream (see mol_to_spin_system.augment).
     """
 
     labels: list[str]
     shifts: np.ndarray
     couplings: list[tuple[str, str, float]]
     meta: dict
+    shift_ranges: np.ndarray | None = None
+    coupling_types: list[str] | None = None
 
     def to_dict(self) -> dict:
         """JSON-serializable record for this molecule."""
-        return {
+        d = {
             "chembl_id": self.meta.get("chembl_id"),
             "smiles": self.meta.get("smiles"),
             "inchikey": self.meta.get("inchikey"),
             "labels": self.labels,
-            "spin_groups": [[round(float(d), 2), int(n)] for d, n in self.shifts],
+            "spin_groups": [[round(float(s), 2), int(n)] for s, n in self.shifts],
             "couplings": [[gi, gj, jval] for gi, gj, jval in self.couplings],
         }
+        if self.shift_ranges is not None:
+            # parallel to spin_groups: [min, max] ppm for the group's shift
+            d["shift_range"] = [
+                [round(float(lo), 2), round(float(hi), 2)]
+                for lo, hi in self.shift_ranges
+            ]
+        if self.coupling_types is not None:
+            # parallel to couplings: the dominant mechanism per group pair
+            d["coupling_types"] = list(self.coupling_types)
+        return d
 
 
 def iter_xyz_entries(path: str | Path):
@@ -124,21 +139,25 @@ def entry_to_spin_system(
         raw_shifts = predict_shifts(mol, "H", solvent, use_3d=True)
     except RuntimeError:
         raw_shifts = predict_shifts(mol, "H", solvent, use_3d=False)
-    per_atom_shift = {i: v["mean"] for i, v in raw_shifts.items()}
-    couplings = all_couplings(mol)
+    # keep the predictor's empirical spread (min/max), not just the mean, so a
+    # randomized shift can be sampled downstream (mol_to_spin_system.augment).
+    per_atom = {i: (v["mean"], v["min"], v["max"]) for i, v in raw_shifts.items()}
+    couplings = all_couplings_typed(mol)  # {(i,j): (J, type)}
 
     # labelled (non-exchangeable) protons only
     group_of = {i: a[4] for i, a in enumerate(atoms) if a[4] is not None}
     class_of = {i: _class_key(atoms[i][5], i) for i in group_of}
 
-    # tier averaging: one shift per chemical-equivalence class
+    # tier averaging: one (mean, min, max) per chemical-equivalence class.
+    # The bounds are averaged the same way as the mean so the group's range
+    # stays consistent with its shift.
     class_atoms: dict[tuple, list[int]] = {}
     for i, c in class_of.items():
         class_atoms.setdefault(c, []).append(i)
-    class_shift = {
-        c: float(np.mean([per_atom_shift[i] for i in idxs if i in per_atom_shift]))
+    class_stat = {
+        c: np.mean([per_atom[i] for i in idxs if i in per_atom], axis=0)
         for c, idxs in class_atoms.items()
-    }
+    }  # each -> array([mean, min, max])
 
     # spin groups, sorted Excel-style (A..Z, AA..)
     group_atoms: dict[str, list[int]] = {}
@@ -147,27 +166,39 @@ def entry_to_spin_system(
     labels = sorted(group_atoms, key=lambda s: (len(s), s))
 
     shifts = np.zeros((len(labels), 2))
+    shift_ranges = np.zeros((len(labels), 2))
     for row, g in enumerate(labels):
         members = group_atoms[g]
-        delta = float(np.mean([class_shift[class_of[i]] for i in members]))
+        stat = np.mean([class_stat[class_of[i]] for i in members], axis=0)
+        delta, lo, hi = float(stat[0]), float(stat[1]), float(stat[2])
         shifts[row] = [round(delta, 2), len(members)]
+        shift_ranges[row] = [lo, hi]
 
-    # group averaging for couplings (distinct groups only)
+    # group averaging for couplings (distinct groups only). Each group pair also
+    # records a type — the mechanism of its dominant (largest |J|) atom pair —
+    # so a per-type sampling sigma can be applied downstream.
     sums: dict[tuple[str, str], float] = {}
     counts: dict[tuple[str, str], int] = {}
-    for (i, j), jval in couplings.items():
+    key_type: dict[tuple[str, str], str] = {}
+    key_maxabs: dict[tuple[str, str], float] = {}
+    for (i, j), (jval, jtype) in couplings.items():
         gi, gj = group_of.get(i), group_of.get(j)
         if gi is None or gj is None or gi == gj:
             continue
         key = (gi, gj) if (len(gi), gi) <= (len(gj), gj) else (gj, gi)
         sums[key] = sums.get(key, 0.0) + jval
         counts[key] = counts.get(key, 0) + 1
-    coupling_list = [
-        (gi, gj, round(sums[(gi, gj)] / counts[(gi, gj)], 1))
-        for (gi, gj) in sorted(sums, key=lambda k: ((len(k[0]), k[0]), (len(k[1]), k[1])))
-    ]
+        if abs(jval) >= key_maxabs.get(key, -1.0):
+            key_maxabs[key] = abs(jval)
+            key_type[key] = jtype
+    ordered = sorted(sums, key=lambda k: ((len(k[0]), k[0]), (len(k[1]), k[1])))
+    coupling_list = [(gi, gj, round(sums[(gi, gj)] / counts[(gi, gj)], 1))
+                     for (gi, gj) in ordered]
+    coupling_types = [key_type[k] for k in ordered]
 
-    return LabeledSpinSystem(labels, shifts, coupling_list, comment)
+    return LabeledSpinSystem(
+        labels, shifts, coupling_list, comment, shift_ranges, coupling_types
+    )
 
 
 def _convert_one(args: tuple[dict, list, str]) -> dict | None:
