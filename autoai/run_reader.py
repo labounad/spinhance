@@ -161,3 +161,135 @@ def list_runs(runs_root: str | Path | None = None) -> list[Path]:
         return []
     return sorted([d for d in root.iterdir() if d.is_dir()],
                   key=lambda d: d.stat().st_mtime, reverse=True)
+# ── Artifact-path integration ─────────────────────────────────────────────────
+
+def _repo_path(path: str | Path, repo_root: str | Path | None = None) -> Path:
+    p = Path(path)
+    root = Path(repo_root) if repo_root is not None else REPO
+    return p if p.is_absolute() else root / p
+
+
+def infer_run_dir_from_artifacts(
+    artifact_paths: dict,
+    repo_root: str | Path | None = None,
+) -> Path | None:
+    """Infer a model/runs/<run_id> directory from worker artifact paths.
+
+    Preferred explicit keys:
+      - run_dir
+      - train_run
+      - diagnostics_run_dir
+
+    Fallbacks:
+      - checkpoint path inside a checkpoints/ directory
+      - metrics/status/summary path inside a canonical run directory
+    """
+    root = Path(repo_root) if repo_root is not None else REPO
+
+    for key in ("run_dir", "train_run", "diagnostics_run_dir"):
+        value = artifact_paths.get(key)
+        if value:
+            candidate = _repo_path(value, root)
+            if candidate.exists() and candidate.is_dir():
+                return candidate
+
+    for key in ("checkpoint", "best_checkpoint", "last_checkpoint"):
+        value = artifact_paths.get(key)
+        if not value:
+            continue
+
+        p = _repo_path(value, root)
+        parts = p.parts
+        if "checkpoints" in parts:
+            idx = parts.index("checkpoints")
+            candidate = Path(*parts[:idx])
+            if candidate.exists() and (candidate / "metrics.jsonl").exists():
+                return candidate
+
+    for key in ("metrics", "summary", "status", "log"):
+        value = artifact_paths.get(key)
+        if not value:
+            continue
+
+        p = _repo_path(value, root)
+        if p.name in {"metrics.jsonl", "summary.json", "status.json"}:
+            candidate = p.parent
+            if candidate.exists() and (candidate / "metrics.jsonl").exists():
+                return candidate
+
+        if p.name == "metrics.json" and p.parent.exists():
+            # AutoAI cycle metrics file, not necessarily the training run.
+            nested = p.parent / "train_run"
+            if nested.exists() and (nested / "metrics.jsonl").exists():
+                return nested
+
+    return None
+
+
+def latest_probe_epoch(run_dir: str | Path) -> str | None:
+    probes = Path(run_dir) / "probes"
+    if not probes.exists():
+        return None
+
+    dirs = sorted([d for d in probes.iterdir() if d.is_dir()])
+    return dirs[-1].name if dirs else None
+
+
+def summarize_metrics_for_agent(metrics: dict) -> dict:
+    """Compact metric subset for experiment-log display and model-selection prompts."""
+    keys = (
+        "shift_mae_ppm",
+        "h_shift_mae_ppm",
+        "j_mae_hz",
+        "h_j_mae_hz",
+        "presence_f1",
+        "deg_acc",
+        "deg_acc_balanced",
+        "matrix_loss",
+    )
+    return {k: metrics[k] for k in keys if k in metrics}
+
+
+def analyze_artifact_paths(
+    artifact_paths: dict,
+    repo_root: str | Path | None = None,
+) -> dict:
+    """Analyze canonical training diagnostics from a WorkerResult artifact map."""
+    run_dir = infer_run_dir_from_artifacts(artifact_paths, repo_root=repo_root)
+    if run_dir is None:
+        return {
+            "available": False,
+            "reason": "no canonical model run directory found in artifact_paths",
+        }
+
+    analysis = analyze_run(run_dir)
+    analysis["available"] = True
+    analysis["run_dir"] = str(run_dir)
+    analysis["latest_probe_epoch"] = latest_probe_epoch(run_dir)
+
+    best_metrics = analysis.get("best_metrics") or {}
+    analysis["compact_best_metrics"] = summarize_metrics_for_agent(best_metrics)
+
+    failure = analysis.get("failure_summary") or {}
+    analysis["dominant_failure"] = failure.get("dominant_failure", "none")
+
+    return analysis
+
+
+def write_analysis_json(
+    run_dir: str | Path,
+    out_path: str | Path,
+) -> dict:
+    """Analyze a run directory and write the result to JSON."""
+    out_path = Path(out_path)
+    analysis = analyze_run(run_dir)
+    analysis["available"] = True
+    analysis["run_dir"] = str(run_dir)
+    analysis["latest_probe_epoch"] = latest_probe_epoch(run_dir)
+    analysis["compact_best_metrics"] = summarize_metrics_for_agent(
+        analysis.get("best_metrics") or {}
+    )
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(analysis, indent=2, sort_keys=True) + "\n")
+    return analysis
