@@ -44,8 +44,12 @@ class RegularizedEigh(torch.autograd.Function):
     @staticmethod
     def forward(ctx, H, eps):
         in_dtype = H.dtype
+        # linalg.eigh has no bf16/fp16 CUDA kernel — upcast to fp32 only for
+        # half-precision inputs.  fp32/fp64 inputs are kept as-is so that
+        # downstream matmuls with tensors of the same dtype remain type-consistent.
+        _HALF = (torch.bfloat16, torch.float16)
         with torch.autocast(device_type="cuda", enabled=False):
-            Hf = H.float()
+            Hf = H.float() if in_dtype in _HALF else H
             E, V = torch.linalg.eigh(Hf)
         ctx.save_for_backward(E, V)
         ctx.eps = float(eps)
