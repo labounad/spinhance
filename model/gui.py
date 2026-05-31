@@ -1,56 +1,156 @@
 """
-model/gui.py — SpinHance model evaluation dashboard.
+model/gui.py — SpinHance training session viewer.
+
+Two-page Streamlit app:
+  Page 1 "Session browser"  → select a session from S3
+  Page 2 "Session analysis" → epoch bar chart + best-epoch molecule inspector
 
 Run from the repo root:
     conda run -n spinhance streamlit run model/gui.py
 """
-
 from __future__ import annotations
 
+import json
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import streamlit as st
 import plotly.graph_objects as go
+import streamlit as st
+import streamlit.components.v1 as components
 
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
+S3_TRAINING = "s3://spinhance-data/training"
+CACHE_DIR = Path(tempfile.gettempdir()) / "spinhance_viewer"
 DEF_JSON = str(REPO / "mol_to_spin_system/data/spin_systems.json")
-DEF_CKPT = str(REPO / "model/checkpoints/spinhance.pt")
 
-# ─── Page config ──────────────────────────────────────────────────────────────
-st.set_page_config(page_title="SpinHance Evaluator", layout="wide",
-                   initial_sidebar_state="expanded")
-st.title("SpinHance — Model Evaluation Dashboard")
-st.caption("ResNet-1D encoder · ¹H spectrum (90/600 MHz) → 8×9 spin-shift matrix")
+# ── AWS SSO constants (mirrors context/setup_aws_login.sh) ───────────────────
+AWS_PROFILE    = "hack-scripps"
+AWS_REGION     = "us-west-2"
+SSO_SESSION    = "scripps-hackathon"
+SSO_START_URL  = "https://d-9267e96a16.awsapps.com/start"
+ACCOUNT_ID     = "127696279288"
 
-
-# ─── Session state init ───────────────────────────────────────────────────────
-for key in ("model", "std", "vocab", "n_params", "ckpt_loaded"):
-    st.session_state.setdefault(key, None)
-st.session_state.setdefault("ckpt_loaded", False)
+st.set_page_config(page_title="SpinHance Viewer", layout="wide",
+                   initial_sidebar_state="collapsed")
 
 
-# ─── Helpers (cached) ─────────────────────────────────────────────────────────
+# ─── AWS credential helpers ───────────────────────────────────────────────────
+
+def _ensure_aws_config() -> None:
+    """Write the SSO profile stanzas to ~/.aws/config if they are absent."""
+    config = Path.home() / ".aws" / "config"
+    config.parent.mkdir(exist_ok=True)
+    text = config.read_text() if config.exists() else ""
+
+    additions = ""
+    if f"[sso-session {SSO_SESSION}]" not in text:
+        additions += f"""
+[sso-session {SSO_SESSION}]
+sso_start_url = {SSO_START_URL}
+sso_region = {AWS_REGION}
+sso_registration_scopes = sso:account:access
+"""
+    if f"[profile {AWS_PROFILE}]" not in text:
+        additions += f"""
+[profile {AWS_PROFILE}]
+sso_session = {SSO_SESSION}
+sso_account_id = {ACCOUNT_ID}
+sso_role_name = Hackathon
+region = {AWS_REGION}
+output = json
+"""
+    if additions:
+        with open(config, "a") as f:
+            f.write(additions)
+
+
+def _aws_ok() -> bool:
+    """Return True if the SSO token for AWS_PROFILE is currently valid."""
+    r = subprocess.run(
+        ["aws", "sts", "get-caller-identity", "--profile", AWS_PROFILE],
+        capture_output=True, timeout=10)
+    return r.returncode == 0
+
+
+# ─── S3 helpers ───────────────────────────────────────────────────────────────
+
+def _s3_ls(prefix: str) -> list[str]:
+    r = subprocess.run(
+        ["aws", "s3", "ls", prefix.rstrip("/") + "/",
+         "--profile", AWS_PROFILE, "--region", AWS_REGION],
+        capture_output=True, text=True, timeout=30)
+    if r.returncode != 0:
+        raise RuntimeError(r.stderr.strip() or "aws s3 ls returned non-zero")
+    return r.stdout.splitlines()
+
+
+@st.cache_data(ttl=60)
+def _list_sessions() -> list[str]:
+    lines = _s3_ls(S3_TRAINING)
+    sessions = []
+    for line in lines:
+        parts = line.strip().split()
+        if parts and parts[0] == "PRE":
+            sessions.append(parts[1].rstrip("/"))
+    return sorted(sessions, reverse=True)
+
+
+@st.cache_data(ttl=60)
+def _list_epoch_numbers(session: str) -> list[int]:
+    lines = _s3_ls(f"{S3_TRAINING}/{session}")
+    epochs = []
+    for line in lines:
+        parts = line.strip().split()
+        if not parts:
+            continue
+        fname = parts[-1]
+        if fname.startswith("epoch_") and fname.endswith(".pt"):
+            try:
+                epochs.append(int(fname[6:-3]))
+            except ValueError:
+                pass
+    return sorted(epochs)
+
+
+def _epoch_local(session: str, epoch: int) -> Path:
+    d = CACHE_DIR / session
+    d.mkdir(parents=True, exist_ok=True)
+    return d / f"epoch_{epoch:03d}.pt"
+
+
+def _download_epoch(session: str, epoch: int) -> Path:
+    local = _epoch_local(session, epoch)
+    if not local.exists():
+        s3_uri = f"{S3_TRAINING}/{session}/epoch_{epoch:03d}.pt"
+        r = subprocess.run(
+            ["aws", "s3", "cp", s3_uri, str(local),
+             "--profile", AWS_PROFILE, "--region", AWS_REGION],
+            capture_output=True, timeout=300)
+        if r.returncode != 0:
+            local.unlink(missing_ok=True)
+            raise RuntimeError(r.stderr.decode()[:300])
+    return local
+
+
+# ─── Checkpoint helpers ───────────────────────────────────────────────────────
 
 def _rebuild_model(sd: dict):
-    """Reconstruct SpinHanceModel from a state-dict without knowing the config."""
     from model.model import SpinHanceModel, ResNet1DEncoder
-
     stem_c = sd["encoder.stem.0.weight"].shape[0]
     head_hidden = sd["shift_head.0.weight"].shape[0]
     G = sd["shift_head.3.weight"].shape[0]
     n_deg = sd["deg_head.3.weight"].shape[0] // G
-
-    if stem_c <= 24:   # "--small" encoder
+    if stem_c <= 24:
         enc = ResNet1DEncoder(stem_channels=24, stage_channels=(32, 64, 128, 192),
                               blocks_per_stage=(1, 1, 1, 1))
-    else:              # default encoder
+    else:
         enc = ResNet1DEncoder()
-
     model = SpinHanceModel(n_groups=G, n_deg_classes=n_deg,
                            encoder=enc, head_hidden=head_hidden, dropout=0.0)
     model.load_state_dict(sd)
@@ -58,35 +158,36 @@ def _rebuild_model(sd: dict):
     return model
 
 
-def _load_ckpt(path: str):
+@st.cache_data(show_spinner=False)
+def _epoch_meta(session: str, epoch: int) -> dict:
+    """Download checkpoint and return only epoch, metrics, cfg (no model weights)."""
+    import torch
+    local = _download_epoch(session, epoch)
+    ckpt = torch.load(str(local), map_location="cpu", weights_only=False)
+    return {
+        "epoch": ckpt.get("epoch", epoch),
+        "metrics": ckpt.get("metrics") or {},
+        "cfg": ckpt.get("cfg") or {},
+    }
+
+
+@st.cache_resource(show_spinner="Loading model weights…")
+def _load_model(session: str, epoch: int):
+    """Load model + standardizer from a checkpoint. Returns (model, std, vocab, cfg)."""
     import torch
     from model.targets import DegeneracyVocab, Standardizer
-
-    ckpt = torch.load(path, map_location="cpu", weights_only=False)
-    sd = {k: v for k, v in ckpt["model"].items()}
+    local = _download_epoch(session, epoch)
+    ckpt = torch.load(str(local), map_location="cpu", weights_only=False)
     std_d = ckpt["standardizer"]
-
     std = Standardizer()
     std.shift_mean, std.shift_std = float(std_d["shift_mean"]), float(std_d["shift_std"])
     std.j_mean, std.j_std = float(std_d["j_mean"]), float(std_d["j_std"])
-
     vocab = DegeneracyVocab()
-    model = _rebuild_model(sd)
-    n_params = sum(p.numel() for p in model.parameters())
-    return model, std, vocab, n_params
+    model = _rebuild_model(ckpt["model"])
+    return model, std, vocab, ckpt.get("cfg") or {}
 
 
-@st.cache_data(show_spinner="Simulating NMR spectrum…")
-def _simulate(shifts_t: tuple, couplings_t: tuple, degeneracy_t: tuple,
-              field_mhz: int) -> tuple[np.ndarray, np.ndarray]:
-    from simulation.pyspin.composite import simulate_spectrum_composite
-    shifts = np.array(shifts_t)
-    couplings = np.array(couplings_t)
-    degeneracy = list(degeneracy_t)
-    ppm_axis, intensity = simulate_spectrum_composite(
-        shifts, couplings, degeneracy, float(field_mhz))
-    return ppm_axis.astype(np.float64), intensity.astype(np.float64)
-
+# ─── Data helpers ─────────────────────────────────────────────────────────────
 
 @st.cache_data(show_spinner="Loading molecules…")
 def _load_records(json_path: str) -> list[dict]:
@@ -98,11 +199,9 @@ def _load_records(json_path: str) -> list[dict]:
         shifts = np.array(shifts, dtype=float)
         couplings = np.array(couplings, dtype=float)
         degeneracy = np.array(degeneracy, dtype=int)
-        # Apply canonical ordering so GT display matches the model's output order
         order = canonical_order(shifts, couplings, degeneracy)
         shifts, couplings, degeneracy = reorder(shifts, couplings, degeneracy, order)
         records.append({
-            "idx": idx,
             "mol_id": f"mol_{idx:06d}",
             "chembl_id": rec.get("chembl_id", ""),
             "smiles": rec.get("smiles", ""),
@@ -113,44 +212,54 @@ def _load_records(json_path: str) -> list[dict]:
     return records
 
 
+@st.cache_data(show_spinner="Computing test split…")
+def _test_records(json_path: str, seed: int) -> list[dict]:
+    from model.splits import make_splits
+    records = _load_records(json_path)
+    assignment, _ = make_splits(records, seed=seed, compute_scaffold=False)
+    return [r for r in records if assignment.get(r["mol_id"]) == "test"]
+
+
+@st.cache_data(show_spinner="Simulating spectrum…")
+def _simulate(shifts_t: tuple, couplings_t: tuple, degeneracy_t: tuple,
+              field_mhz: int) -> tuple[np.ndarray, np.ndarray]:
+    from simulation.pyspin.composite import simulate_spectrum_composite
+    ppm_axis, intensity = simulate_spectrum_composite(
+        np.array(shifts_t), np.array(couplings_t), list(degeneracy_t), float(field_mhz))
+    return ppm_axis.astype(np.float64), intensity.astype(np.float64)
+
+
 def _run_inference(model, intensity: np.ndarray, std, vocab) -> dict:
     import torch
     from model.metrics import decode
-
     x = torch.from_numpy(intensity.astype(np.float32)).unsqueeze(0)
     with torch.no_grad():
         pred = model(x)
-    pred_np = {k: v.float().cpu().numpy() for k, v in pred.items()}
-    return decode(pred_np, std, vocab)
+    return decode({k: v.float().cpu().numpy() for k, v in pred.items()}, std, vocab)
 
 
-# ─── Plotting helpers ─────────────────────────────────────────────────────────
+# ─── Plotting ─────────────────────────────────────────────────────────────────
 
 def _fig_spectrum(ppm_axis: np.ndarray, intensity: np.ndarray,
                   title: str = "", color: str = "#2563EB") -> go.Figure:
-    fig = go.Figure(go.Scatter(
-        x=ppm_axis, y=intensity, mode="lines",
-        line=dict(color=color, width=1.5)))
+    fig = go.Figure(go.Scatter(x=ppm_axis, y=intensity, mode="lines",
+                               line=dict(color=color, width=1.5)))
     fig.update_layout(
-        title=dict(text=title, font=dict(size=13)),
+        title=dict(text=title, font=dict(size=12)),
         xaxis=dict(title="δ (ppm)", autorange="reversed",
                    showgrid=True, gridcolor="#e5e7eb"),
-        yaxis=dict(title="Intensity (norm.)", showgrid=True, gridcolor="#e5e7eb"),
-        height=240, margin=dict(l=50, r=20, t=36, b=40),
-        plot_bgcolor="white", showlegend=False,
-    )
+        yaxis=dict(showgrid=True, gridcolor="#e5e7eb"),
+        height=220, margin=dict(l=40, r=10, t=32, b=36),
+        plot_bgcolor="white", showlegend=False)
     return fig
 
 
-def _fig_matrix(shifts: np.ndarray, couplings: np.ndarray, degeneracy: np.ndarray,
-                title: str = "") -> go.Figure:
+def _fig_matrix(shifts: np.ndarray, couplings: np.ndarray,
+                degeneracy: np.ndarray, title: str = "") -> go.Figure:
     G = len(shifts)
     labels = [f"G{i+1}" for i in range(G)]
-
-    # Off-diagonal: J couplings; diagonal zeroed for coloring, shown as annotation
     z = couplings.copy()
     np.fill_diagonal(z, 0.0)
-
     text = []
     for r in range(G):
         row = []
@@ -162,337 +271,369 @@ def _fig_matrix(shifts: np.ndarray, couplings: np.ndarray, degeneracy: np.ndarra
             else:
                 row.append("")
         text.append(row)
-
-    max_j = max(np.abs(z).max(), 1.0)
+    max_j = max(float(np.abs(z).max()), 1.0)
     fig = go.Figure(go.Heatmap(
         z=z, x=labels, y=labels,
         colorscale="RdBu", zmid=0, zmin=-max_j, zmax=max_j,
-        text=text, texttemplate="%{text}",
-        textfont=dict(size=9),
-        colorbar=dict(title="J (Hz)", thickness=14, len=0.8),
-    ))
-    # Highlight diagonal cells with a neutral tint
+        text=text, texttemplate="%{text}", textfont=dict(size=9),
+        colorbar=dict(title="J (Hz)", thickness=12, len=0.8)))
     for i in range(G):
         fig.add_shape(type="rect",
                       x0=i - 0.5, x1=i + 0.5, y0=i - 0.5, y1=i + 0.5,
                       fillcolor="rgba(200,200,200,0.3)", line=dict(width=0))
     fig.update_layout(
-        title=dict(text=title, font=dict(size=13)),
-        height=380, margin=dict(l=60, r=60, t=36, b=50),
-        xaxis=dict(title="Spin group"), yaxis=dict(title="Spin group"),
-    )
+        title=dict(text=title, font=dict(size=12)),
+        height=320, margin=dict(l=50, r=50, t=32, b=40),
+        xaxis=dict(title="Spin group"), yaxis=dict(title="Spin group"))
     return fig
 
 
-def _per_group_df(gt_shifts, gt_deg, pred_shifts, pred_deg) -> pd.DataFrame:
-    G = len(gt_shifts)
-    return pd.DataFrame({
-        "Group": [f"G{i+1}" for i in range(G)],
-        "GT shift (ppm)": [f"{gt_shifts[i]:.3f}" for i in range(G)],
-        "Pred shift (ppm)": [f"{pred_shifts[i]:.3f}" for i in range(G)],
-        "|Δ shift|": [f"{abs(pred_shifts[i] - gt_shifts[i]):.3f}" for i in range(G)],
-        "GT deg": [int(gt_deg[i]) for i in range(G)],
-        "Pred deg": [int(pred_deg[i]) for i in range(G)],
-        "Deg match": ["✓" if pred_deg[i] == gt_deg[i] else "✗" for i in range(G)],
-    })
+# ─── JSMol ────────────────────────────────────────────────────────────────────
+
+def _jsmol_html(smiles: str, width: int = 230, height: int = 230) -> str:
+    try:
+        from rdkit import Chem
+        from rdkit.Chem import AllChem
+        mol = Chem.MolFromSmiles(smiles)
+        if mol is None:
+            raise ValueError("Invalid SMILES")
+        mol = Chem.AddHs(mol)
+        if AllChem.EmbedMolecule(mol, AllChem.ETKDGv3()) != 0:
+            AllChem.EmbedMolecule(mol, randomSeed=42)
+        AllChem.MMFFOptimizeMolecule(mol)
+        mol_block_json = json.dumps(Chem.MolToMolBlock(mol))
+    except Exception as exc:
+        return (f"<p style='color:#888;font-size:11px;padding:8px;'>"
+                f"3D unavailable: {exc}</p>")
+
+    return f"""<!DOCTYPE html>
+<html><head><meta charset='utf-8'>
+<script src='https://chemapps.stolaf.edu/jmol/jmol.js'></script>
+</head>
+<body style='margin:0;padding:0;background:#f3f4f6;'>
+<div id='jd'></div>
+<script>
+Jmol.setDocument(false);
+var md = {mol_block_json};
+var Info = {{
+  width:{width}, height:{height},
+  script: "data 'mol'\\n" + md + "\\nend 'mol'\\nspin on; background [243,244,246];",
+  use: "HTML5",
+  j2sPath: "https://chemapps.stolaf.edu/jmol/j2s",
+  disableJ2SLoadMonitor: true, disableInitialConsole: true
+}};
+document.getElementById('jd').innerHTML = Jmol.getAppletHtml("jsmolApp0", Info);
+</script></body></html>"""
 
 
-def _metrics(pred_dec: dict, gt: dict) -> dict:
-    G = len(gt["shifts"])
-    iu = np.triu_indices(G, 1)
+# ─── Page 1 — Session browser ─────────────────────────────────────────────────
 
-    shift_mae = float(np.abs(pred_dec["shifts"][0] - gt["shifts"]).mean())
+def _page_select() -> None:
+    st.title("SpinHance — Training Session Viewer")
+    st.caption(f"S3 prefix: `{S3_TRAINING}`")
 
-    gt_j = gt["couplings"][iu]
-    pred_j = pred_dec["couplings"][0][iu]
-    gt_pres = np.abs(gt_j) > 0.01
-    j_mae = (float(np.abs(pred_j[gt_pres] - gt_j[gt_pres]).mean())
-             if gt_pres.any() else float("nan"))
+    col_btn, _ = st.columns([1, 5])
+    if col_btn.button("↺  Refresh"):
+        _list_sessions.clear()
+        st.rerun()
 
-    pred_pres = pred_dec["presence"][0] > 0.5
-    tp = float((pred_pres & gt_pres).sum())
-    fp = float((pred_pres & ~gt_pres).sum())
-    fn = float((~pred_pres & gt_pres).sum())
-    prec = tp / max(tp + fp, 1)
-    rec = tp / max(tp + fn, 1)
-    f1 = 2 * prec * rec / max(prec + rec, 1e-9)
+    try:
+        sessions = _list_sessions()
+    except Exception as exc:
+        st.error(f"Cannot list S3 sessions: {exc}")
+        st.info("Ensure AWS credentials are configured and `aws` CLI is on PATH.")
+        return
 
-    pred_deg = pred_dec["degeneracy"][0]
-    deg_acc = float((pred_deg == gt["degeneracy"]).mean())
+    if not sessions:
+        st.warning(f"No sessions found at `{S3_TRAINING}`.")
+        return
 
-    return {"shift_mae": shift_mae, "j_mae": j_mae, "presence_f1": f1,
-            "deg_acc": deg_acc}
+    selected = st.selectbox("Training session", sessions)
+
+    if st.button("Open session →", type="primary"):
+        st.session_state["session"] = selected
+        st.session_state["page"] = "analysis"
+        st.session_state.pop("mol_pred", None)
+        st.rerun()
 
 
-# ─── Sidebar ──────────────────────────────────────────────────────────────────
-with st.sidebar:
-    st.header("Configuration")
+# ─── Page 2 — Session analysis ────────────────────────────────────────────────
 
-    ckpt_path = st.text_input("Checkpoint (.pt)", value=DEF_CKPT,
-                               help="Path to a model checkpoint saved by train.py")
-    if st.button("Load Model", type="primary", use_container_width=True):
-        if not Path(ckpt_path).exists():
-            st.error(f"Not found: {ckpt_path}")
-        else:
-            with st.spinner("Loading…"):
-                try:
-                    m, s, v, n = _load_ckpt(ckpt_path)
-                    st.session_state.update(
-                        model=m, std=s, vocab=v, n_params=n, ckpt_loaded=True)
-                    st.success(f"Loaded ({n / 1e6:.2f}M params)")
-                except Exception as exc:
-                    st.error(f"Load failed: {exc}")
+def _page_analysis() -> None:
+    session: str = st.session_state.get("session", "")
+    if not session:
+        st.session_state["page"] = "select"
+        st.rerun()
 
-    if st.session_state["ckpt_loaded"]:
-        std = st.session_state["std"]
-        st.success(f"Model ready · {st.session_state['n_params'] / 1e6:.2f}M params")
-        st.caption(
-            f"Shift: μ={std.shift_mean:.2f} σ={std.shift_std:.2f} ppm  "
-            f"J: μ={std.j_mean:.2f} σ={std.j_std:.2f} Hz"
-        )
-    else:
-        st.warning("No checkpoint loaded — inference disabled")
+    # ── Nav + title ───────────────────────────────────────────────────────────
+    nav_col, title_col = st.columns([1, 8])
+    if nav_col.button("← Sessions"):
+        st.session_state["page"] = "select"
+        st.rerun()
+    title_col.title(f"Session: `{session}`")
 
+    with st.sidebar:
+        st.header("Data")
+        json_path = st.text_input("spin_systems.json", value=DEF_JSON)
+        field_mhz = st.radio("Field (MHz)", [90, 600], index=0, horizontal=True)
+        st.divider()
+        st.caption("Checkpoints cached to\n`" + str(CACHE_DIR / session) + "`")
+
+    # ── Epoch list ────────────────────────────────────────────────────────────
+    try:
+        epoch_list = _list_epoch_numbers(session)
+    except Exception as exc:
+        st.error(f"Cannot list epochs: {exc}")
+        return
+
+    if not epoch_list:
+        st.warning("No `epoch_XXX.pt` files found in this session.")
+        return
+
+    st.caption(f"{len(epoch_list)} epoch checkpoints: "
+               f"ep{epoch_list[0]} → ep{epoch_list[-1]}")
+
+    # ── Load metrics for all epochs ───────────────────────────────────────────
+    rows: list[dict] = []
+    prog = st.progress(0.0, text="Loading epoch metrics…")
+    errors = []
+    for i, ep in enumerate(epoch_list):
+        prog.progress((i + 1) / len(epoch_list), text=f"Epoch {ep}…")
+        try:
+            meta = _epoch_meta(session, ep)
+            m = meta["metrics"]
+            shift_mae = m.get("shift_mae_ppm", float("nan"))
+            j_mae = m.get("j_mae_hz", float("nan"))
+            if not (np.isnan(shift_mae) or np.isnan(j_mae)):
+                score = shift_mae + j_mae / 10.0
+            else:
+                score = float("nan")
+            rows.append({
+                "epoch": ep,
+                "score": score,
+                "shift_mae_ppm": shift_mae,
+                "j_mae_hz": j_mae,
+                "presence_f1": m.get("presence_f1", float("nan")),
+                "deg_acc": m.get("deg_acc_balanced", m.get("deg_acc", float("nan"))),
+                "cfg": meta["cfg"],
+            })
+        except Exception as exc:
+            errors.append(f"ep{ep}: {exc}")
+    prog.empty()
+
+    if errors:
+        with st.expander(f"{len(errors)} epoch load error(s)", expanded=False):
+            st.text("\n".join(errors))
+
+    valid_rows = [r for r in rows if not np.isnan(r["score"])]
+    if not valid_rows:
+        st.error("No epochs with valid validation metrics could be loaded.")
+        return
+
+    best = min(valid_rows, key=lambda r: r["score"])
+    best_epoch: int = best["epoch"]
+
+    # ── Epoch bar chart ───────────────────────────────────────────────────────
+    st.subheader("Validation score across epochs")
+    st.caption("Score = shift_MAE (ppm) + J_MAE (Hz) / 10  ·  lower is better  ·  "
+               "best epoch highlighted in red")
+
+    xs = [r["epoch"] for r in valid_rows]
+    ys = [r["score"] for r in valid_rows]
+    bar_colors = ["#DC2626" if r["epoch"] == best_epoch else "#93C5FD"
+                  for r in valid_rows]
+
+    fig_bar = go.Figure(go.Bar(
+        x=xs, y=ys, marker_color=bar_colors,
+        text=[f"{s:.3f}" for s in ys],
+        textposition="outside", textfont=dict(size=8)))
+    fig_bar.add_annotation(
+        x=best_epoch, y=best["score"],
+        text=f"Best ep {best_epoch}",
+        showarrow=True, arrowhead=2, arrowsize=1, ax=0, ay=-44,
+        font=dict(color="#DC2626", size=11))
+    fig_bar.update_layout(
+        xaxis=dict(title="Epoch", dtick=max(1, len(valid_rows) // 20)),
+        yaxis=dict(title="Score (lower = better)"),
+        height=320, margin=dict(l=50, r=20, t=20, b=40),
+        plot_bgcolor="white", showlegend=False)
+    st.plotly_chart(fig_bar, use_container_width=True)
+
+    # ── Best-epoch summary ────────────────────────────────────────────────────
     st.divider()
-    json_path = st.text_input("spin_systems.json", value=DEF_JSON)
-    field_mhz = st.radio("Simulation field", [90, 600], index=0, horizontal=True,
-                          help="Field strength used to simulate the input spectrum")
+    st.subheader(f"Best epoch: {best_epoch}")
+    bm1, bm2, bm3, bm4 = st.columns(4)
+    bm1.metric("Score", f"{best['score']:.4f}")
+    bm2.metric("Shift MAE", f"{best['shift_mae_ppm']:.3f} ppm")
+    bm3.metric("J MAE", f"{best['j_mae_hz']:.2f} Hz")
+    bm4.metric("Presence F1", f"{best['presence_f1']:.3f}"
+               if not np.isnan(best['presence_f1']) else "—")
 
+    # ── Load best-epoch model ─────────────────────────────────────────────────
+    try:
+        model, std, vocab, cfg_dict = _load_model(session, best_epoch)
+    except Exception as exc:
+        st.error(f"Failed to load epoch {best_epoch} model: {exc}")
+        return
 
-# ─── Data ─────────────────────────────────────────────────────────────────────
-if not Path(json_path).exists():
-    st.error(f"spin_systems.json not found: {json_path}")
-    st.stop()
+    # ── Test set ──────────────────────────────────────────────────────────────
+    if not Path(json_path).exists():
+        st.error(f"spin_systems.json not found: {json_path}")
+        return
 
-records = _load_records(json_path)
-st.caption(f"{len(records)} molecules · canonical shift order (δ descending)")
+    seed = int(cfg_dict.get("seed", 0))
+    try:
+        test_recs = _test_records(json_path, seed)
+    except Exception as exc:
+        st.error(f"Failed to build test split: {exc}")
+        return
 
-# ─── Tabs ─────────────────────────────────────────────────────────────────────
-tab_single, tab_batch = st.tabs(["Single Molecule Inspector", "Batch Evaluation"])
+    if not test_recs:
+        st.warning("No test molecules found.")
+        return
 
+    st.caption(f"Test set: {len(test_recs)} molecules (split seed={seed})")
 
-# ══════════════════════════════════════════════════════════════════════════════
-# Tab 1 — Single molecule
-# ══════════════════════════════════════════════════════════════════════════════
-with tab_single:
-    mol_idx = st.slider("Molecule", 0, len(records) - 1, 0,
-                        help="Index into spin_systems.json (canonical shift order)")
-    rec = records[mol_idx]
+    # ── Molecule selector row: [JSMol | dropdown + info + button] ─────────────
+    jsmol_col, sel_col = st.columns([1, 3])
 
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Mol ID", rec["mol_id"])
-    c2.metric("ChEMBL", rec["chembl_id"] or "—")
-    c3.metric("Spin groups (G)", len(rec["shifts"]))
-    c4.metric("Total spins", int(rec["degeneracy"].sum()))
-
-    if rec["smiles"]:
-        with st.expander("SMILES", expanded=False):
+    with sel_col:
+        mol_idx = st.selectbox(
+            "Select molecule (SMILES)",
+            range(len(test_recs)),
+            format_func=lambda i: (
+                f"{test_recs[i]['mol_id']}"
+                + (f"  ·  {test_recs[i]['chembl_id']}" if test_recs[i]["chembl_id"] else "")
+                + (f"  ·  {test_recs[i]['smiles'][:55]}…" if len(test_recs[i].get("smiles", "")) > 55
+                   else f"  ·  {test_recs[i]['smiles']}" if test_recs[i].get("smiles") else "")
+            ),
+            key="mol_selector",
+        )
+        rec = test_recs[mol_idx]
+        info_parts = [
+            f"**Spin groups:** {len(rec['shifts'])}",
+            f"**Total spins:** {int(rec['degeneracy'].sum())}",
+        ]
+        if rec.get("chembl_id"):
+            info_parts.insert(0, f"**ChEMBL:** `{rec['chembl_id']}`")
+        st.caption("  ·  ".join(info_parts))
+        if rec.get("smiles"):
             st.code(rec["smiles"], language=None)
 
-    st.divider()
+        if st.button("▶  Run Inference", type="primary", key="run_inf"):
+            with st.spinner("Running inference…"):
+                ppm, intens = _simulate(
+                    tuple(rec["shifts"].tolist()),
+                    tuple(map(tuple, rec["couplings"].tolist())),
+                    tuple(rec["degeneracy"].tolist()),
+                    field_mhz)
+                dec = _run_inference(model, intens, std, vocab)
+            st.session_state["mol_pred"] = {
+                "dec": dec, "ppm": ppm, "intens": intens,
+                "mol_id": rec["mol_id"], "field": field_mhz,
+            }
 
-    # Generate spectrum
-    ppm_axis, intensity = _simulate(
+    with jsmol_col:
+        if rec.get("smiles"):
+            components.html(_jsmol_html(rec["smiles"]), height=242, scrolling=False)
+        else:
+            st.info("No SMILES available")
+
+    # ── Ground truth + prediction panes ──────────────────────────────────────
+    rec = test_recs[mol_idx]  # re-read in case it changed
+    pred_state = st.session_state.get("mol_pred")
+    pred_ready = (pred_state is not None
+                  and pred_state["mol_id"] == rec["mol_id"]
+                  and pred_state["field"] == field_mhz)
+
+    ppm, intens = _simulate(
         tuple(rec["shifts"].tolist()),
         tuple(map(tuple, rec["couplings"].tolist())),
         tuple(rec["degeneracy"].tolist()),
-        field_mhz,
-    )
+        field_mhz)
 
-    col_spec, col_gt = st.columns(2)
-    with col_spec:
-        st.plotly_chart(
-            _fig_spectrum(ppm_axis, intensity,
-                          title=f"{field_mhz} MHz input spectrum"),
-            use_container_width=True)
+    col_gt, col_pred = st.columns(2)
+
     with col_gt:
+        st.markdown("#### Ground truth")
         st.plotly_chart(
             _fig_matrix(rec["shifts"], rec["couplings"], rec["degeneracy"],
-                        title="Ground truth matrix (diagonal=δ ppm, off-diag=J Hz)"),
+                        title="GT matrix  (diag = δ ppm · off-diag = J Hz)"),
+            use_container_width=True)
+        st.plotly_chart(
+            _fig_spectrum(ppm, intens, title=f"GT spectrum  ({field_mhz} MHz)"),
             use_container_width=True)
 
-    # ── Inference ─────────────────────────────────────────────────────────────
-    if not st.session_state["ckpt_loaded"]:
-        st.info("Load a checkpoint in the sidebar to run inference on this molecule.")
-    else:
-        if st.button("▶  Run Inference", type="primary"):
-            with st.spinner("Running inference…"):
-                dec = _run_inference(
-                    st.session_state["model"], intensity,
-                    st.session_state["std"], st.session_state["vocab"])
-            st.session_state["pred_dec"] = dec
-            st.session_state["pred_mol_idx"] = mol_idx
-
-        if (st.session_state.get("pred_dec") is not None
-                and st.session_state.get("pred_mol_idx") == mol_idx):
-            dec = st.session_state["pred_dec"]
-            pred_shifts = dec["shifts"][0]
-            pred_couplings = dec["couplings"][0]
-            pred_deg = dec["degeneracy"][0]
-
-            col_pred, col_metrics = st.columns(2)
-
-            with col_pred:
-                st.plotly_chart(
-                    _fig_matrix(pred_shifts, pred_couplings, pred_deg,
-                                title="Predicted matrix"),
-                    use_container_width=True)
-
-            with col_metrics:
-                m = _metrics(dec, rec)
-                st.subheader("Metrics vs ground truth")
-                mc1, mc2 = st.columns(2)
-                mc1.metric("Shift MAE", f"{m['shift_mae']:.3f} ppm")
-                mc2.metric("J MAE (present)", f"{m['j_mae']:.2f} Hz"
-                           if not np.isnan(m["j_mae"]) else "no couplings")
-                mc3, mc4 = st.columns(2)
-                mc3.metric("Presence F1", f"{m['presence_f1']:.3f}")
-                mc4.metric("Degeneracy acc", f"{m['deg_acc']:.3f}")
-
-            st.dataframe(
-                _per_group_df(rec["shifts"], rec["degeneracy"],
-                              pred_shifts, pred_deg),
-                use_container_width=True, hide_index=True)
-
-            # Overlay predicted spectrum
+    with col_pred:
+        st.markdown("#### Model prediction")
+        if pred_ready:
+            dec = pred_state["dec"]
+            p_shifts = dec["shifts"][0]
+            p_coup = dec["couplings"][0]
+            p_deg = dec["degeneracy"][0]
             pred_ppm, pred_int = _simulate(
-                tuple(pred_shifts.tolist()),
-                tuple(map(tuple, pred_couplings.tolist())),
-                tuple(pred_deg.tolist()),
-                field_mhz,
-            )
-            fig_ov = go.Figure()
-            fig_ov.add_trace(go.Scatter(
-                x=ppm_axis, y=intensity, mode="lines",
-                line=dict(color="#2563EB", width=1.5), name="Input (GT)"))
-            fig_ov.add_trace(go.Scatter(
-                x=pred_ppm, y=pred_int, mode="lines",
-                line=dict(color="#DC2626", width=1.5, dash="dash"),
-                name="Rendered (pred)"))
-            fig_ov.update_layout(
-                title="Spectral overlay — ground truth (blue) vs rendered predicted (red dashed)",
-                xaxis=dict(title="δ (ppm)", autorange="reversed",
-                           showgrid=True, gridcolor="#e5e7eb"),
-                yaxis=dict(title="Intensity", showgrid=True, gridcolor="#e5e7eb"),
-                height=280, margin=dict(l=50, r=20, t=36, b=40),
-                plot_bgcolor="white", legend=dict(x=0.01, y=0.99),
-            )
-            st.plotly_chart(fig_ov, use_container_width=True)
+                tuple(p_shifts.tolist()),
+                tuple(map(tuple, p_coup.tolist())),
+                tuple(p_deg.tolist()),
+                field_mhz)
+            st.plotly_chart(
+                _fig_matrix(p_shifts, p_coup, p_deg,
+                            title="Predicted matrix"),
+                use_container_width=True)
+            st.plotly_chart(
+                _fig_spectrum(pred_ppm, pred_int,
+                              title=f"Predicted spectrum  ({field_mhz} MHz)",
+                              color="#DC2626"),
+                use_container_width=True)
+        else:
+            st.info("Press **▶ Run Inference** to see the model output.")
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# Tab 2 — Batch evaluation
-# ══════════════════════════════════════════════════════════════════════════════
-with tab_batch:
-    if not st.session_state["ckpt_loaded"]:
-        st.info("Load a checkpoint in the sidebar to run batch evaluation.")
-    else:
-        col_n, col_seed = st.columns([2, 1])
-        n_eval = col_n.number_input(
-            "Molecules to evaluate", min_value=1, max_value=len(records),
-            value=min(50, len(records)), step=10)
-        seed = col_seed.number_input("Random seed", value=42, min_value=0)
+# ─── Page 0 — AWS login gate ─────────────────────────────────────────────────
 
-        if st.button("▶  Run Batch Evaluation", type="primary"):
-            rng = np.random.default_rng(int(seed))
-            idxs = rng.choice(len(records), size=int(n_eval), replace=False)
+def _page_aws_login() -> None:
+    st.title("AWS Login Required")
+    st.warning(
+        f"The `{AWS_PROFILE}` SSO session has expired or is not yet active.  "
+        "Click **Login** to open the Scripps SSO browser flow, then come back "
+        "and click **Refresh**.")
 
-            rows = []
-            shift_gt_all, shift_pred_all = [], []
-            j_gt_all, j_pred_all = [], []
+    col_login, col_refresh, _ = st.columns([1, 1, 4])
 
-            prog = st.progress(0.0, text="Evaluating…")
-            for k, i in enumerate(idxs):
-                r = records[i]
-                pa, intens = _simulate(
-                    tuple(r["shifts"].tolist()),
-                    tuple(map(tuple, r["couplings"].tolist())),
-                    tuple(r["degeneracy"].tolist()),
-                    field_mhz,
-                )
-                dec = _run_inference(
-                    st.session_state["model"], intens,
-                    st.session_state["std"], st.session_state["vocab"])
-                m = _metrics(dec, r)
-                rows.append({
-                    "mol_id": r["mol_id"],
-                    "shift_mae (ppm)": round(m["shift_mae"], 4),
-                    "j_mae (Hz)": round(m["j_mae"], 3) if not np.isnan(m["j_mae"]) else None,
-                    "presence_f1": round(m["presence_f1"], 4),
-                    "deg_acc": round(m["deg_acc"], 4),
-                })
+    if col_login.button("🔑  Login with AWS SSO", type="primary"):
+        with st.spinner("Starting SSO login — a browser window will open…"):
+            r = subprocess.run(
+                ["aws", "sso", "login", "--profile", AWS_PROFILE],
+                capture_output=True, text=True, timeout=180)
+        if r.returncode == 0:
+            st.success("Login successful!")
+            st.rerun()
+        else:
+            st.error("Login command failed:")
+            st.code(r.stderr or r.stdout, language=None)
 
-                G = len(r["shifts"])
-                shift_gt_all.extend(r["shifts"].tolist())
-                shift_pred_all.extend(dec["shifts"][0].tolist())
-                iu = np.triu_indices(G, 1)
-                j_gt_all.extend(r["couplings"][iu].tolist())
-                j_pred_all.extend(dec["couplings"][0][iu].tolist())
+    if col_refresh.button("↺  Refresh"):
+        st.rerun()
 
-                prog.progress((k + 1) / len(idxs), text=f"{r['mol_id']} ({k+1}/{len(idxs)})")
+    with st.expander("Manual login", expanded=False):
+        st.code(
+            f"# Run this in a terminal, then click Refresh above\n"
+            f"bash {REPO / 'context' / 'setup_aws_login.sh'}",
+            language="bash")
 
-            prog.empty()
-            st.session_state["batch"] = {
-                "rows": rows,
-                "shifts": (shift_gt_all, shift_pred_all),
-                "j": (j_gt_all, j_pred_all),
-            }
 
-        if "batch" in st.session_state:
-            b = st.session_state["batch"]
-            df = pd.DataFrame(b["rows"])
+# ─── Router ───────────────────────────────────────────────────────────────────
 
-            # ── Aggregate ─────────────────────────────────────────────────────
-            st.subheader("Aggregate metrics")
-            num_cols = ["shift_mae (ppm)", "j_mae (Hz)", "presence_f1", "deg_acc"]
-            agg = df[num_cols].apply(pd.to_numeric, errors="coerce").describe().loc[
-                ["mean", "std", "min", "25%", "50%", "75%", "max"]]
-            st.dataframe(agg.style.format("{:.4f}"), use_container_width=True)
+# Bootstrap: write the SSO config stanzas to ~/.aws/config if absent.
+# This is always safe and requires no user interaction.
+_ensure_aws_config()
 
-            # ── Scatter plots ─────────────────────────────────────────────────
-            sg, sp = b["shifts"]
-            jg, jp = b["j"]
-            sg, sp = np.array(sg), np.array(sp)
-            jg, jp = np.array(jg), np.array(jp)
+# Gate: if the SSO token is expired, show the login page instead.
+if not _aws_ok():
+    _page_aws_login()
+    st.stop()
 
-            sc1, sc2 = st.columns(2)
-            with sc1:
-                lo, hi = min(sg.min(), sp.min()), max(sg.max(), sp.max())
-                fig_s = go.Figure()
-                fig_s.add_trace(go.Scatter(
-                    x=sg.tolist(), y=sp.tolist(), mode="markers",
-                    marker=dict(size=3, color="#2563EB", opacity=0.4), name="groups"))
-                fig_s.add_trace(go.Scatter(
-                    x=[lo, hi], y=[lo, hi], mode="lines",
-                    line=dict(color="#DC2626", dash="dash", width=1), name="ideal"))
-                fig_s.update_layout(
-                    title="Shift: GT vs Predicted (ppm)",
-                    xaxis_title="GT (ppm)", yaxis_title="Predicted (ppm)",
-                    height=350, margin=dict(l=50, r=20, t=36, b=40),
-                    showlegend=False, plot_bgcolor="white")
-                st.plotly_chart(fig_s, use_container_width=True)
-
-            with sc2:
-                nonzero = np.abs(jg) > 0.1
-                if nonzero.any():
-                    lo, hi = jg[nonzero].min(), jg[nonzero].max()
-                    fig_j = go.Figure()
-                    fig_j.add_trace(go.Scatter(
-                        x=jg[nonzero].tolist(), y=jp[nonzero].tolist(),
-                        mode="markers",
-                        marker=dict(size=3, color="#D97706", opacity=0.4)))
-                    fig_j.add_trace(go.Scatter(
-                        x=[lo, hi], y=[lo, hi], mode="lines",
-                        line=dict(color="#DC2626", dash="dash", width=1)))
-                    fig_j.update_layout(
-                        title="J coupling: GT vs Predicted (Hz, nonzero only)",
-                        xaxis_title="GT (Hz)", yaxis_title="Predicted (Hz)",
-                        height=350, margin=dict(l=50, r=20, t=36, b=40),
-                        showlegend=False, plot_bgcolor="white")
-                    st.plotly_chart(fig_j, use_container_width=True)
-                else:
-                    st.info("No nonzero GT couplings in this sample.")
-
-            # ── Per-molecule table ─────────────────────────────────────────────
-            with st.expander("Per-molecule results", expanded=False):
-                st.dataframe(df, use_container_width=True, hide_index=True)
+if st.session_state.get("page", "select") == "select":
+    _page_select()
+else:
+    _page_analysis()

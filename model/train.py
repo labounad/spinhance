@@ -130,7 +130,13 @@ def build_datasets(records, assignment, cfg: TrainConfig):
 
 # ── Spectral term ──────────────────────────────────────────────────────────────
 
-_SPEC_CHUNK = 4   # samples per spectral-sim call; limits peak (chunk, K) tensor size
+# K = total spectral lines per molecule across all spin-manifold combos.
+# With no connected-component splitting, K grows exponentially with group count and
+# degeneracy. For K > 1M, keeping k samples alive in the autograd graph requires
+# ~28 * K * k bytes for broadening intermediates alone, which quickly exceeds VRAM.
+# Skip the spectral loss for those batches; matrix loss still supervises them.
+_MAX_SPEC_K  = 1_000_000
+_SPEC_CHUNK  = 1   # one sample at a time to keep peak (1, K) tensors bounded
 
 
 def _spectral_term(pred_phys, batch, cfg, device):
@@ -144,8 +150,16 @@ def _spectral_term(pred_phys, batch, cfg, device):
     deg_list = [int(x) for x in deg.tolist()]
     struct   = renderer._structure(deg_list, device, pred_phys["shifts"].dtype)
 
-    # Process in small chunks so the (chunk, K) broadening tensors stay bounded.
-    # A single (k, K) batch can OOM for large spin systems with many spectral lines.
+    # Count spectral lines from the numpy struct (CPU, free) before touching GPU.
+    total_k = sum(
+        Fp.shape[0] * Fp.shape[1]
+        for _, _, sb in struct["combos"]
+        for _, (_, Fp) in sb["fplus"].items()
+    )
+    if total_k > _MAX_SPEC_K:
+        z = torch.zeros((), device=device)
+        return z, z
+
     chunk_losses, chunk_w1s = [], []
     for start in range(0, k, _SPEC_CHUNK):
         idx = sel[start : start + _SPEC_CHUNK]

@@ -64,9 +64,9 @@ TRAIN_CMD="cd $REPO && PYTHONPATH=. $PYTHON -m model.run_experiment \
   --spectra simulation/data/spectra \
   --fields 90 \
   --stage2 \
-  --epochs 110 \
-  --stage1-epochs 70 \
-  --ramp-epochs 10 \
+  --epochs 10 \
+  --stage1-epochs 2 \
+  --ramp-epochs 5 \
   --batch 256 \
   --s3-ckpt-prefix $S3_PREFIX 2>&1 | tee $LOG"
 

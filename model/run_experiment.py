@@ -21,7 +21,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
+
+# Allow PyTorch to release unused CUDA memory segments back to the driver instead
+# of holding them in the caching pool. Prevents fragmentation OOM when the
+# allocator has reserved GiBs but can't satisfy a large contiguous request.
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
 import numpy as np
 
