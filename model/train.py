@@ -140,12 +140,13 @@ def _spectral_term(pred_phys, batch, cfg, device):
     sel = torch.randperm(B, device=device)[:k]
     deg_list = [int(x) for x in deg.tolist()]
     struct   = renderer._structure(deg_list, device, pred_phys["shifts"].dtype)
-    sub      = {"shifts": pred_phys["shifts"][sel], "couplings": pred_phys["couplings"][sel]}
+    sub      = {"shifts": pred_phys["shifts"][sel].float(), "couplings": pred_phys["couplings"][sel].float()}
     ref      = batch["spectrum_ref"][sel]
-    loss, w1 = spectral_loss(
-        sub, ref, batch["degeneracy"][sel], cfg.field_low, renderer, struct=struct,
-        points=cfg.points, ppm_from=cfg.ppm_from, ppm_to=cfg.ppm_to,
-        linewidth_hz=cfg.linewidth_hz, eigh_eps=cfg.eigh_eps)
+    with torch.autocast(device_type="cuda", enabled=False):
+        loss, w1 = spectral_loss(
+            sub, ref, batch["degeneracy"][sel], cfg.field_low, renderer, struct=struct,
+            points=cfg.points, ppm_from=cfg.ppm_from, ppm_to=cfg.ppm_to,
+            linewidth_hz=cfg.linewidth_hz, eigh_eps=cfg.eigh_eps)
     return loss, w1.mean()
 
 

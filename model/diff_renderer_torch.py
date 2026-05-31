@@ -43,9 +43,13 @@ DEFAULT_EIGH_EPS = 1.0   # Hz
 class RegularizedEigh(torch.autograd.Function):
     @staticmethod
     def forward(ctx, H, eps):
-        E, V = torch.linalg.eigh(H)
+        in_dtype = H.dtype
+        with torch.autocast(device_type="cuda", enabled=False):
+            Hf = H.float()
+            E, V = torch.linalg.eigh(Hf)
         ctx.save_for_backward(E, V)
         ctx.eps = float(eps)
+        ctx.in_dtype = in_dtype
         return E, V
 
     @staticmethod
@@ -62,7 +66,7 @@ class RegularizedEigh(torch.autograd.Function):
         if dV is not None:
             inner = inner + F * (V.transpose(-2, -1) @ dV)
         dH = V @ inner @ V.transpose(-2, -1)
-        return 0.5 * (dH + dH.transpose(-2, -1)), None
+        return 0.5 * (dH + dH.transpose(-2, -1)).to(ctx.in_dtype), None
 
 
 def regularized_eigh(H, eps=DEFAULT_EIGH_EPS):
