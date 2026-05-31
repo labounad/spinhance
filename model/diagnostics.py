@@ -80,3 +80,32 @@ class DiagnosticsWriter:
 
     def finalize(self, summary: dict[str, Any]) -> None:
         self.write_json_atomic("summary.json", summary)
+
+    def reset_live_files(self) -> None:
+        """Clear live append-only/status artifacts at the beginning of a fresh run.
+
+        This prevents accidental reuse of a run directory from appending a new
+        training run onto old metrics.jsonl/events.jsonl rows. Checkpoints are
+        intentionally not deleted here; checkpoint paths are overwritten by the
+        training loop when saved.
+        """
+        if not self.enabled:
+            return
+
+        for name in (
+            "metrics.jsonl",
+            "events.jsonl",
+            "system.jsonl",
+            "status.json",
+            "summary.json",
+        ):
+            path = self.run_dir / name
+            if path.exists():
+                path.unlink()
+
+        probes_dir = self.run_dir / "probes"
+        if probes_dir.exists():
+            import shutil
+
+            shutil.rmtree(probes_dir)
+
