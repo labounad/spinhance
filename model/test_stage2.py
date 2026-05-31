@@ -394,7 +394,7 @@ def test_stage2_backward_completes_cpu():
     assert g_c is not None, "No gradient for couplings after backward"
     assert torch.isfinite(g_s).all(), "Non-finite shift gradients"
     assert torch.isfinite(g_c).all(), "Non-finite coupling gradients"
-    print(f"  K={k}, loss={float(loss):.4f}")
+    print(f"  K={k}, loss={loss.detach().item():.4f}")
     print("test_stage2_backward_completes_cpu: PASS")
 
 
