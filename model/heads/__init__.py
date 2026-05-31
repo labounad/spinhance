@@ -1,1 +1,4 @@
-"""model.heads — see model/README.md for the package map."""
+"""Typed output heads (pooled embedding -> ModelOutput)."""
+from model.heads.typed_matrix_head import TypedMatrixHead
+
+__all__ = ["TypedMatrixHead"]
