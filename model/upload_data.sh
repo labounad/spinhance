@@ -11,21 +11,26 @@ REGION="${AWS_REGION:-us-west-2}"
 BUCKET="spinhance-data"
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 
+SPIN_SYSTEMS="$REPO/mol_to_spin_system/data/buckets/spin_systems_chembl_8spin.json.gz"
+SPECTRA="$REPO/simulation/data/spectra/90MHz.tar.gz"
+
 echo "=== Uploading training data to s3://$BUCKET ==="
 
-echo "[1/2] Uploading spin_systems_chembl.json..."
-aws s3 cp "$REPO/mol_to_spin_system/data/spin_systems_chembl.json" \
-  "s3://$BUCKET/spin_systems_chembl.json" \
+echo "[1/2] Uploading spin_systems_chembl_8spin.json.gz..."
+aws s3 cp "$SPIN_SYSTEMS" \
+  "s3://$BUCKET/mol_to_spin_system/data/buckets/spin_systems_chembl_8spin.json.gz" \
   --profile "$PROFILE" --region "$REGION"
 
-echo "[2/2] Creating and uploading 90MHz spectra tar (may take a few minutes)..."
-TMP=$(mktemp /tmp/spectra-90MHz-XXXXX.tar.gz)
-tar czf "$TMP" -C "$REPO/simulation/data/index/csv" "$REPO/simulation/data/spectra/90MHz" .
-aws s3 cp "$TMP" "s3://$BUCKET/spectra/90MHz/mol_all.tar.gz" \
+echo "[2/2] Uploading 90MHz.tar.gz..."
+aws s3 cp "$SPECTRA" \
+  "s3://$BUCKET/simulation/data/spectra/90MHz.tar.gz" \
   --profile "$PROFILE" --region "$REGION"
-rm "$TMP"
 
 echo ""
-echo "=== Done. On EC2, run: ==="
+echo "=== Done. On EC2: ==="
 echo ""
-echo "  bash ~/spinhance/model/train.sh"
+echo "  aws s3 cp s3://$BUCKET/mol_to_spin_system/data/buckets/spin_systems_chembl_8spin.json.gz ."
+echo "  aws s3 cp s3://$BUCKET/simulation/data/spectra/90MHz.tar.gz ."
+echo "  python -m modelv2.train \\"
+echo "    --spin_systems=spin_systems_chembl_8spin.json.gz \\"
+echo "    --spectra=90MHz.tar.gz"
