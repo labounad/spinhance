@@ -49,8 +49,17 @@ Best-epoch molecule inspector
       side-by-side with ground truth
 
 Sidebar options (Page 2)
-  spin_systems.json  path to the molecule dataset (default: mol_to_spin_system/data/)
+  Molecules JSON     must be spin_systems_60k.json (default: mol_to_spin_system/data/spin_systems_60k.json)
+  Spectra root       directory containing 90MHz/mol_*.npy (default: simulation/data/spectra)
   Field (MHz)        90 or 600 MHz for spectrum simulation
+
+Data pipeline correctness
+  The test split is reconstructed by running exactly the same pipeline as training:
+    data_adapter.load_records(json, spectra_root, fields=(90,), require_spectra=True)
+    make_splits(records, seed=checkpoint_seed, compute_scaffold=False)
+  Only molecules that HAD a 90 MHz spectrum file during training are included, so
+  the split is identical to what the model was evaluated on.  If spin_systems_60k.json
+  is missing locally, a download button appears in the sidebar.
 
 Notes
 -----
@@ -79,9 +88,11 @@ import streamlit.components.v1 as components
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
-S3_TRAINING = "s3://spinhance-data/training"
-CACHE_DIR = Path(tempfile.gettempdir()) / "spinhance_viewer"
-DEF_JSON = str(REPO / "mol_to_spin_system/data/spin_systems.json")
+S3_TRAINING  = "s3://spinhance-data/training"
+S3_JSON_60K  = "s3://spinhance-data/spin_systems_60k.json"
+CACHE_DIR    = Path(tempfile.gettempdir()) / "spinhance_viewer"
+DEF_JSON     = str(REPO / "mol_to_spin_system/data/spin_systems_60k.json")
+DEF_SPECTRA  = str(REPO / "simulation/data/spectra")
 
 # ── AWS SSO constants (mirrors context/setup_aws_login.sh) ───────────────────
 AWS_PROFILE    = "hack-scripps"
@@ -324,34 +335,30 @@ def _load_model(session: str, epoch: int):
 
 
 # ─── Data helpers ─────────────────────────────────────────────────────────────
+# IMPORTANT: must mirror the training pipeline exactly.
+# Training (model/train.sh + model/run_experiment.py) uses:
+#   data_adapter.load_records(json, spectra_root, fields=(90,), require_spectra=True)
+#   make_splits(records, seed=cfg.seed, compute_scaffold=False)
+# Any deviation from this produces a different molecule set → different split.
 
-@st.cache_data(show_spinner="Loading molecules…")
-def _load_records(json_path: str) -> list[dict]:
-    from simulation.graph_io import read_spin_systems, record_to_arrays
+@st.cache_data(show_spinner="Loading molecules (filtering by 90 MHz spectra)…")
+def _load_all_records(json_path: str, spectra_root: str) -> list[dict]:
+    """Load records using the same pipeline as training: requires 90 MHz .npy files."""
+    from model.data_adapter import load_records
     from model.splits import canonical_order, reorder
+    raw = load_records(json_path, spectra_root, fields=(90,), require_spectra=True)
     records = []
-    for idx, rec in read_spin_systems(json_path):
-        _, shifts, couplings, degeneracy = record_to_arrays(rec)
-        shifts = np.array(shifts, dtype=float)
-        couplings = np.array(couplings, dtype=float)
-        degeneracy = np.array(degeneracy, dtype=int)
-        order = canonical_order(shifts, couplings, degeneracy)
-        shifts, couplings, degeneracy = reorder(shifts, couplings, degeneracy, order)
-        records.append({
-            "mol_id": f"mol_{idx:06d}",
-            "chembl_id": rec.get("chembl_id", ""),
-            "smiles": rec.get("smiles", ""),
-            "shifts": shifts,
-            "couplings": couplings,
-            "degeneracy": degeneracy,
-        })
+    for r in raw:
+        order = canonical_order(r["shifts"], r["couplings"], r["degeneracy"])
+        shifts, couplings, deg = reorder(r["shifts"], r["couplings"], r["degeneracy"], order)
+        records.append({**r, "shifts": shifts, "couplings": couplings, "degeneracy": deg})
     return records
 
 
 @st.cache_data(show_spinner="Computing test split…")
-def _test_records(json_path: str, seed: int) -> list[dict]:
+def _test_records(json_path: str, spectra_root: str, seed: int) -> list[dict]:
     from model.splits import make_splits
-    records = _load_records(json_path)
+    records = _load_all_records(json_path, spectra_root)
     assignment, _ = make_splits(records, seed=seed, compute_scaffold=False)
     return [r for r in records if assignment.get(r["mol_id"]) == "test"]
 
@@ -528,8 +535,38 @@ def _page_analysis() -> None:
 
     with st.sidebar:
         st.header("Data")
-        json_path = st.text_input("spin_systems.json", value=DEF_JSON)
-        field_mhz = st.radio("Field (MHz)", [90, 600], index=0, horizontal=True)
+
+        json_path = st.text_input("Molecules JSON", value=DEF_JSON,
+                                   help="Must be spin_systems_60k.json — the same file used during training")
+        spectra_root = st.text_input("Spectra root", value=DEF_SPECTRA,
+                                      help="Directory containing 90MHz/mol_*.npy files used to filter the training set")
+        field_mhz = st.radio("Simulation field (MHz)", [90, 600], index=0, horizontal=True)
+
+        # ── Data availability checks ──────────────────────────────────────────
+        json_ok = Path(json_path).exists()
+        spectra_ok = (Path(spectra_root) / "90MHz").exists()
+
+        if not json_ok:
+            st.error(f"`{Path(json_path).name}` not found locally.")
+            if st.button("⬇  Download from S3", key="dl_json"):
+                with st.spinner("Downloading spin_systems_60k.json…"):
+                    Path(json_path).parent.mkdir(parents=True, exist_ok=True)
+                    r = subprocess.run(
+                        ["aws", "s3", "cp", S3_JSON_60K, json_path,
+                         "--profile", AWS_PROFILE, "--region", AWS_REGION],
+                        capture_output=True, timeout=120)
+                if r.returncode == 0:
+                    st.success("Downloaded.")
+                    st.rerun()
+                else:
+                    st.error(r.stderr.decode()[:200])
+
+        if not spectra_ok:
+            st.warning("90MHz spectra directory not found — split may not match training.")
+
+        if json_ok and spectra_ok:
+            st.success("Data paths OK")
+
         st.divider()
         st.caption("Checkpoints cached to\n`" + str(CACHE_DIR / session) + "`")
 
@@ -695,12 +732,17 @@ def _page_analysis() -> None:
 
     # ── Test set ──────────────────────────────────────────────────────────────
     if not Path(json_path).exists():
-        st.error(f"spin_systems.json not found: {json_path}")
+        st.error(f"Molecules JSON not found: {json_path}")
+        return
+
+    if not Path(spectra_root).exists():
+        st.error(f"Spectra root not found: {spectra_root}  — cannot reconstruct training split.")
         return
 
     seed = int(cfg_dict.get("seed", 0))
     try:
-        test_recs = _test_records(json_path, seed)
+        all_recs = _load_all_records(json_path, spectra_root)
+        test_recs = _test_records(json_path, spectra_root, seed)
     except Exception as exc:
         st.error(f"Failed to build test split: {exc}")
         return
@@ -709,7 +751,14 @@ def _page_analysis() -> None:
         st.warning("No test molecules found.")
         return
 
-    st.caption(f"Test set: {len(test_recs)} molecules (split seed={seed})")
+    n_all = len(all_recs)
+    n_test = len(test_recs)
+    expected_pct = 10.0
+    actual_pct = 100 * n_test / n_all if n_all else 0
+    st.caption(
+        f"Test set: **{n_test:,}** / {n_all:,} molecules  ({actual_pct:.1f}% — "
+        f"expected ~{expected_pct:.0f}%)  ·  split seed={seed}"
+    )
 
     # ── Molecule selector row: [2D] [3D] | [dropdown + info + button] ──────────
     draw_col, mol3d_col, sel_col = st.columns([1, 1, 3])
