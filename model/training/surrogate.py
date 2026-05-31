@@ -180,6 +180,7 @@ class SurrogateTrainer:
                           "field": float(field), **comps}
                     if torch.cuda.is_available():
                         sm["cuda_allocated_gb"] = torch.cuda.memory_allocated(self.device) / 1e9
+                        sm["cuda_reserved_gb"] = torch.cuda.memory_reserved(self.device) / 1e9
                     diag.log_metrics(split="train_step", epoch=epoch, step=step, metrics=sm)
                 step += 1
             n = max(1, len(train_dl))
