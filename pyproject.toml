@@ -34,6 +34,9 @@ packages = [
     "generate",   "generate.tests",
     "autoai",
     "model",
+    "model.schemas", "model.data", "model.architectures", "model.heads",
+    "model.losses", "model.renderers", "model.training", "model.evaluation",
+    "model.diagnostics", "model.experiments", "model.tests",
 ]
 
 [tool.setuptools.package-data]
@@ -42,3 +45,6 @@ simulation = ["mnova_scripts/*.qs"]
 
 [tool.pytest.ini_options]
 testpaths = ["simulation/tests", "generate/tests", "model", "autoai"]
+markers = [
+    "slow: slow test, deselected by default (run with --runslow)",
+]

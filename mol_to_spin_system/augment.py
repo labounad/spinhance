@@ -22,6 +22,11 @@ Sample at simulation/training time so every epoch sees a fresh draw.
 
 from __future__ import annotations
 
+import gzip
+import json
+import sys
+from collections import defaultdict
+
 import numpy as np
 
 #: range -> sigma divisor ((max-min) ~ 4 sigma covers ~95% of a normal)
@@ -121,9 +126,20 @@ def sample_record(
     sg = record["spin_groups"]
     means = [g[0] for g in sg]
     ranges = record.get("shift_range") or [[m, m] for m in means]
-    shifts = sample_shifts(means, ranges, rng=rng, **(shift_kw or {}))
-    out["spin_groups"] = [[round(float(s), 3), int(g[1])]
-                          for s, g in zip(shifts, sg)]
+    # Class-aware: groups that are chemically equivalent — identical shift AND
+    # stored range, i.e. the same tier class (e.g. SOFT AA'BB' siblings) — MUST
+    # share ONE randomized shift, or the equivalence is broken (an AA'BB'
+    # system would degrade to ABCD). Sample once per class, broadcast to members.
+    classes: dict[tuple, list[int]] = defaultdict(list)
+    for i, (m, r) in enumerate(zip(means, ranges)):
+        classes[(m, tuple(r))].append(i)
+    shifts = [0.0] * len(means)
+    for (m, r), idxs in classes.items():
+        draw = float(sample_shifts([m], [list(r)], rng=rng, **(shift_kw or {}))[0])
+        for i in idxs:
+            shifts[i] = draw
+    out["spin_groups"] = [[round(shifts[i], 3), int(sg[i][1])]
+                          for i in range(len(sg))]
 
     coups = record.get("couplings", [])
     if coups:
@@ -133,3 +149,45 @@ def sample_record(
         out["couplings"] = [[c[0], c[1], round(float(j), 2)]
                             for c, j in zip(coups, jvals)]
     return out
+
+
+#: fields of the original (pre-augmentation) spin-system schema
+OLD_FIELDS = ("chembl_id", "smiles", "inchikey", "labels", "spin_groups", "couplings")
+
+
+def to_old_format(record: dict) -> dict:
+    """Strip augmentation fields (shift_range, coupling_types) -> legacy schema."""
+    return {k: record[k] for k in OLD_FIELDS if k in record}
+
+
+def bake_file(
+    in_path: str,
+    out_path: str,
+    rng: np.random.Generator | None = None,
+) -> int:
+    """Write a one-realization randomized copy of *in_path* in the legacy schema.
+
+    Each molecule is sampled once (class-aware shifts, per-pair couplings) and
+    emitted without the shift_range / coupling_types fields, so the output is a
+    drop-in for the deterministic dataset.  Reads/writes .gz transparently.
+    """
+    rng = rng if rng is not None else np.random.default_rng()
+    opener_in = gzip.open if str(in_path).endswith(".gz") else open
+    with opener_in(in_path, "rt") as f:
+        data = json.load(f)
+    out = [to_old_format(sample_record(r, rng=rng)) for r in data]
+    opener_out = gzip.open if str(out_path).endswith(".gz") else open
+    with opener_out(out_path, "wt") as f:
+        json.dump(out, f)
+    return len(out)
+
+
+def main() -> None:
+    if len(sys.argv) != 3:
+        sys.exit("usage: python -m mol_to_spin_system.augment IN.json[.gz] OUT.json[.gz]")
+    n = bake_file(sys.argv[1], sys.argv[2])
+    print(f"baked {n:,} randomized records (legacy schema) -> {sys.argv[2]}")
+
+
+if __name__ == "__main__":
+    main()

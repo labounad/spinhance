@@ -32,6 +32,7 @@ generate/data/buckets/
 
 # Spin-system JSON outputs (large ones are in S3; spin_systems.json is kept)
 mol_to_spin_system/data/spin_systems_chembl.json
+mol_to_spin_system/data/spin_systems_chembl_8spin_randomized.json
 mol_to_spin_system/data/spin_systems_pubchem.json.tar.gz
 mol_to_spin_system/data/buckets/
 
