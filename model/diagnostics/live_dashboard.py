@@ -16,11 +16,16 @@ Usage:
 from __future__ import annotations
 
 import json
+import sys
+from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 
-from model import s3io
+# Streamlit executes this file directly, so the repo root isn't on sys.path.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from model import s3io  # noqa: E402
 
 S3_TRAINING = "s3://spinhance-data/training"
 

@@ -246,6 +246,21 @@ def _fig_spectrum(ppm_axis, intensity, title="", color="#2563EB") -> go.Figure:
     return fig
 
 
+def _fig_overlay(traces, title="", height=360) -> go.Figure:
+    """Overlay multiple (ppm, intensity, name, color) spectra on one set of axes."""
+    fig = go.Figure()
+    for ppm, inten, name, color in traces:
+        fig.add_trace(go.Scatter(x=ppm, y=inten, mode="lines", name=name,
+                                 line=dict(color=color, width=1.4)))
+    fig.update_layout(
+        title=dict(text=title, font=dict(size=13)),
+        xaxis=dict(title="δ (ppm)", autorange="reversed", showgrid=True, gridcolor="#e5e7eb"),
+        yaxis=dict(title="intensity", showgrid=True, gridcolor="#e5e7eb"),
+        height=height, margin=dict(l=50, r=20, t=48, b=44), plot_bgcolor="white",
+        legend=dict(orientation="h", yanchor="bottom", y=1.0, xanchor="right", x=1))
+    return fig
+
+
 def _fig_matrix(shifts, couplings, degeneracy, title="") -> go.Figure:
     G = len(shifts)
     labels = [f"G{i+1}" for i in range(G)]
@@ -365,7 +380,6 @@ def _page_analysis() -> None:
         st.header("Data")
         json_path = st.text_input("Molecules JSON", value=DEF_JSON)
         spectra_root = st.text_input("Spectra root", value=DEF_SPECTRA)
-        field_mhz = st.radio("Simulation field (MHz)", [90, 600], index=0, horizontal=True)
         which = st.radio("Checkpoint", ["best", "last"], index=0, horizontal=True)
 
         json_ok = Path(json_path).exists()
@@ -431,8 +445,8 @@ def _page_analysis() -> None:
     seed = int(cfg.get("training", {}).get("seed", 0))
     compute_scaffold = (cfg.get("data", {}).get("split", "none") == "scaffold")
     try:
-        all_recs = _load_all_records(json_path, spectra_root, field_mhz)
-        test_recs = _test_records(json_path, spectra_root, field_mhz, seed, compute_scaffold)
+        all_recs = _load_all_records(json_path, spectra_root, 90)
+        test_recs = _test_records(json_path, spectra_root, 90, seed, compute_scaffold)
     except Exception as exc:
         st.error(f"Failed to build test split: {exc}")
         return
@@ -457,11 +471,12 @@ def _page_analysis() -> None:
             st.code(rec["smiles"], language=None)
         if st.button("▶  Run Inference", type="primary", key="run_inf"):
             with st.spinner("Running inference…"):
-                _, intens = _simulate(tuple(rec["shifts"].tolist()),
-                                      tuple(map(tuple, rec["couplings"].tolist())),
-                                      tuple(rec["degeneracy"].tolist()), field_mhz)
-                dec = _run_inference(model, intens, std, vocab)
-            st.session_state["mol_pred"] = {"dec": dec, "mol_id": rec["mol_id"], "field": field_mhz}
+                # the model always takes the 90 MHz spectrum as input
+                _, in90 = _simulate(tuple(rec["shifts"].tolist()),
+                                    tuple(map(tuple, rec["couplings"].tolist())),
+                                    tuple(rec["degeneracy"].tolist()), 90)
+                dec = _run_inference(model, in90, std, vocab)
+            st.session_state["mol_pred"] = {"dec": dec, "mol_id": rec["mol_id"]}
 
     with draw_col:
         if rec.get("smiles"):
@@ -477,34 +492,40 @@ def _page_analysis() -> None:
         else:
             st.info("No SMILES")
 
-    # ── GT vs prediction ──────────────────────────────────────────────────────
+    # ── Matrices (field-independent) ──────────────────────────────────────────
     pred_state = st.session_state.get("mol_pred")
-    pred_ready = (pred_state and pred_state["mol_id"] == rec["mol_id"]
-                  and pred_state["field"] == field_mhz)
-    ppm, intens = _simulate(tuple(rec["shifts"].tolist()),
-                            tuple(map(tuple, rec["couplings"].tolist())),
-                            tuple(rec["degeneracy"].tolist()), field_mhz)
+    pred_ready = bool(pred_state and pred_state["mol_id"] == rec["mol_id"])
+    dec = pred_state["dec"] if pred_ready else None
+
     col_gt, col_pred = st.columns(2)
     with col_gt:
-        st.markdown("#### Ground truth")
+        st.markdown("#### Ground-truth matrix")
         st.plotly_chart(_fig_matrix(rec["shifts"], rec["couplings"], rec["degeneracy"],
-                                    title="GT matrix (diag = δ ppm · off-diag = J Hz)"),
-                        use_container_width=True)
-        st.plotly_chart(_fig_spectrum(ppm, intens, title=f"GT spectrum ({field_mhz} MHz)"),
+                                    title="diag = δ ppm · off-diag = J Hz"),
                         use_container_width=True)
     with col_pred:
-        st.markdown("#### Model prediction")
+        st.markdown("#### Predicted matrix")
         if pred_ready:
-            dec = pred_state["dec"]
-            ps, pc, pd_ = dec["shifts"][0], dec["couplings"][0], dec["degeneracy"][0]
-            pppm, pint = _simulate(tuple(ps.tolist()), tuple(map(tuple, pc.tolist())),
-                                   tuple(pd_.tolist()), field_mhz)
-            st.plotly_chart(_fig_matrix(ps, pc, pd_, title="Predicted matrix"),
-                            use_container_width=True)
-            st.plotly_chart(_fig_spectrum(pppm, pint, title=f"Predicted spectrum ({field_mhz} MHz)",
-                                          color="#DC2626"), use_container_width=True)
+            st.plotly_chart(_fig_matrix(dec["shifts"][0], dec["couplings"][0], dec["degeneracy"][0],
+                                        title="predicted"), use_container_width=True)
         else:
             st.info("Press **▶ Run Inference** to see the model output.")
+
+    # ── Spectra: experimental (ground truth) vs predicted, overlaid per field ──
+    st.markdown("#### Spectra — experimental vs predicted")
+    if not pred_ready:
+        st.caption("Showing experimental only — press **▶ Run Inference** to overlay the prediction.")
+    for field in (90, 600):
+        gx, gy = _simulate(tuple(rec["shifts"].tolist()),
+                           tuple(map(tuple, rec["couplings"].tolist())),
+                           tuple(rec["degeneracy"].tolist()), field)
+        traces = [(gx, gy, "experimental (ground truth)", "#2563EB")]
+        if pred_ready:
+            px, py = _simulate(tuple(dec["shifts"][0].tolist()),
+                               tuple(map(tuple, dec["couplings"][0].tolist())),
+                               tuple(dec["degeneracy"][0].tolist()), field)
+            traces.append((px, py, "predicted", "#DC2626"))
+        st.plotly_chart(_fig_overlay(traces, f"{field} MHz"), use_container_width=True)
 
 
 # ─── AWS login gate ────────────────────────────────────────────────────────────
