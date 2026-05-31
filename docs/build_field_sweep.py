@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """
-precompute_field_sweep.py
-=========================
+build_field_sweep.py
+====================
 Generate the compact JSON dataset that powers the Spinhance website's
 scroll-driven "field sweep" hero animation.
 
-For a curated subset of molecules from docs/data/spin_systems_pubchem.json (a random
-1000-molecule sample of the PubChem set; see sample_pubchem_subset.py) we
-run the pure-Python pyspin composite simulator across a GEOMETRIC sweep of
-spectrometer fields (90 -> 600 MHz) and store downsampled, quantized intensity
-arrays. The site interpolates between frames as the user scrolls.
+Reads docs/data/spin_systems_chembl_8spin_randomized.json (co-located so
+docs/ is fully self-contained), randomly samples N_MOLECULES, simulates
+spectra across a geometric field sweep (90→600 MHz), and generates 3D
+conformers on-the-fly from SMILES via RDKit (ETKDGv3 + MMFF94).
 
 Output: docs/data/field_sweep.json
 """
@@ -25,6 +24,7 @@ import numpy as np
 
 # This script lives in <repo>/docs/ ; the repo root is one level up.
 REPO = Path(__file__).resolve().parent.parent
+HERE = Path(__file__).resolve().parent   # docs/
 sys.path.insert(0, str(REPO))
 
 from simulation.graph_io import record_to_arrays, molecule_id  # noqa: E402
@@ -48,79 +48,39 @@ MAX_FRAGMENT_SPINS = 11  # skip very large coupled fragments (slow / huge)
 SIGNAL_FRAC = 2e-3       # signal-extent threshold (fraction of peak) for windowing
 SCAN_POINTS = 16384      # resolution of the full-range scan that finds the window
 
-OUT = REPO / "docs" / "data" / "field_sweep.json"
-# Spin-system source: randomized ChEMBL 8-spin dataset with Gaussian-jittered
-# shifts and couplings (replaces the PubChem 1000-molecule pool).
-SPIN = REPO / "mol_to_spin_system" / "data" / "spin_systems_chembl_8spin_randomized.json"
-# Precomputed 3D coordinates (force-field embedded) for the 3D structure view —
-# the full ChEMBL 8-spin set from molecular generation. We stream it and keep
-# only the blocks for the chosen molecules (see build_xyz_index).
-XYZ_CANDIDATES = [REPO / "generate" / "data" / "buckets" / "chembl_8spin.xyz.gz",
-                  REPO / "generate" / "data" / "buckets" / "chembl_8spin.xyz"]
+# All paths relative to docs/ so the directory is self-contained.
+OUT  = HERE / "data" / "field_sweep.json"
+SPIN = HERE / "data" / "spin_systems_chembl_8spin_randomized.json"
 
 
-def _open_xyz(path):
-    """Open an .xyz or .xyz.gz file as a text stream."""
-    if str(path).endswith(".gz"):
-        import gzip
-        return gzip.open(path, "rt")
-    return open(path, "r")
+def smiles_to_xyz(smiles: str, title: str = "") -> str | None:
+    """Generate a 3D conformer from SMILES via RDKit (ETKDGv3 + MMFF94).
 
-
-def build_xyz_index(wanted_chembl, wanted_smiles, n_target):
-    """Stream the (huge, gzipped) XYZ file and index ONLY the chosen molecules.
-
-    Each block is: a count line, a JSON-meta line, then `natoms` coordinate rows.
-    H rows may carry trailing spin-group labels; we keep only element + x/y/z so
-    3Dmol.js parses cleanly (it infers bonds by distance). The full PubChem XYZ is
-    ~1.6 GB gzipped, so we never load it whole — we stream block-by-block, retain
-    only matches, and stop early once every chosen molecule is found.
+    Returns a standard XYZ block (natoms / title / Element x y z lines)
+    that 3Dmol.js can parse directly, or None if embedding fails.
+    Heavy atoms + explicit H are included so bond inference works.
     """
-    def _is_real_file(p):
-        """Return False if p is a Git LFS pointer (not actual binary data)."""
-        try:
-            with open(p, "rb") as fh:
-                return not fh.read(7).startswith(b"version")
-        except OSError:
-            return False
-
-    path = next((p for p in XYZ_CANDIDATES if p.exists() and _is_real_file(p)), None)
-    by_chembl, by_smiles = {}, {}
-    if path is None:
-        print("WARNING: XYZ file not found or is an LFS pointer; 3D structures will be omitted")
-        return by_chembl, by_smiles
-    found = 0
-    with _open_xyz(path) as fh:
-        while found < n_target:
-            header = fh.readline()
-            if not header:
-                break
-            header = header.strip()
-            if not header:
-                continue
-            natoms = int(header)
-            meta_line = fh.readline()
-            coord_lines = [fh.readline() for _ in range(natoms)]
-            try:
-                meta = json.loads(meta_line)
-            except Exception:
-                continue
-            cid, smi = meta.get("chembl_id"), meta.get("smiles")
-            if cid not in wanted_chembl and smi not in wanted_smiles:
-                continue
-            clean = []
-            for ln in coord_lines:
-                p = ln.split()
-                if len(p) >= 4:
-                    clean.append(f"{p[0]} {p[1]} {p[2]} {p[3]}")
-            xyz = f"{natoms}\n{cid or ''}\n" + "\n".join(clean)
-            if cid:
-                by_chembl[cid] = xyz
-            if smi:
-                by_smiles[smi] = xyz
-            found += 1
-    print(f"indexed {found}/{n_target} chosen-molecule XYZ structures from {path.name}")
-    return by_chembl, by_smiles
+    try:
+        from rdkit import Chem
+        from rdkit.Chem import AllChem
+        mol = Chem.MolFromSmiles(smiles)
+        if mol is None:
+            return None
+        mol = Chem.AddHs(mol)
+        params = AllChem.ETKDGv3()
+        params.randomSeed = 0xF00D
+        if AllChem.EmbedMolecule(mol, params) != 0:
+            return None
+        AllChem.MMFFOptimizeMolecule(mol)
+        conf = mol.GetConformer()
+        lines = [str(mol.GetNumAtoms()), title or ""]
+        for i in range(mol.GetNumAtoms()):
+            atom = mol.GetAtomWithIdx(i)
+            pos  = conf.GetAtomPosition(i)
+            lines.append(f"{atom.GetSymbol()} {pos.x:.4f} {pos.y:.4f} {pos.z:.4f}")
+        return "\n".join(lines)
+    except Exception:
+        return None
 
 
 def geometric_fields(lo, hi, n):
@@ -265,18 +225,18 @@ def main():
     chosen = [(rec, shifts, couplings, deg) for rec, shifts, couplings, deg in chosen_raw]
     print(f"{len(records)} records -> {len(eligible)} eligible -> {len(chosen)} chosen (seed={SAMPLE_SEED})")
 
-    wanted_chembl = {rec.get("chembl_id") for rec, *_ in chosen if rec.get("chembl_id")}
-    wanted_smiles = {rec.get("smiles") for rec, *_ in chosen if rec.get("smiles")}
-    xyz_chembl, xyz_smiles = build_xyz_index(wanted_chembl, wanted_smiles, len(chosen))
     fields = geometric_fields(LOW_MHZ, HIGH_MHZ, N_FIELDS)
     molecules = []
     max_sticks = 0
     n_xyz = 0
     for rank, (rec, shifts, couplings, deg) in enumerate(chosen):
         win_lo, win_hi = signal_window(shifts, couplings, deg)
-        xyz = xyz_chembl.get(rec.get("chembl_id")) or xyz_smiles.get(rec.get("smiles"))
+        smiles = rec.get("smiles", "")
+        xyz = smiles_to_xyz(smiles, title=rec.get("chembl_id", "")) if smiles else None
         if xyz:
             n_xyz += 1
+        else:
+            print(f"  [{rank+1:2d}] WARNING: 3D embed failed for {rec.get('chembl_id')}")
         frames = []
         for f in fields:
             mc, ma = molecule_sticks(shifts, couplings, deg, f, win_lo, win_hi)
@@ -318,7 +278,7 @@ def main():
             "linewidth_hz": LINEWIDTH_HZ,
             "format": "sticks",
             "encoding": "per frame {c: base64 float32 centers ppm, a: base64 uint16 amps/65535}; broaden client-side",
-            "source": "pyspin composite simulator; 40 random molecules from randomized ChEMBL 8-spin dataset",
+            "source": "pyspin composite simulator; 40 random molecules from docs/data/spin_systems_chembl_8spin_randomized.json; 3D via RDKit ETKDGv3+MMFF94",
         },
         "molecules": molecules,
     }
