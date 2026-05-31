@@ -64,3 +64,6 @@ Thumbs.db
 *.swp
 simulation/examples/*.cmp_*.png
 modelv2/runs/
+
+# Large trained checkpoints pulled from S3 (not tracked)
+model_artifacts/
