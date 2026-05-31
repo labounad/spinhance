@@ -101,8 +101,8 @@ _ssh() {
 echo "[3/5] Syncing code..."
 ARCHIVE=$(mktemp /tmp/spinhance-code-XXXXX.tar.gz)
 tar czf "$ARCHIVE" -C "$REPO" --exclude='.git' --exclude='__pycache__' --exclude='*.pyc' \
-  --exclude='simulation/data' --exclude='mol_to_spin_system/data' --exclude='model/runs' \
-  --exclude='model/checkpoints' --exclude='docs/data' .
+  --exclude='simulation/data' --exclude='mol_to_spin_system/data' --exclude='generate/data' \
+  --exclude='model/runs' --exclude='model/checkpoints' --exclude='docs/data' .
 aws s3 cp "$ARCHIVE" "s3://$BUCKET/code/spinhance-rebuild.tar.gz" --profile "$PROFILE" --region "$REGION" --no-progress
 _ssh "mkdir -p $WORKSPACE && aws s3 cp s3://$BUCKET/code/spinhance-rebuild.tar.gz /tmp/c.tar.gz && \
   tar xzf /tmp/c.tar.gz -C $WORKSPACE && rm /tmp/c.tar.gz"
@@ -118,11 +118,14 @@ _ssh "set -e
 
 # ── 5. Launch training (tmux) + S3 sync sidecar ───────────────────────────────
 echo "[5/5] Starting training..."
-PY="/opt/conda/bin/conda run -n pytorch python"
+# Find a torch-capable interpreter. The AL2023 DL AMI ships a venv at
+# /opt/pytorch (python3.12 + torch+cuda); older AMIs used a conda 'pytorch' env.
 _ssh "
   cd $WORKSPACE
-  /opt/conda/bin/conda run -n pytorch pip install -q pyyaml 2>/dev/null || true
-  tmux new-session -d -s spinhance \"cd $WORKSPACE && PYTHONPATH=. $PY -m model.experiments.train \
+  PY=/opt/pytorch/bin/python
+  [ -x \"\$PY\" ] || PY=\"/opt/conda/bin/conda run -n pytorch python\"
+  \$PY -m pip install -q pyyaml 2>/dev/null || true
+  tmux new-session -d -s spinhance \"cd $WORKSPACE && PYTHONPATH=. \$PY -m model.experiments.train \
     --config $CONFIG --set run.name=session$SESSION $EXTRA_SET 2>&1 | tee /home/ec2-user/train_$SESSION.log\"
   # sidecar: sync run dirs (incl. checkpoints) to S3 every 60s
   tmux new-session -d -s sync \"while true; do \
