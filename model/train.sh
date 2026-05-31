@@ -14,15 +14,17 @@ REPO="$(cd "$(dirname "$0")/.." && pwd)"
 JSON_DST="$REPO/mol_to_spin_system/data/spin_systems_60k.json"
 SPECTRA="$REPO/simulation/data/spectra/90MHz"
 
-# ── Python command: use active env, or find conda/mamba ──────────────────────
+# ── Python command ────────────────────────────────────────────────────────────
 if command -v python &>/dev/null && python -c "import torch" 2>/dev/null; then
   PYTHON="python"
+elif [ -f "$HOME/.local/bin/micromamba" ]; then
+  PYTHON="$HOME/.local/bin/micromamba run -n spinhance python"
 elif [ -f /opt/conda/bin/mamba ]; then
   PYTHON="/opt/conda/bin/mamba run -n spinhance python"
 elif [ -f /opt/conda/bin/conda ]; then
   PYTHON="/opt/conda/bin/conda run -n spinhance python"
 else
-  echo "ERROR: no python with torch found. Activate your conda env and retry."
+  echo "ERROR: no python with torch found. Run: bash ~/spinhance/model/setup.sh"
   exit 1
 fi
 

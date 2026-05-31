@@ -30,11 +30,12 @@ outputs/
 simulation/mnova_outputs/
 
 # ML checkpoints
-model/checkpoints/
+model/checkpoints/*
 model/runs/
 *.pt
 *.pth
 *.ckpt
+!model/checkpoints/spinhance-epoch44.pt
 
 # OS
 .DS_Store
