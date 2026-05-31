@@ -11,7 +11,7 @@ set -euo pipefail
 
 BUCKET="spinhance-data"
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-JSON_DST="$REPO/mol_to_spin_system/data/spin_systems_60k.json"
+JSON_DST="$REPO/mol_to_spin_system/data/spin_systems_chembl.json"
 SPECTRA="$REPO/simulation/data/spectra/90MHz"
 
 # ── Python command ────────────────────────────────────────────────────────────
@@ -39,11 +39,11 @@ echo ""
 
 # ── Download data (skip if already present) ───────────────────────────────────
 if [ ! -f "$JSON_DST" ]; then
-  echo "Downloading spin_systems_60k.json..."
+  echo "Downloading spin_systems_chembl.json..."
   mkdir -p "$(dirname "$JSON_DST")"
-  aws s3 cp "s3://$BUCKET/spin_systems_60k.json" "$JSON_DST"
+  aws s3 cp "s3://$BUCKET/spin_systems_chembl.json" "$JSON_DST"
 else
-  echo "spin_systems_60k.json already present — skipping download."
+  echo "spin_systems_chembl.json already present — skipping download."
 fi
 
 if [ ! -f "$SPECTRA/mol_000000.npy" ]; then
@@ -60,7 +60,7 @@ fi
 # ── Train ─────────────────────────────────────────────────────────────────────
 LOG="$HOME/train_session${SESSION}.log"
 TRAIN_CMD="cd $REPO && PYTHONPATH=. $PYTHON -m model.run_experiment \
-  --json mol_to_spin_system/data/spin_systems_60k.json \
+  --json mol_to_spin_system/data/spin_systems_chembl.json \
   --spectra simulation/data/spectra \
   --fields 90 \
   --stage2 \

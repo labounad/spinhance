@@ -13,9 +13,9 @@ REPO="$(cd "$(dirname "$0")/.." && pwd)"
 
 echo "=== Uploading training data to s3://$BUCKET ==="
 
-echo "[1/2] Uploading spin_systems_60k.json..."
-aws s3 cp "$REPO/mol_to_spin_system/data/spin_systems_60k.json" \
-  "s3://$BUCKET/spin_systems_60k.json" \
+echo "[1/2] Uploading spin_systems_chembl.json..."
+aws s3 cp "$REPO/mol_to_spin_system/data/spin_systems_chembl.json" \
+  "s3://$BUCKET/spin_systems_chembl.json" \
   --profile "$PROFILE" --region "$REGION"
 
 echo "[2/2] Creating and uploading 90MHz spectra tar (may take a few minutes)..."

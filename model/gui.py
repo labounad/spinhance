@@ -49,7 +49,7 @@ Best-epoch molecule inspector
       side-by-side with ground truth
 
 Sidebar options (Page 2)
-  Molecules JSON     must be spin_systems_60k.json (default: mol_to_spin_system/data/spin_systems_60k.json)
+  Molecules JSON     must be spin_systems_chembl.json (default: mol_to_spin_system/data/spin_systems_chembl.json)
   Spectra root       directory containing 90MHz/mol_*.npy (default: simulation/data/spectra)
   Field (MHz)        90 or 600 MHz for spectrum simulation
 
@@ -58,7 +58,7 @@ Data pipeline correctness
     data_adapter.load_records(json, spectra_root, fields=(90,), require_spectra=True)
     make_splits(records, seed=checkpoint_seed, compute_scaffold=False)
   Only molecules that HAD a 90 MHz spectrum file during training are included, so
-  the split is identical to what the model was evaluated on.  If spin_systems_60k.json
+  the split is identical to what the model was evaluated on.  If spin_systems_chembl.json
   is missing locally, a download button appears in the sidebar.
 
 Notes
@@ -89,9 +89,9 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
 S3_TRAINING  = "s3://spinhance-data/training"
-S3_JSON_60K  = "s3://spinhance-data/spin_systems_60k.json"
+S3_JSON_60K  = "s3://spinhance-data/spin_systems_chembl.json"
 CACHE_DIR    = Path(tempfile.gettempdir()) / "spinhance_viewer"
-DEF_JSON     = str(REPO / "mol_to_spin_system/data/spin_systems_60k.json")
+DEF_JSON     = str(REPO / "mol_to_spin_system/data/spin_systems_chembl.json")
 DEF_SPECTRA  = str(REPO / "simulation/data/spectra")
 
 # ── AWS SSO constants (mirrors context/setup_aws_login.sh) ───────────────────
@@ -537,7 +537,7 @@ def _page_analysis() -> None:
         st.header("Data")
 
         json_path = st.text_input("Molecules JSON", value=DEF_JSON,
-                                   help="Must be spin_systems_60k.json — the same file used during training")
+                                   help="Must be spin_systems_chembl.json — the same file used during training")
         spectra_root = st.text_input("Spectra root", value=DEF_SPECTRA,
                                       help="Directory containing 90MHz/mol_*.npy files used to filter the training set")
         field_mhz = st.radio("Simulation field (MHz)", [90, 600], index=0, horizontal=True)
@@ -549,7 +549,7 @@ def _page_analysis() -> None:
         if not json_ok:
             st.error(f"`{Path(json_path).name}` not found locally.")
             if st.button("⬇  Download from S3", key="dl_json"):
-                with st.spinner("Downloading spin_systems_60k.json…"):
+                with st.spinner("Downloading spin_systems_chembl.json…"):
                     Path(json_path).parent.mkdir(parents=True, exist_ok=True)
                     r = subprocess.run(
                         ["aws", "s3", "cp", S3_JSON_60K, json_path,
