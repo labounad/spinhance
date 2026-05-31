@@ -403,7 +403,7 @@ def test_chunked_gradient_matches_unchunked():
     single un-chunked call to simulate_batch.  If it doesn't, chunking broke
     the training signal even before any OOM occurs."""
     from model_legacy.losses import spectral_loss
-    import model.stage2 as s2_module
+    import model_legacy.stage2 as s2_module
 
     deg_list = [1, 1, 1, 1]
     G = len(deg_list)
@@ -557,7 +557,7 @@ def test_no_memory_growth_across_optimizer_steps():
     from model_legacy.model import SpinHanceModel
     from model_legacy.schedules import curriculum_weights
     from model_legacy.losses import matrix_loss
-    import model.stage2 as s2_module
+    import model_legacy.stage2 as s2_module
 
     cfg = _Cfg()
     deg_list = [3, 1, 1, 1, 1, 1, 1, 1]   # one CH3, K well below threshold

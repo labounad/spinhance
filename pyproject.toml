@@ -33,7 +33,11 @@ packages = [
     "simulation", "simulation.tests", "simulation.benchmarks", "simulation.pyspin",
     "generate",   "generate.tests",
     "autoai",
+    "model_legacy",
     "model",
+    "model.schemas", "model.data", "model.architectures", "model.heads",
+    "model.losses", "model.renderers", "model.training", "model.evaluation",
+    "model.diagnostics", "model.experiments", "model.tests",
 ]
 
 [tool.setuptools.package-data]
