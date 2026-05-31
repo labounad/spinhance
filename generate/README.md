@@ -12,7 +12,7 @@ and machine-learning (Task 4) modules.
 ```bash
 conda activate spinhance
 
-# 1. Screen ChEMBL → 8spin.csv + 8spin.xyz.gz in one pass
+# 1. Screen ChEMBL → chembl_8spin.csv + chembl_8spin.xyz.gz in one pass
 #    (takes several hours on the full dataset)
 python generate/cli.py run
 
@@ -25,11 +25,11 @@ pass.  It embeds and classifies each molecule once — the old separate `xyz`
 step re-embedded every kept molecule a second time.  Pass `--no-xyz` to write
 only the CSV.
 
-The standalone `xyz` command is still available to (re)generate `8spin.xyz.gz`
+The standalone `xyz` command is still available to (re)generate `chembl_8spin.xyz.gz`
 from an existing CSV:
 
 ```bash
-python generate/cli.py xyz          # 8spin.csv → 8spin.xyz.gz
+python generate/cli.py xyz          # chembl_8spin.csv → chembl_8spin.xyz.gz
 ```
 
 All subcommands accept `--help` for full option listings.
@@ -56,7 +56,7 @@ peptides/polymers/macrocycles before the slow 3-D embedding.
 ```bash
 # Screen all of PubChem locally (slow — see HPC sharding below for scale)
 python generate/cli.py run --source pubchem --chembl CID-SMILES.gz \
-  --output 8spin_pubchem.csv --xyz-output 8spin_pubchem.xyz.gz
+  --output pubchem_8spin.csv --xyz-output pubchem_8spin.xyz.gz
 ```
 
 PubChem's `CID-SMILES.gz` (~1.5 GB) is at
@@ -75,8 +75,8 @@ sbatch --export=ALL,INPUT=$HOME/pubchem/CID-SMILES.gz,SRC=pubchem \
 
 # After it finishes, merge the shards into one dataset
 python generate/cli.py merge data/screen/shards \
-    --output data/screen/8spin_pubchem.csv \
-    --xyz-output data/screen/8spin_pubchem.xyz.gz
+    --output data/screen/pubchem_8spin.csv \
+    --xyz-output data/screen/pubchem_8spin.xyz.gz
 ```
 
 The screen is embed-bound (the 3-D step dwarfs parsing), so 16 cores/task keeps
@@ -99,8 +99,8 @@ ChEMBL chemreps.txt  (738 MB)
          │  HARD/SOFT/NONE tier assignment + magnetic equivalence check
          │  (single embed per molecule; reused for both outputs below)
          │
-         ├─▶  8spin.csv     (~60 000 molecules)  ──▶  viewer.py  triage GUI
-         └─▶  8spin.xyz.gz  3-D XYZ with spin-group annotations (xyz_writer.build_xyz_block)
+         ├─▶  chembl_8spin.csv     (~60 000 molecules)  ──▶  viewer.py  triage GUI
+         └─▶  chembl_8spin.xyz.gz  3-D XYZ with spin-group annotations (xyz_writer.build_xyz_block)
 ```
 
 The deuterium test is the expensive step (ETKDG embedding ≫ everything else).
@@ -154,7 +154,7 @@ in the molecule during the test; exclude them from the candidate list via
 
 ## Output files
 
-### `8spin.csv`
+### `chembl_8spin.csv`
 
 Produced by `python generate/cli.py run`.
 
@@ -166,7 +166,7 @@ Produced by `python generate/cli.py run`.
 | `n_groups` | int | Number of spin groups (always 8) |
 | `group_sizes` | str | Semicolon-separated proton counts per group, descending |
 
-### `8spin.xyz.gz`
+### `chembl_8spin.xyz.gz`
 
 Produced by `python generate/cli.py xyz`.  Gzip-compressed multi-XYZ file
 (~35–40 MB for ~60 000 molecules).  See [`XYZ_FORMAT.md`](XYZ_FORMAT.md) for
@@ -218,17 +218,17 @@ spinhance-gen run   [--chembl PATH] [--output PATH] [--n-groups N]
 
     Stream ChEMBL, apply heuristic pre-filter then 3-D deuterium test.
     Workers run the expensive embedding+test step in parallel.
-    Default output: generate/data/8spin.csv
+    Default output: generate/data/chembl_8spin.csv
 
 spinhance-gen view  [--file PATH] [--n N] [--seed SEED]
 
     Launch the interactive gallery viewer.
-    Default file: generate/data/8spin.csv
+    Default file: generate/data/chembl_8spin.csv
 
 spinhance-gen xyz   [--input PATH] [--output PATH] [--workers N]
 
-    Convert 8spin.csv to a gzip multi-XYZ file with spin annotations.
-    Default output: generate/data/8spin.xyz.gz
+    Convert chembl_8spin.csv to a gzip multi-XYZ file with spin annotations.
+    Default output: generate/data/chembl_8spin.xyz.gz
 ```
 
 ---

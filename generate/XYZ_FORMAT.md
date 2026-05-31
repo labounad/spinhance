@@ -2,7 +2,7 @@
 
 **For:** Yiming (mol_to_spin_system)  
 **From:** Sam (generate)  
-**File produced by:** `python generate/cli.py xyz` → `generate/data/8spin.xyz.gz`
+**File produced by:** `python generate/cli.py xyz` → `generate/data/chembl_8spin.xyz.gz`
 
 ---
 
@@ -14,7 +14,7 @@ the standard extended-XYZ format.  Tools like ASE read it natively:
 
 ```python
 from ase.io import read
-mols = read("8spin.xyz.gz", index=":")   # list of all Atoms objects
+mols = read("chembl_8spin.xyz.gz", index=":")   # list of all Atoms objects
 ```
 
 To read without ASE, iterate the decompressed text — each block starts
@@ -176,7 +176,7 @@ def iter_xyz_blocks(path):
                 block.append((sym, x, y, z, group, tier))
             yield comment, block
 
-for meta, atoms in iter_xyz_blocks("generate/data/8spin.xyz.gz"):
+for meta, atoms in iter_xyz_blocks("generate/data/chembl_8spin.xyz.gz"):
     smiles    = meta["smiles"]
     chembl_id = meta["chembl_id"]
     spin_h    = [(sym,x,y,z,g,t) for sym,x,y,z,g,t in atoms

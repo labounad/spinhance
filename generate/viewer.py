@@ -21,7 +21,7 @@ Usage
 ::
 
     python generate/cli.py view
-    python generate/cli.py view --file generate/data/8spin.csv
+    python generate/cli.py view --file generate/data/chembl_8spin.csv
 """
 
 from __future__ import annotations

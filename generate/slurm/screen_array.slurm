@@ -9,7 +9,7 @@
 #       generate/slurm/screen_array.slurm
 # then merge once the array finishes:
 #   micromamba run -n spinhance python -m generate.merge_shards \
-#       data/screen/shards data/screen/8spin_pubchem.csv data/screen/8spin_pubchem.xyz.gz
+#       data/screen/shards data/screen/pubchem_8spin.csv data/screen/pubchem_8spin.xyz.gz
 #
 #SBATCH --job-name=screen
 #SBATCH --partition=shared

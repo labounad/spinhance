@@ -1,7 +1,7 @@
 """generate/pipeline.py — end-to-end molecule screening pipeline.
 
 Streams the ChEMBL chemreps file and writes qualifying molecules directly to
-``8spin.csv`` in a single pass with no intermediate file.
+``chembl_8spin.csv`` in a single pass with no intermediate file.
 
 Two filters run in sequence for every molecule:
 
@@ -60,8 +60,8 @@ RDLogger.DisableLog("rdApp.*")
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
 DEFAULT_CHEMBL     = _REPO_ROOT / "generate" / "chembl" / "chembl_37_chemreps.txt"
-DEFAULT_OUTPUT     = _REPO_ROOT / "generate" / "data" / "8spin.csv"
-DEFAULT_XYZ_OUTPUT = _REPO_ROOT / "generate" / "data" / "8spin.xyz.gz"
+DEFAULT_OUTPUT     = _REPO_ROOT / "generate" / "data" / "chembl_8spin.csv"
+DEFAULT_XYZ_OUTPUT = _REPO_ROOT / "generate" / "data" / "chembl_8spin.xyz.gz"
 DEFAULT_WORKERS    = max(1, (os.cpu_count() or 2) - 1)
 DEFAULT_CHUNK_SIZE = 32
 
@@ -208,7 +208,7 @@ def run_pipeline(
     ``xyz`` phases.  Because both outputs come from a single
     :func:`~generate.spin_equivalence.classify_spin_groups` call per molecule —
     using the same fixed-seed embedding the standalone ``xyz`` command would
-    use — the fused ``8spin.xyz.gz`` is identical (modulo block order) to
+    use — the fused ``chembl_8spin.xyz.gz`` is identical (modulo block order) to
     running ``run`` then ``xyz``, but skips re-embedding every kept molecule.
 
     Parameters

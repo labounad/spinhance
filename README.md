@@ -67,7 +67,7 @@ Output: `mol_to_spin_system/data/spin_systems.json` — a JSON array of spin-sys
 
 `spin_groups[i]` = `[shift ppm, #protons]` for `labels[i]`. Absent couplings are J = 0.
 
-The production 60k dataset is already at `mol_to_spin_system/data/spin_systems_60k.json`.
+The production 60k dataset is already at `mol_to_spin_system/data/spin_systems_chembl.json`.
 
 ---
 
@@ -78,7 +78,7 @@ Runs quantum spin simulation at 90 MHz and 600 MHz using the pure-Python engine 
 ```bash
 # Simulate all molecules in the JSON (uses all CPU cores)
 python -m simulation.cli run \
-  --graphs mol_to_spin_system/data/spin_systems_60k.json \
+  --graphs mol_to_spin_system/data/spin_systems_chembl.json \
   --out simulation/data/spectra \
   --engine python \
   --workers 8
@@ -95,17 +95,17 @@ Output: `simulation/data/spectra/{90,600}MHz/mol_XXXXXX.npy` — 16384-point nor
 ```bash
 # Validate data paths before training (torch-free)
 PYTHONPATH=. python -m aws_trainer.run \
-  --json mol_to_spin_system/data/spin_systems_60k.json \
+  --json mol_to_spin_system/data/spin_systems_chembl.json \
   --dry-run
 
 # Stage 1 only (matrix loss) — fast, good for sanity checks
 PYTHONPATH=. python -m aws_trainer.run \
-  --json mol_to_spin_system/data/spin_systems_60k.json \
+  --json mol_to_spin_system/data/spin_systems_chembl.json \
   --model-size medium --no-stage2 --epochs 80
 
 # Full training: Stage 1 (matrix loss) then Stage 2 (+ spectral consistency)
 PYTHONPATH=. python -m aws_trainer.run \
-  --json mol_to_spin_system/data/spin_systems_60k.json \
+  --json mol_to_spin_system/data/spin_systems_chembl.json \
   --model-size medium --epochs 110 --stage1-epochs 70
 ```
 
@@ -212,7 +212,7 @@ vars(std).update(ckpt["standardizer"])
 
 | Path | Contents |
 |---|---|
-| `mol_to_spin_system/data/spin_systems_60k.json` | 64k molecule spin-system dataset |
+| `mol_to_spin_system/data/spin_systems_chembl.json` | 64k molecule spin-system dataset |
 | `simulation/data/spectra/90MHz/mol_XXXXXX.npy` | Simulated 90 MHz spectra |
 | `simulation/data/spectra/600MHz/mol_XXXXXX.npy` | Simulated 600 MHz spectra |
 | `aws_trainer/checkpoints/best.pt` | Best model checkpoint |

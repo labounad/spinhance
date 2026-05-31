@@ -53,7 +53,7 @@ the checkout isn't where `shifts.py` expects — fix the location or set
 
 ## Note: input data (Git LFS)
 
-The Task 1 dataset `generate/data/8spin.xyz.gz` is stored with **Git LFS**.
+The Task 1 dataset `generate/data/chembl_8spin.xyz.gz` is stored with **Git LFS**.
 After cloning, install git-lfs and pull it:
 
 ```bash

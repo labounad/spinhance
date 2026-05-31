@@ -54,13 +54,13 @@ SPIN = next((p for p in [REPO / "docs" / "data" / "spin_systems.json",
             REPO / "mol_to_spin_system" / "data" / "spin_systems.json")
 # Precomputed 3D coordinates (force-field embedded) for the 3D structure view.
 # Prefer the in-docs copy, then the working copy, then the tracked backup.
-XYZ_CANDIDATES = [REPO / "docs" / "data" / "8spin.xyz",
-                  REPO / "generate" / "data" / "8spin.xyz",
-                  REPO / "data" / "8spin.xyz"]
+XYZ_CANDIDATES = [REPO / "docs" / "data" / "chembl_8spin.xyz",
+                  REPO / "generate" / "data" / "chembl_8spin.xyz",
+                  REPO / "data" / "chembl_8spin.xyz"]
 
 
 def build_xyz_index():
-    """Index 8spin.xyz by chembl_id and smiles -> cleaned XYZ block (element+coords).
+    """Index chembl_8spin.xyz by chembl_id and smiles -> cleaned XYZ block (element+coords).
 
     The source file's H rows carry trailing spin-group labels ("A N"); we keep only
     the element symbol and x/y/z so 3Dmol.js parses it cleanly (it infers bonds).
@@ -68,7 +68,7 @@ def build_xyz_index():
     path = next((p for p in XYZ_CANDIDATES if p.exists()), None)
     by_chembl, by_smiles = {}, {}
     if path is None:
-        print("WARNING: 8spin.xyz not found; 3D structures will be omitted")
+        print("WARNING: chembl_8spin.xyz not found; 3D structures will be omitted")
         return by_chembl, by_smiles
     lines = path.read_text().splitlines()
     i = 0

@@ -1,7 +1,7 @@
 """generate/xyz_writer.py — write spin-annotated XYZ files from screened molecules.
 
-Converts every molecule in ``8spin.csv`` to an entry in a single gzip-compressed
-multi-XYZ file (``8spin.xyz.gz``).  The multi-XYZ format concatenates individual
+Converts every molecule in ``chembl_8spin.csv`` to an entry in a single gzip-compressed
+multi-XYZ file (``chembl_8spin.xyz.gz``).  The multi-XYZ format concatenates individual
 XYZ blocks back-to-back; standard tools (ASE, OpenBabel, MDAnalysis) can read it
 transparently.
 
@@ -52,9 +52,9 @@ Running
 -------
 ::
 
-    python generate/cli.py xyz                          # 8spin.csv → 8spin.xyz.gz
-    python generate/cli.py xyz --input  /path/to/8spin.csv \\
-                                --output /path/to/8spin.xyz.gz
+    python generate/cli.py xyz                          # chembl_8spin.csv → chembl_8spin.xyz.gz
+    python generate/cli.py xyz --input  /path/to/chembl_8spin.csv \\
+                                --output /path/to/chembl_8spin.xyz.gz
 """
 
 from __future__ import annotations
@@ -71,8 +71,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 _REPO_ROOT       = Path(__file__).resolve().parent.parent
-DEFAULT_INPUT    = _REPO_ROOT / "generate" / "data" / "8spin.csv"
-DEFAULT_OUTPUT   = _REPO_ROOT / "generate" / "data" / "8spin.xyz.gz"
+DEFAULT_INPUT    = _REPO_ROOT / "generate" / "data" / "chembl_8spin.csv"
+DEFAULT_OUTPUT   = _REPO_ROOT / "generate" / "data" / "chembl_8spin.xyz.gz"
 DEFAULT_WORKERS  = max(1, (os.cpu_count() or 2) - 1)
 
 
@@ -294,7 +294,7 @@ def write_xyz_gz(
     max_pending = workers * 8   # keep workers fed without unbounded queue
 
     pbar = (_tqdm(total=len(rows),
-                  desc=f"Writing 8spin.xyz.gz  [{workers} workers]",
+                  desc=f"Writing chembl_8spin.xyz.gz  [{workers} workers]",
                   unit=" mol") if _tqdm else None)
 
     with (

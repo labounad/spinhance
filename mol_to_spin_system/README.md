@@ -27,7 +27,7 @@ python -m mol_to_spin_system.pipeline input.csv out_dir --smiles-col smiles --id
 
 ## XYZ → spin-system JSON
 
-Convert Task 1's labelled multi-XYZ (`generate/data/8spin.xyz[.gz]`) to a JSON
+Convert Task 1's labelled multi-XYZ (`generate/data/chembl_8spin.xyz[.gz]`) to a JSON
 array of per-molecule records (see `data/README.md` for the format):
 
 ```bash

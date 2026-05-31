@@ -5,11 +5,11 @@ Subcommands
 
 ``run``
     Screen the full ChEMBL database end-to-end in a single streaming pass.
-    Produces ``8spin.csv``.
+    Produces ``chembl_8spin.csv``.
 
 ``view``
     Launch the interactive Tkinter gallery viewer.  Defaults to
-    ``8spin.csv`` so no arguments are required after screening.
+    ``chembl_8spin.csv`` so no arguments are required after screening.
 
 Usage
 -----
@@ -21,7 +21,7 @@ Usage
     spinhance-gen run               # after pip install -e .
 
     python generate/cli.py view
-    python generate/cli.py view --file generate/data/8spin.csv
+    python generate/cli.py view --file generate/data/chembl_8spin.csv
 
     # Override paths / parameters:
     python generate/cli.py run --chembl /data/chembl_37_chemreps.txt
@@ -50,8 +50,8 @@ from generate.config import N_SPIN_GROUPS  # noqa: E402
 # but without importing RDKit or the pipeline.
 _REPO_ROOT        = Path(__file__).resolve().parent.parent
 _DEFAULT_CHEMBL   = _REPO_ROOT / "generate" / "chembl" / "chembl_37_chemreps.txt"
-_DEFAULT_OUTPUT   = _REPO_ROOT / "generate" / "data" / "8spin.csv"
-_DEFAULT_XYZ      = _REPO_ROOT / "generate" / "data" / "8spin.xyz.gz"
+_DEFAULT_OUTPUT   = _REPO_ROOT / "generate" / "data" / "chembl_8spin.csv"
+_DEFAULT_XYZ      = _REPO_ROOT / "generate" / "data" / "chembl_8spin.xyz.gz"
 _DEFAULT_WORKERS  = max(1, (os.cpu_count() or 2) - 1)
 _DEFAULT_CHUNK    = 32
 
@@ -77,14 +77,36 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
 def _cmd_merge(args: argparse.Namespace) -> int:
     from generate.merge_shards import merge_shards  # noqa: PLC0415
-    rows, n_xyz = merge_shards(
-        Path(args.shard_dir),
-        Path(args.output),
-        None if args.no_xyz else Path(args.xyz_output),
-    )
-    print(f"merged {rows:,} rows -> {args.output}")
+    out_csv = Path(args.output)
+    out_xyz = None if args.no_xyz else Path(args.xyz_output)
+    rows, n_xyz = merge_shards(Path(args.shard_dir), out_csv, out_xyz)
+    print(f"merged {rows:,} rows -> {out_csv}")
     if not args.no_xyz:
-        print(f"merged {n_xyz} shard XYZ files -> {args.xyz_output}")
+        print(f"merged {n_xyz} shard XYZ files -> {out_xyz}")
+    if args.dedup:
+        from generate.dedup import dedup_dataset  # noqa: PLC0415
+        tmp_csv = out_csv.with_suffix(out_csv.suffix + ".tmp")
+        tmp_xyz = out_xyz.with_suffix(out_xyz.suffix + ".tmp") if out_xyz else None
+        kept, dropped, nx = dedup_dataset(
+            out_csv, tmp_csv, in_xyz=out_xyz, out_xyz=tmp_xyz,
+        )
+        tmp_csv.replace(out_csv)
+        if tmp_xyz:
+            tmp_xyz.replace(out_xyz)
+        print(f"deduped: kept {kept:,} unique (dropped {dropped:,} duplicate InChIKeys)")
+    return 0
+
+
+def _cmd_dedup(args: argparse.Namespace) -> int:
+    from generate.dedup import dedup_dataset  # noqa: PLC0415
+    kept, dropped, n_xyz = dedup_dataset(
+        Path(args.in_csv), Path(args.out_csv),
+        in_xyz=Path(args.in_xyz) if args.in_xyz else None,
+        out_xyz=Path(args.out_xyz) if args.out_xyz else None,
+    )
+    print(f"kept {kept:,} unique  (dropped {dropped:,} duplicate InChIKeys) -> {args.out_csv}")
+    if args.out_xyz:
+        print(f"wrote {n_xyz:,} XYZ blocks -> {args.out_xyz}")
     return 0
 
 
@@ -132,7 +154,7 @@ def build_parser() -> argparse.ArgumentParser:
     # ── run ───────────────────────────────────────────────────────────────────
     p_run = sub.add_parser(
         "run",
-        help="Screen ChEMBL end-to-end and write 8spin.csv + 8spin.xyz.gz.",
+        help="Screen ChEMBL end-to-end and write chembl_8spin.csv + chembl_8spin.xyz.gz.",
         description=(
             "Single-pass pipeline: streams ChEMBL, applies the fast proton-count "
             "heuristic, then the 3-D deuterium substitution test.  Molecules with "
@@ -226,14 +248,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_view.set_defaults(func=_cmd_view)
 
     # ── xyz ───────────────────────────────────────────────────────────────────
-    _xyz_in  = _REPO_ROOT / "generate" / "data" / "8spin.csv"
-    _xyz_out = _REPO_ROOT / "generate" / "data" / "8spin.xyz.gz"
+    _xyz_in  = _REPO_ROOT / "generate" / "data" / "chembl_8spin.csv"
+    _xyz_out = _REPO_ROOT / "generate" / "data" / "chembl_8spin.xyz.gz"
 
     p_xyz = sub.add_parser(
         "xyz",
-        help="Convert 8spin.csv to a gzip-compressed multi-XYZ file.",
+        help="Convert chembl_8spin.csv to a gzip-compressed multi-XYZ file.",
         description=(
-            "Reads 8spin.csv, embeds each molecule in 3-D, classifies spin groups, "
+            "Reads chembl_8spin.csv, embeds each molecule in 3-D, classifies spin groups, "
             "and writes a single gzip-compressed multi-XYZ file.  "
             "Each H atom is annotated with its group letter, tier (H/S/N), "
             "and chemical-shift class number.  "
@@ -280,7 +302,27 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-xyz", action="store_true",
         help="Merge only the CSV shards.",
     )
+    p_merge.add_argument(
+        "--dedup", action="store_true",
+        help="After merging, collapse rows sharing an InChIKey to one "
+             "(first occurrence) and filter the XYZ to match.",
+    )
     p_merge.set_defaults(func=_cmd_merge)
+
+    # ── dedup ─────────────────────────────────────────────────────────────────
+    p_dedup = sub.add_parser(
+        "dedup",
+        help="Drop duplicate molecules (same InChIKey) from a merged dataset.",
+        description=(
+            "Collapse CSV rows sharing an InChIKey to the first occurrence and "
+            "filter the companion multi-XYZ to the surviving IDs."
+        ),
+    )
+    p_dedup.add_argument("in_csv",  metavar="IN.csv")
+    p_dedup.add_argument("out_csv", metavar="OUT.csv")
+    p_dedup.add_argument("--in-xyz",  dest="in_xyz",  default=None, metavar="IN.xyz.gz")
+    p_dedup.add_argument("--out-xyz", dest="out_xyz", default=None, metavar="OUT.xyz.gz")
+    p_dedup.set_defaults(func=_cmd_dedup)
 
     return parser
 

@@ -18,7 +18,7 @@ mkdir -p logs data/processed
 MM="$HOME/.local/bin/micromamba"
 
 "$MM" run -n spinhance python -m mol_to_spin_system.xyz \
-    generate/data/8spin.xyz.gz \
+    generate/data/chembl_8spin.xyz.gz \
     data/processed/test_100.json \
     --workers "$SLURM_CPUS_PER_TASK" \
     --limit 100

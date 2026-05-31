@@ -1,12 +1,12 @@
 # mol_to_spin_system/data
 
-Spin-system data converted from `generate/data/8spin.xyz{,.gz}` by
+Spin-system data converted from `generate/data/chembl_8spin.xyz{,.gz}` by
 `mol_to_spin_system.xyz.convert_file`.
 
-- `spin_systems.json` — **1072 molecules** from `8spin.xyz` (small uncompressed set).
-  Regenerate with `convert_file('generate/data/8spin.xyz', <out>, workers=8)`.
-- `spin_systems_60k.json` — **64,476 molecules** from `8spin.xyz.gz` (full dataset).
-  Regenerate with `convert_file('generate/data/8spin.xyz.gz', <out>, workers=32)`.
+- `spin_systems.json` — **1072 molecules** from `chembl_8spin.xyz` (small uncompressed set).
+  Regenerate with `convert_file('generate/data/chembl_8spin.xyz', <out>, workers=8)`.
+- `spin_systems_chembl.json` — **64,476 molecules** from `chembl_8spin.xyz.gz` (full dataset).
+  Regenerate with `convert_file('generate/data/chembl_8spin.xyz.gz', <out>, workers=32)`.
 
 ## Format
 
