@@ -92,3 +92,17 @@ else
   echo "=== Training running with nohup (tmux/screen not found) ==="
   echo "  Tail logs: tail -f $LOG"
 fi
+
+# ── Diagnostics sync sidecar ──────────────────────────────────────────────────
+# Syncs model/runs/ JSONL artifacts (not checkpoints) to S3 every 30s so the
+# live dashboard (model/live_dashboard.py) can read them locally after an
+# `aws s3 sync` on your machine.
+nohup bash -c "
+  while true; do
+    aws s3 sync \"$REPO/model/runs\" \"s3://$BUCKET/model/runs\" \
+      --exclude '*.pt' --no-progress 2>>/tmp/sync.log
+    sleep 30
+  done
+" >> /tmp/sync.log 2>&1 &
+disown
+echo "  Diagnostics sync → s3://$BUCKET/model/runs (every 30s, log: /tmp/sync.log)"
