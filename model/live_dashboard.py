@@ -202,7 +202,7 @@ def _dashboard():
                 st.write(f"Matrix plots ({len(imgs)} probes, showing {n_show})")
                 img_cols = st.columns(3)
                 for i, img in enumerate(imgs[:n_show]):
-                    img_cols[i % 3].image(str(img), use_column_width=True)
+                    img_cols[i % 3].image(str(img), width="stretch")
 
             fsummary = _read_json(ep_dir / "failure_summary.json")
             if fsummary:
