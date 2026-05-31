@@ -218,3 +218,28 @@ vars(std).update(ckpt["standardizer"])
 | `aws_trainer/checkpoints/best.pt` | Best model checkpoint |
 | `aws_trainer/configs/medium_s2.json` | Full Stage 1+2 training config |
 | `model/gui.py` | Evaluation dashboard |
+
+## Training diagnostics
+
+Current model training writes a canonical diagnostics directory under `model/runs/<run_id>/`. This directory is the source of truth for live dashboards, probe diagnostics, failure analysis, and AutoAI integration.
+
+Smoke run:
+
+~~~bash
+PYTHONPATH=. python -m model.run_experiment \
+  --small \
+  --epochs 2 \
+  --batch 16 \
+  --max-mol 128 \
+  --run-dir model/runs/diagnostics_smoke \
+  --ckpt model/runs/diagnostics_smoke/checkpoints/spinhance.pt \
+  --log-every-steps 1
+~~~
+
+Live dashboard:
+
+~~~bash
+PYTHONPATH=. streamlit run model/live_dashboard.py
+~~~
+
+See `docs/training_diagnostics.md` for the full artifact contract used by collaborators and AutoAI agents.
