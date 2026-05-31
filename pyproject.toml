@@ -33,6 +33,7 @@ packages = [
     "simulation", "simulation.tests", "simulation.benchmarks", "simulation.pyspin",
     "generate",   "generate.tests",
     "autoai",
+    "model",
 ]
 
 [tool.setuptools.package-data]
@@ -40,4 +41,4 @@ packages = [
 simulation = ["mnova_scripts/*.qs"]
 
 [tool.pytest.ini_options]
-testpaths = ["simulation/tests", "generate/tests"]
+testpaths = ["simulation/tests", "generate/tests", "model", "autoai"]

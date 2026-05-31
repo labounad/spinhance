@@ -215,10 +215,12 @@ else
   "
 fi
 
-# ── 5. Launch training ────────────────────────────────────────────────────────
+# ── 5. Launch training + diagnostics sync sidecar ─────────────────────────────
 echo "[5/5] Starting training..."
 _ssh "
   cd $WORKSPACE
+
+  # Training process
   nohup bash -c 'PYTHONPATH=. /opt/conda/bin/conda run -n pytorch python -m model.run_experiment \
     --json mol_to_spin_system/data/spin_systems_60k.json \
     --spectra simulation/data/spectra \
@@ -226,7 +228,19 @@ _ssh "
     $TRAIN_ARGS' \
     > /tmp/train.log 2>&1 &
   disown
-  echo 'training started'
+
+  # Sidecar: sync JSONL diagnostics (no .pt) to S3 every 30s for live dashboard
+  nohup bash -c "
+    while true; do
+      aws s3 sync $WORKSPACE/model/runs \
+        s3://$BUCKET/model/runs \
+        --exclude '*.pt' --no-progress 2>>/tmp/sync.log
+      sleep 30
+    done
+  " > /tmp/sync.log 2>&1 &
+  disown
+
+  echo 'training + sync sidecar started'
 "
 
 # ── Done ──────────────────────────────────────────────────────────────────────

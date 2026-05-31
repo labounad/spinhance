@@ -99,7 +99,15 @@ def full_run(args):
         weight_decay=args.weight_decay, patience=args.patience, seed=args.seed,
         device=args.device, amp_dtype=args.amp, ckpt_path=args.ckpt,
         s3_ckpt_prefix=args.s3_ckpt_prefix, num_workers=args.workers,
-        val_every=args.val_every)
+        val_every=args.val_every,
+        diagnostics_enabled=not args.no_diagnostics,
+        run_dir=args.run_dir, run_name=args.run_name,
+        log_every_steps=args.log_every_steps,
+        probe_every_epochs=args.probe_every_epochs,
+        probe_count=args.probe_count,
+        save_probe_plots=not args.no_probe_plots,
+        save_failure_tables=not args.no_failure_tables,
+    )
     print(f"config: {cfg}")
     npar = sum(p.numel() for p in model.parameters())
     print(f"model params: {npar/1e6:.2f}M | device {cfg.device} | "
@@ -135,6 +143,23 @@ def build_parser():
     p.add_argument("--workers", type=int, default=-1, help="DataLoader num_workers (-1 = auto)")
     p.add_argument("--val-every", type=int, default=1, help="validate every N epochs")
     p.add_argument("--seed", type=int, default=0)
+    # Diagnostics
+    p.add_argument("--no-diagnostics", action="store_true",
+                   help="disable structured run artifacts (status.json, metrics.jsonl, …)")
+    p.add_argument("--run-dir", default="",
+                   help="explicit run directory (auto-generated if empty)")
+    p.add_argument("--run-name", default="",
+                   help="label suffix for auto-generated run_id")
+    p.add_argument("--log-every-steps", type=int, default=25,
+                   help="step-level metric logging frequency")
+    p.add_argument("--probe-every-epochs", type=int, default=5,
+                   help="run probe evaluator every N epochs")
+    p.add_argument("--probe-count", type=int, default=16,
+                   help="number of fixed probe molecules")
+    p.add_argument("--no-probe-plots", action="store_true",
+                   help="skip PNG matrix plots in probe output")
+    p.add_argument("--no-failure-tables", action="store_true",
+                   help="skip per-sample failure-case tables")
     return p
 
 
