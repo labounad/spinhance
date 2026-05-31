@@ -1,1 +1,4 @@
-"""model.diagnostics — see model/README.md for the package map."""
+"""Run-directory diagnostics: the canonical artifact-writing contract."""
+from model.diagnostics.writer import DiagnosticsWriter
+
+__all__ = ["DiagnosticsWriter"]
