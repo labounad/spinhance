@@ -9,8 +9,9 @@ data:
   records: mol_to_spin_system/data/spin_systems_chembl.json   # 64,476 molecules
   spectra: simulation/data/spectra
   field: 90
-  # NOTE: scaffold splitting crashes on RDKit 2026.03 (STEREOANY double bonds in
-  # the 64k set — see model_legacy/SUGGESTIONS.md §6). Use molecule + dedup split.
+  # NOTE: scaffold splitting crashes on RDKit 2026.03 (MurckoScaffoldSmiles on
+  # STEREOANY double bonds in the 64k set — see model/SUGGESTIONS.md §6).
+  # Use molecule + dedup split.
   split: none
 
 model:

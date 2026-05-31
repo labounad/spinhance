@@ -33,7 +33,6 @@ packages = [
     "simulation", "simulation.tests", "simulation.benchmarks", "simulation.pyspin",
     "generate",   "generate.tests",
     "autoai",
-    "model_legacy",
     "model",
     "model.schemas", "model.data", "model.architectures", "model.heads",
     "model.losses", "model.renderers", "model.training", "model.evaluation",
@@ -45,7 +44,7 @@ packages = [
 simulation = ["mnova_scripts/*.qs"]
 
 [tool.pytest.ini_options]
-testpaths = ["simulation/tests", "generate/tests", "model", "model_legacy", "autoai"]
+testpaths = ["simulation/tests", "generate/tests", "model", "autoai"]
 markers = [
     "slow: slow test, deselected by default (run with --runslow)",
 ]

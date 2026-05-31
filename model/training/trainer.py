@@ -47,6 +47,8 @@ def _resolve_device(d):
 
 
 def _make_run_dir(cfg: Config) -> Path:
+    if cfg.run.dir:                       # explicit, deterministic run dir
+        return Path(cfg.run.dir)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     h = hashlib.sha256(json.dumps(cfg.raw, sort_keys=True, default=str).encode()).hexdigest()[:6]
     return Path(cfg.run.output_dir) / f"{ts}_{cfg.run.name}_{h}"

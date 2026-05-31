@@ -18,6 +18,7 @@ import yaml
 class RunCfg:
     name: str = "run"
     output_dir: str = "model/runs"
+    dir: str = ""                # explicit run dir; if set, used verbatim (no ts/hash suffix)
 
 
 @dataclass

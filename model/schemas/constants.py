@@ -16,7 +16,7 @@ PPM_TO = 12.0
 N_PAIRS = N_GROUPS * (N_GROUPS - 1) // 2   # 28 for G=8
 
 # Default degeneracy vocabulary (protons per group). Index order is the class id
-# used by the degeneracy classification head. Mirrors model_legacy DEFAULT_DEG_VOCAB
+# used by the degeneracy classification head. Mirrors the original DEFAULT_DEG_VOCAB
 # (kept identical so real data never KeyErrors; pruning to observed classes is a
 # future optimization).
 DEFAULT_DEG_VOCAB = (1, 2, 3, 4, 6, 9, 12, 18)
