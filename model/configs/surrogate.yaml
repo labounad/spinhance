@@ -1,0 +1,40 @@
+# Train the differentiable surrogate matrix->spectrum renderer (Branch 5).
+# Targets are the pyspin ground-truth spectra (simulate them first; see
+# model/scripts/launch_surrogate_ec2.sh).
+run:
+  name: surrogate
+  output_dir: model/runs
+
+data:
+  records: mol_to_spin_system/data/spin_systems_chembl_8spin_randomized.json
+  spectra: simulation/data/spectra        # contains 90MHz/ and 600MHz/ mol_*.npy
+  fields: [90, 600]
+  split: none                             # molecule + dedup split (no RDKit scaffold)
+
+model:
+  name: surrogate
+  dim: 128
+  depth: 4
+  heads: 4
+  sticks_per_group: 48
+  linewidth_hz: 1.0
+
+loss:
+  mse_weight: 0.3                         # W1 + mse_weight * MSE
+
+training:
+  epochs: 60
+  batch_size: 256
+  lr: 0.0003
+  weight_decay: 0.01
+  amp: bf16
+  warmup_frac: 0.03
+  grad_clip: 1.0
+  num_workers: 8
+  val_every: 1
+  save_every: 1
+  seed: 0
+
+diagnostics:
+  enabled: true
+  log_every_steps: 50
