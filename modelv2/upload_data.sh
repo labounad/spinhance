@@ -2,7 +2,7 @@
 # upload_data.sh — Upload training data to S3. Run locally before training on EC2.
 #
 # Usage:
-#   bash model/upload_data.sh
+#   bash modelv2/upload_data.sh
 
 set -euo pipefail
 
@@ -31,6 +31,7 @@ echo "=== Done. On EC2: ==="
 echo ""
 echo "  aws s3 cp s3://$BUCKET/mol_to_spin_system/data/buckets/spin_systems_chembl_8spin.json.gz ."
 echo "  aws s3 cp s3://$BUCKET/simulation/data/spectra/90MHz.tar.gz ."
-echo "  python -m modelv2.train \\"
+echo "  export SPINHANCE_OUT=s3://$BUCKET/training"
+echo "  PYTHONPATH=. python -m modelv2.train \\"
 echo "    --spin_systems=spin_systems_chembl_8spin.json.gz \\"
 echo "    --spectra=90MHz.tar.gz"

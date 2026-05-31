@@ -300,6 +300,11 @@ Key flags: `--epochs`, `--batch`, `--lr`, `--ckpt`, `--device`, `--seed`,
 `--dry-run` exercises the entire data path (adapter → splits → standardizer →
 target encoding → renderable mask) without touching torch.
 
+**Session output root** (`--out`): pass an `s3://` URI to write all artifacts to
+S3. If omitted, falls back to the `SPINHANCE_OUT` environment variable (set it
+to `s3://spinhance-data/training` on EC2 so every run goes to S3 without
+needing `--out`). Final fallback is `modelv2/runs/session_<timestamp>` (local).
+
 ---
 
 ## gui.py
@@ -486,8 +491,17 @@ fail-fast); the speed items are defaults.
 # Validate the data path, no training, no torch:
 PYTHONPATH=. python -m modelv2.train --dry-run
 
-# Train
-PYTHONPATH=. python -m modelv2.train --spin_systems=mol_to_spin_system/data/spin_systems_pubchem.json.tar.gz --spectra=simulation/data/spectra/90MHz.tar.gz
+# Train (EC2) — set SPINHANCE_OUT once; all sessions auto-route to S3:
+export SPINHANCE_OUT=s3://spinhance-data/training
+PYTHONPATH=. python -m modelv2.train \
+    --spin_systems=spin_systems_chembl_8spin.json.gz \
+    --spectra=90MHz.tar.gz
+
+# Train with an explicit session root:
+PYTHONPATH=. python -m modelv2.train \
+    --spin_systems=spin_systems_chembl_8spin.json.gz \
+    --spectra=90MHz.tar.gz \
+    --out=s3://spinhance-data/training/session_001
 
 # Visualize (Streamlit app)
 PYTHONPATH=. streamlit run modelv2/gui.py

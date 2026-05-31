@@ -924,6 +924,9 @@ def _resolve_out_dir(out_dir, cfg):
     if out_dir:
         return out_dir
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    env_root = os.environ.get("SPINHANCE_OUT", "").rstrip("/")
+    if env_root:
+        return f"{env_root}/session_{ts}"
     return str(Path("modelv2/runs") / f"session_{ts}")
 
 
