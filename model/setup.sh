@@ -73,7 +73,7 @@ fi
 # shellcheck disable=SC2086
 "$MAMBA" create -n spinhance -y \
   -c pytorch $EXTRA_CHANNELS -c conda-forge \
-  python=3.11 pytorch ${CUDA_PKG:+$CUDA_PKG} numpy scipy lxml \
+  python=3.11 pytorch ${CUDA_PKG:+$CUDA_PKG} numpy scipy lxml matplotlib \
   || fail "Environment creation failed."
 
 pass "Environment created."

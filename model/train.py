@@ -474,7 +474,7 @@ def fit(records, assignment, cfg: TrainConfig, model=None):
         last_path  = str(ckpt_dir / "last.pt")
         best_path  = str(ckpt_dir / "best.pt") if is_best else ""
         legacy     = cfg.ckpt_path if is_best else ""
-        s3_dest    = f"{cfg.s3_ckpt_prefix}/last.pt" if cfg.s3_ckpt_prefix else ""
+        s3_dest    = f"{cfg.s3_ckpt_prefix}/epoch_{epoch:03d}.pt" if cfg.s3_ckpt_prefix else ""
         ckpt_q.put((ckpt, last_path, s3_dest, best_path, legacy))
 
         # ── Probes + failure analysis ──────────────────────────────────────────
