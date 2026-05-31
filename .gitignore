@@ -63,3 +63,4 @@ Thumbs.db
 .idea/
 *.swp
 simulation/examples/*.cmp_*.png
+modelv2/runs/
