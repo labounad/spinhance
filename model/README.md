@@ -1,6 +1,6 @@
 # SpinHance `model/` — modular training package
 
-Rebuilt from the flat monolith (now frozen under [`model_legacy/`](../model_legacy))
+Rebuilt from the original flat monolith (the pre-rebuild layout; see git history)
 around explicit, typed contracts so architectures, losses, renderers, training,
 and diagnostics can be developed, tested, and swapped independently.
 

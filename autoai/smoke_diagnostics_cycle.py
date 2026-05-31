@@ -28,25 +28,23 @@ def run_tiny_training(model_run_dir: Path, *, clean: bool = True) -> None:
     if clean and model_run_dir.exists():
         shutil.rmtree(model_run_dir)
 
-    ckpt = model_run_dir / "checkpoints" / "spinhance.pt"
-
+    # Rebuilt trainer (config-driven). run.dir forces a deterministic run dir so
+    # the cycle can read its artifacts; small/CPU/few-epoch overrides keep it fast.
     cmd = [
-        sys.executable,
-        "-m",
-        "model_legacy.run_experiment",
-        "--small",
-        "--epochs",
-        "2",
-        "--batch",
-        "16",
-        "--max-mol",
-        "128",
-        "--run-dir",
-        _rel(model_run_dir),
-        "--ckpt",
-        _rel(ckpt),
-        "--log-every-steps",
-        "1",
+        sys.executable, "-m", "model.experiments.train",
+        "--config", "model/configs/baseline_matrix.yaml",
+        "--set", f"run.dir={_rel(model_run_dir)}",
+        "--set", f"run.name={model_run_dir.name}",
+        "--set", "training.epochs=2",
+        "--set", "training.batch_size=16",
+        "--set", "training.amp=none",
+        "--set", "training.device=cpu",
+        "--set", "training.num_workers=0",
+        "--set", "data.max_mol=128",
+        "--set", "data.split=none",
+        "--set", "diagnostics.log_every_steps=1",
+        "--set", "diagnostics.probe_every_epochs=1",
+        "--set", "diagnostics.probe_count=4",
     ]
 
     print("Running training smoke command:")
