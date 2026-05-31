@@ -5,7 +5,8 @@ precompute_field_sweep.py
 Generate the compact JSON dataset that powers the Spinhance website's
 scroll-driven "field sweep" hero animation.
 
-For a curated subset of molecules from mol_to_spin_system/data/spin_systems.json we
+For a curated subset of molecules from docs/data/spin_systems_pubchem.json (a random
+1000-molecule sample of the PubChem set; see sample_pubchem_subset.py) we
 run the pure-Python pyspin composite simulator across a GEOMETRIC sweep of
 spectrometer fields (90 -> 600 MHz) and store downsampled, quantized intensity
 arrays. The site interpolates between frames as the user scrolls.
@@ -47,47 +48,70 @@ SIGNAL_FRAC = 2e-3       # signal-extent threshold (fraction of peak) for window
 SCAN_POINTS = 16384      # resolution of the full-range scan that finds the window
 
 OUT = REPO / "docs" / "data" / "field_sweep.json"
-# Spin-system source. Prefer the self-contained copy in docs/data so the site can
-# be rebuilt from docs/ alone; fall back to the canonical mol_to_spin_system location.
-SPIN = next((p for p in [REPO / "docs" / "data" / "spin_systems.json",
-                         REPO / "mol_to_spin_system" / "data" / "spin_systems.json"] if p.exists()),
-            REPO / "mol_to_spin_system" / "data" / "spin_systems.json")
-# Precomputed 3D coordinates (force-field embedded) for the 3D structure view.
-# Prefer the in-docs copy, then the working copy, then the tracked backup.
-XYZ_CANDIDATES = [REPO / "docs" / "data" / "chembl_8spin.xyz",
-                  REPO / "generate" / "data" / "chembl_8spin.xyz",
-                  REPO / "data" / "chembl_8spin.xyz"]
+# Spin-system source: a random 1000-molecule subset of the PubChem dataset,
+# produced by docs/sample_pubchem_subset.py and shipped in docs/data so the
+# pool travels with the site.
+SPIN = REPO / "docs" / "data" / "spin_systems_pubchem.json"
+# Precomputed 3D coordinates (force-field embedded) for the 3D structure view —
+# the full PubChem set from molecular generation (gzipped, ~1.6 GB). We stream it
+# and keep only the blocks for the chosen molecules (see build_xyz_index).
+XYZ_CANDIDATES = [REPO / "generate" / "data" / "pubchem_8spin.xyz.gz",
+                  REPO / "generate" / "data" / "pubchem_8spin.xyz"]
 
 
-def build_xyz_index():
-    """Index chembl_8spin.xyz by chembl_id and smiles -> cleaned XYZ block (element+coords).
+def _open_xyz(path):
+    """Open an .xyz or .xyz.gz file as a text stream."""
+    if str(path).endswith(".gz"):
+        import gzip
+        return gzip.open(path, "rt")
+    return open(path, "r")
 
-    The source file's H rows carry trailing spin-group labels ("A N"); we keep only
-    the element symbol and x/y/z so 3Dmol.js parses it cleanly (it infers bonds).
+
+def build_xyz_index(wanted_chembl, wanted_smiles, n_target):
+    """Stream the (huge, gzipped) XYZ file and index ONLY the chosen molecules.
+
+    Each block is: a count line, a JSON-meta line, then `natoms` coordinate rows.
+    H rows may carry trailing spin-group labels; we keep only element + x/y/z so
+    3Dmol.js parses cleanly (it infers bonds by distance). The full PubChem XYZ is
+    ~1.6 GB gzipped, so we never load it whole — we stream block-by-block, retain
+    only matches, and stop early once every chosen molecule is found.
     """
     path = next((p for p in XYZ_CANDIDATES if p.exists()), None)
     by_chembl, by_smiles = {}, {}
     if path is None:
-        print("WARNING: chembl_8spin.xyz not found; 3D structures will be omitted")
+        print("WARNING: pubchem XYZ not found; 3D structures will be omitted")
         return by_chembl, by_smiles
-    lines = path.read_text().splitlines()
-    i = 0
-    while i < len(lines):
-        if not lines[i].strip():
-            i += 1; continue
-        natoms = int(lines[i].strip())
-        meta = json.loads(lines[i + 1])
-        clean = []
-        for ln in lines[i + 2: i + 2 + natoms]:
-            p = ln.split()
-            clean.append(f"{p[0]} {p[1]} {p[2]} {p[3]}")
-        xyz = f"{natoms}\n{meta.get('chembl_id', '')}\n" + "\n".join(clean)
-        if meta.get("chembl_id"):
-            by_chembl[meta["chembl_id"]] = xyz
-        if meta.get("smiles"):
-            by_smiles[meta["smiles"]] = xyz
-        i += 2 + natoms
-    print(f"indexed {len(by_chembl)} XYZ structures from {path.name}")
+    found = 0
+    with _open_xyz(path) as fh:
+        while found < n_target:
+            header = fh.readline()
+            if not header:
+                break
+            header = header.strip()
+            if not header:
+                continue
+            natoms = int(header)
+            meta_line = fh.readline()
+            coord_lines = [fh.readline() for _ in range(natoms)]
+            try:
+                meta = json.loads(meta_line)
+            except Exception:
+                continue
+            cid, smi = meta.get("chembl_id"), meta.get("smiles")
+            if cid not in wanted_chembl and smi not in wanted_smiles:
+                continue
+            clean = []
+            for ln in coord_lines:
+                p = ln.split()
+                if len(p) >= 4:
+                    clean.append(f"{p[0]} {p[1]} {p[2]} {p[3]}")
+            xyz = f"{natoms}\n{cid or ''}\n" + "\n".join(clean)
+            if cid:
+                by_chembl[cid] = xyz
+            if smi:
+                by_smiles[smi] = xyz
+            found += 1
+    print(f"indexed {found}/{n_target} chosen-molecule XYZ structures from {path.name}")
     return by_chembl, by_smiles
 
 
@@ -233,7 +257,9 @@ def main():
     chosen = scored[:N_MOLECULES]
     print(f"{len(records)} records -> {len(scored)} eligible -> {len(chosen)} chosen")
 
-    xyz_chembl, xyz_smiles = build_xyz_index()
+    wanted_chembl = {rec.get("chembl_id") for _, rec, *_ in chosen if rec.get("chembl_id")}
+    wanted_smiles = {rec.get("smiles") for _, rec, *_ in chosen if rec.get("smiles")}
+    xyz_chembl, xyz_smiles = build_xyz_index(wanted_chembl, wanted_smiles, len(chosen))
     fields = geometric_fields(LOW_MHZ, HIGH_MHZ, N_FIELDS)
     molecules = []
     max_sticks = 0
@@ -284,7 +310,7 @@ def main():
             "linewidth_hz": LINEWIDTH_HZ,
             "format": "sticks",
             "encoding": "per frame {c: base64 float32 centers ppm, a: base64 uint16 amps/65535}; broaden client-side",
-            "source": "pyspin composite simulator over mol_to_spin_system/data/spin_systems.json",
+            "source": "pyspin composite simulator over a 1000-molecule PubChem subset (docs/data/spin_systems_pubchem.json)",
         },
         "molecules": molecules,
     }
