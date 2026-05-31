@@ -42,21 +42,21 @@ PPM_FROM, PPM_TO = 0.0, 12.0
 SIM_POINTS = 32768       # 2**15 — simulated AND STORED over the TIGHT window
 DISP_POINTS = SIM_POINTS # store every simulated point (no downsampling) -> smooth peaks
 LINEWIDTH_HZ = 1.1       # crisp lines for high-field resolution
-N_MOLECULES = 30         # how many molecules to ship
+N_MOLECULES = 40         # how many molecules to ship
+SAMPLE_SEED = 42         # RNG seed for reproducible random molecule selection
 MAX_FRAGMENT_SPINS = 11  # skip very large coupled fragments (slow / huge)
 SIGNAL_FRAC = 2e-3       # signal-extent threshold (fraction of peak) for windowing
 SCAN_POINTS = 16384      # resolution of the full-range scan that finds the window
 
 OUT = REPO / "docs" / "data" / "field_sweep.json"
-# Spin-system source: a random 1000-molecule subset of the PubChem dataset,
-# produced by docs/sample_pubchem_subset.py and shipped in docs/data so the
-# pool travels with the site.
-SPIN = REPO / "docs" / "data" / "spin_systems_pubchem.json"
+# Spin-system source: randomized ChEMBL 8-spin dataset with Gaussian-jittered
+# shifts and couplings (replaces the PubChem 1000-molecule pool).
+SPIN = REPO / "mol_to_spin_system" / "data" / "spin_systems_chembl_8spin_randomized.json"
 # Precomputed 3D coordinates (force-field embedded) for the 3D structure view —
-# the full PubChem set from molecular generation (gzipped, ~1.6 GB). We stream it
-# and keep only the blocks for the chosen molecules (see build_xyz_index).
-XYZ_CANDIDATES = [REPO / "generate" / "data" / "pubchem_8spin.xyz.gz",
-                  REPO / "generate" / "data" / "pubchem_8spin.xyz"]
+# the full ChEMBL 8-spin set from molecular generation. We stream it and keep
+# only the blocks for the chosen molecules (see build_xyz_index).
+XYZ_CANDIDATES = [REPO / "generate" / "data" / "buckets" / "chembl_8spin.xyz.gz",
+                  REPO / "generate" / "data" / "buckets" / "chembl_8spin.xyz"]
 
 
 def _open_xyz(path):
@@ -76,10 +76,18 @@ def build_xyz_index(wanted_chembl, wanted_smiles, n_target):
     ~1.6 GB gzipped, so we never load it whole — we stream block-by-block, retain
     only matches, and stop early once every chosen molecule is found.
     """
-    path = next((p for p in XYZ_CANDIDATES if p.exists()), None)
+    def _is_real_file(p):
+        """Return False if p is a Git LFS pointer (not actual binary data)."""
+        try:
+            with open(p, "rb") as fh:
+                return not fh.read(7).startswith(b"version")
+        except OSError:
+            return False
+
+    path = next((p for p in XYZ_CANDIDATES if p.exists() and _is_real_file(p)), None)
     by_chembl, by_smiles = {}, {}
     if path is None:
-        print("WARNING: pubchem XYZ not found; 3D structures will be omitted")
+        print("WARNING: XYZ file not found or is an LFS pointer; 3D structures will be omitted")
         return by_chembl, by_smiles
     found = 0
     with _open_xyz(path) as fh:
@@ -234,8 +242,11 @@ def second_order_score(shifts, couplings, deg):
 
 
 def main():
+    import random
+    rng = random.Random(SAMPLE_SEED)
+
     records = json.loads(SPIN.read_text())
-    scored = []
+    eligible = []
     for rec in records:
         try:
             labels, shifts, couplings, deg = record_to_arrays(rec)
@@ -248,23 +259,20 @@ def main():
         lo, hi = min(shifts), max(shifts)
         if lo < 0.3 or hi > 11.5:
             continue
-        s = second_order_score(shifts, couplings, deg)
-        if s <= 0:
-            continue
-        scored.append((s, rec, shifts, couplings, deg))
+        eligible.append((rec, shifts, couplings, deg))
 
-    scored.sort(key=lambda t: t[0], reverse=True)
-    chosen = scored[:N_MOLECULES]
-    print(f"{len(records)} records -> {len(scored)} eligible -> {len(chosen)} chosen")
+    chosen_raw = rng.sample(eligible, min(N_MOLECULES, len(eligible)))
+    chosen = [(rec, shifts, couplings, deg) for rec, shifts, couplings, deg in chosen_raw]
+    print(f"{len(records)} records -> {len(eligible)} eligible -> {len(chosen)} chosen (seed={SAMPLE_SEED})")
 
-    wanted_chembl = {rec.get("chembl_id") for _, rec, *_ in chosen if rec.get("chembl_id")}
-    wanted_smiles = {rec.get("smiles") for _, rec, *_ in chosen if rec.get("smiles")}
+    wanted_chembl = {rec.get("chembl_id") for rec, *_ in chosen if rec.get("chembl_id")}
+    wanted_smiles = {rec.get("smiles") for rec, *_ in chosen if rec.get("smiles")}
     xyz_chembl, xyz_smiles = build_xyz_index(wanted_chembl, wanted_smiles, len(chosen))
     fields = geometric_fields(LOW_MHZ, HIGH_MHZ, N_FIELDS)
     molecules = []
     max_sticks = 0
     n_xyz = 0
-    for rank, (score, rec, shifts, couplings, deg) in enumerate(chosen):
+    for rank, (rec, shifts, couplings, deg) in enumerate(chosen):
         win_lo, win_hi = signal_window(shifts, couplings, deg)
         xyz = xyz_chembl.get(rec.get("chembl_id")) or xyz_smiles.get(rec.get("smiles"))
         if xyz:
@@ -295,8 +303,8 @@ def main():
             "xyz": xyz,                  # precomputed 3D coords (XYZ block) or None
             "frames": frames,            # per field: {c: centers ppm, a: amps} (base64)
         })
-        print(f"  [{rank+1:2d}] {rec.get('chembl_id'):12s} score={score:6.1f} "
-              f"win=[{win_lo:.2f},{win_hi:.2f}] smiles={rec.get('smiles')[:34]}")
+        print(f"  [{rank+1:2d}] {rec.get('chembl_id'):12s} "
+              f"win=[{win_lo:.2f},{win_hi:.2f}] smiles={rec.get('smiles')[:40]}")
     print(f"max sticks/frame = {max_sticks}; molecules with 3D coords = {n_xyz}/{len(chosen)}")
 
     payload = {
@@ -310,7 +318,7 @@ def main():
             "linewidth_hz": LINEWIDTH_HZ,
             "format": "sticks",
             "encoding": "per frame {c: base64 float32 centers ppm, a: base64 uint16 amps/65535}; broaden client-side",
-            "source": "pyspin composite simulator over a 1000-molecule PubChem subset (docs/data/spin_systems_pubchem.json)",
+            "source": "pyspin composite simulator; 40 random molecules from randomized ChEMBL 8-spin dataset",
         },
         "molecules": molecules,
     }
