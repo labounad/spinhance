@@ -11,8 +11,14 @@ term without any architecture or trainer changes:
         - {name: matrix, weight: 1.0}
         - {name: surrogate_spectral, weight: 0.1, start_epoch: 40, ramp_epochs: 10}
 
-The trainer calls ``set_epoch`` once per epoch; term weights ramp linearly from
-``start_epoch`` over ``ramp_epochs``.
+The trainer calls ``set_epoch`` once per epoch; term weights follow a trapezoid:
+linear ramp from ``start_epoch`` over ``ramp_epochs`` up to ``weight``, hold, then
+(optionally) linear decay from ``decay_start_epoch`` over ``decay_epochs`` down to
+``end_weight`` (default 0). Omitting the decay fields gives the plain ramp-and-hold
+schedule. A curriculum that shapes mid-training then yields back to the anchor:
+
+        - {name: surrogate_spectral, weight: 0.3, start_epoch: 40, ramp_epochs: 10,
+           decay_start_epoch: 60, decay_epochs: 10, end_weight: 0.0}
 """
 from __future__ import annotations
 
@@ -32,6 +38,9 @@ class Term:
     weight: float = 1.0
     start_epoch: int = 0
     ramp_epochs: int = 0
+    decay_start_epoch: int | None = None   # None = no decay (ramp-and-hold)
+    decay_epochs: int = 0
+    end_weight: float = 0.0
 
 
 @LOSSES.register("composite")
@@ -48,10 +57,17 @@ class CompositeLoss(Loss):
             t.loss.set_epoch(epoch)
 
     def _weight(self, t: Term) -> float:
-        if self.epoch < t.start_epoch:
+        e = self.epoch
+        if e < t.start_epoch:
             return 0.0
+        # decay phase takes precedence once reached (ramp -> hold -> decay)
+        if t.decay_start_epoch is not None and e >= t.decay_start_epoch:
+            if t.decay_epochs > 0:
+                frac = min(1.0, (e - t.decay_start_epoch + 1) / t.decay_epochs)
+                return t.weight + (t.end_weight - t.weight) * frac
+            return t.end_weight
         if t.ramp_epochs > 0:
-            frac = min(1.0, (self.epoch - t.start_epoch + 1) / t.ramp_epochs)
+            frac = min(1.0, (e - t.start_epoch + 1) / t.ramp_epochs)
             return t.weight * frac
         return t.weight
 
@@ -89,12 +105,17 @@ def build_composite(terms_cfg: list[dict], **shared) -> CompositeLoss:
         weight = tc.pop("weight", 1.0)
         start = tc.pop("start_epoch", 0)
         ramp = tc.pop("ramp_epochs", 0)
+        decay_start = tc.pop("decay_start_epoch", None)
+        decay = tc.pop("decay_epochs", 0)
+        end_weight = tc.pop("end_weight", 0.0)
         kwargs = {**tc}
         for k, v in shared.items():
             kwargs.setdefault(k, v)
         sub = build_loss(name, **_filter_kwargs(name, kwargs))
         terms.append(Term(name=name, loss=sub, weight=weight,
-                          start_epoch=start, ramp_epochs=ramp))
+                          start_epoch=start, ramp_epochs=ramp,
+                          decay_start_epoch=decay_start, decay_epochs=decay,
+                          end_weight=end_weight))
     return CompositeLoss(terms)
 
 

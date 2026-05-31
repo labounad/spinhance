@@ -1,0 +1,59 @@
+# Run B — 64k ChEMBL with a TRAPEZOID spectral-consistency schedule (Branch 6).
+# The frozen surrogate spectral term ramps IN over epochs 40-50, holds through
+# epoch 60, then ramps back OUT over epochs 60-70 to weight 0 — so it shapes the
+# matrix prediction toward spectral consistency mid-training, then yields back to
+# the pure matrix anchor for the final 10 epochs of convergence. Compare against
+# train_64k_surrogate_spectral.yaml (ramp-up-and-hold, Run A) and train_64k.yaml
+# (matrix-only, Stage-1 baseline).
+#
+# Identical data/seed/model/epochs to Run A — only the loss schedule differs.
+run:
+  name: rebuild64k_surrogate_spectral_trapezoid
+  output_dir: model/runs
+
+data:
+  records: mol_to_spin_system/data/spin_systems_chembl.json   # 64,476 molecules
+  spectra: simulation/data/spectra
+  field: 90
+  split: none
+
+model:
+  name: resnet1d_attention_pool
+  size: medium
+  dropout: 0.1
+
+loss:
+  name: composite
+  terms:
+    - name: matrix
+      weight: 1.0
+    - name: surrogate_spectral
+      weight: 0.3                 # peak weight
+      start_epoch: 40             # ramp in (let the matrix anchor stabilize first)
+      ramp_epochs: 10             # 0 -> 0.3 over epochs 40..50
+      decay_start_epoch: 60       # then ramp back out
+      decay_epochs: 10            # 0.3 -> 0.0 over epochs 60..70
+      end_weight: 0.0             # matrix-only for the final epochs
+      checkpoint: model_artifacts/surrogate/session012_best.pt
+      field: 90
+      w1_weight: 1.0
+      cosine_weight: 0.5
+      use_clean_target: true
+
+training:
+  epochs: 80
+  batch_size: 256
+  lr: 0.0003
+  weight_decay: 0.01
+  amp: bf16
+  warmup_frac: 0.03
+  patience: 15
+  num_workers: 8
+  val_every: 1
+  seed: 0
+
+diagnostics:
+  enabled: true
+  log_every_steps: 50
+  probe_every_epochs: 5
+  probe_count: 16
