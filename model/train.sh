@@ -31,7 +31,7 @@ fi
 # ── Session number (auto-increment from S3) ───────────────────────────────────
 LAST=$(aws s3 ls "s3://$BUCKET/training/" 2>/dev/null \
   | grep -oE 'session[0-9]+' | grep -oE '[0-9]+' | sort -n | tail -1 || true)
-SESSION=$(printf "%03d" $(( ${LAST:-0} + 1 )))
+SESSION=$(printf "%03d" $(( 10#${LAST:-0} + 1 )))
 S3_PREFIX="s3://$BUCKET/training/session$SESSION"
 echo "=== SpinHance training — session $SESSION ==="
 echo "  checkpoints → $S3_PREFIX"
@@ -68,7 +68,7 @@ TRAIN_CMD="cd $REPO && PYTHONPATH=. $PYTHON -m model.run_experiment \
   --stage1-epochs 2 \
   --ramp-epochs 5 \
   --batch 256 \
-  --s3-ckpt-prefix $S3_PREFIX 2>&1 | tee $LOG"
+  --session-id $S3_PREFIX 2>&1 | tee $LOG"
 
 echo "Launching training (logs → $LOG)..."
 
@@ -93,16 +93,3 @@ else
   echo "  Tail logs: tail -f $LOG"
 fi
 
-# ── Diagnostics sync sidecar ──────────────────────────────────────────────────
-# Syncs model/runs/ JSONL artifacts (not checkpoints) to S3 every 30s so the
-# live dashboard (model/live_dashboard.py) can read them locally after an
-# `aws s3 sync` on your machine.
-nohup bash -c "
-  while true; do
-    aws s3 sync \"$REPO/model/runs\" \"s3://$BUCKET/model/runs\" \
-      --exclude '*.pt' --no-progress 2>>/tmp/sync.log
-    sleep 30
-  done
-" >> /tmp/sync.log 2>&1 &
-disown
-echo "  Diagnostics sync → s3://$BUCKET/model/runs (every 30s, log: /tmp/sync.log)"
