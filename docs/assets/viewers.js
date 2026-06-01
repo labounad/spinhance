@@ -207,7 +207,7 @@
     // All molecules display at this fixed scale (px per native SVG pixel).
     // ChemDraw exports all molecules at the same bond length in SVG px, so
     // a single PIXEL_SCALE makes every structure appear at the same bond size.
-    var PIXEL_SCALE = 3;
+    var PIXEL_SCALE = 2.5;
 
     function svgUri(svg) {
       return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
@@ -219,14 +219,12 @@
     // we convert using imgW/imgH (displayed image dimensions) + offset for centering.
 
     function atomPx(p) {
-      // Returns {x, y} in canvas pixel space, accounting for centered image offset
-      if (!current) return {x:0, y:0};
-      var imgW = current.svg_w * PIXEL_SCALE;
-      var imgH = current.svg_h * PIXEL_SCALE;
+      // Returns {x, y} in canvas pixel space, using the clamped display dimensions
+      if (!current || !current._dispW) return {x:0, y:0};
       var boxW = overlay.width, boxH = overlay.height;
-      var offX = (boxW - imgW) / 2;
-      var offY = (boxH - imgH) / 2;
-      return {x: offX + p[0] * imgW, y: offY + p[1] * imgH};
+      var offX = (boxW - current._dispW) / 2;
+      var offY = (boxH - current._dispH) / 2;
+      return {x: offX + p[0] * current._dispW + 11, y: offY + p[1] * current._dispH - 14};
     }
 
     function drawOverlay(activeLabel) {
@@ -248,8 +246,13 @@
         return;
       }
 
-      // Spotlight: dark veil + reveal active group
-      ctx.fillStyle = "rgba(0,0,0,0.55)"; ctx.fillRect(0, 0, W, H);
+      // Spotlight: veil colour matches the mol-box background (dark or light mode)
+      var isDark = document.documentElement.getAttribute("data-theme") === "dark";
+      var veilColor = isDark ? "rgba(0,0,0,0.55)" : "rgba(255,255,255,0.65)";
+      var revealOpaque = isDark ? "rgba(0,0,0,1)" : "rgba(255,255,255,1)";
+      var revealMid    = isDark ? "rgba(0,0,0,0.82)" : "rgba(255,255,255,0.82)";
+      var revealEdge   = isDark ? "rgba(0,0,0,0)" : "rgba(255,255,255,0)";
+      ctx.fillStyle = veilColor; ctx.fillRect(0, 0, W, H);
       var ag = current.groups.find(function(g){ return g.label === activeLabel; });
       if (!ag) return;
 
@@ -257,9 +260,9 @@
       ag.atoms.forEach(function(p) {
         var pt = atomPx(p);
         var gr = ctx.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, r*2.8);
-        gr.addColorStop(0,   "rgba(0,0,0,1)");
-        gr.addColorStop(0.5, "rgba(0,0,0,0.82)");
-        gr.addColorStop(1,   "rgba(0,0,0,0)");
+        gr.addColorStop(0,   revealOpaque);
+        gr.addColorStop(0.5, revealMid);
+        gr.addColorStop(1,   revealEdge);
         ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(pt.x, pt.y, r*2.8, 0, Math.PI*2); ctx.fill();
       });
       ctx.globalCompositeOperation = "source-over";
@@ -331,9 +334,19 @@
       if (current.svg) {
         var img = document.createElement("img");
         img.className = "sv-mol-img"; img.alt = current.id;
-        // Size at fixed scale so all molecules have the same bond size on screen
+        // Fixed scale for uniform bond sizes; clamp to box minus 24px padding each side
+        var PAD = 24;
+        var maxW = molBox.clientWidth  - PAD * 2;
+        var maxH = molBox.clientHeight - PAD * 2;
         var imgW = current.svg_w * PIXEL_SCALE;
         var imgH = current.svg_h * PIXEL_SCALE;
+        // If the natural size overflows, scale down uniformly (preserves bond proportions
+        // for this molecule only; other similarly-sized molecules are unaffected)
+        var clamp = Math.min(1, maxW / imgW, maxH / imgH);
+        imgW = Math.round(imgW * clamp);
+        imgH = Math.round(imgH * clamp);
+        current._dispW = imgW;
+        current._dispH = imgH;
         img.style.width  = imgW + "px";
         img.style.height = imgH + "px";
         img.src = svgUri(current.svg);

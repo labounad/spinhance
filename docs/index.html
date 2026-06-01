@@ -291,7 +291,12 @@
   .sv-body{display:flex;align-items:stretch;min-height:300px}
   .sv-mol-box{position:relative;flex:1;background:#000;min-width:0;
     height:320px;overflow:hidden;display:flex;align-items:center;justify-content:center}
-  .sv-mol-img{display:block;flex:none}   /* JS sets explicit px width/height */
+  :root .sv-mol-box{background:#fff}
+  [data-theme="dark"] .sv-mol-box{background:#000}
+  .sv-mol-img{display:block;flex:none}
+  /* Light mode: invert the white-on-black SVG so bonds appear dark on white */
+  :root .sv-mol-img{filter:invert(1)}
+  [data-theme="dark"] .sv-mol-img{filter:none}
   .sv-overlay{position:absolute;inset:0;cursor:crosshair}
   .sv-table-col{flex:0 0 182px;border-left:1px solid var(--line);
     display:flex;flex-direction:column;min-width:0}
