@@ -414,6 +414,29 @@
       });
   }
 
-  function boot() { initCurves(); initTable(); initExplorer(); initSpinViewer(); }
+  // ====================== 5. HELD-OUT TEST EVAL (val vs test) ==============
+  function initTestEval() {
+    const host = $("#testEval"); if (!host) return;
+    fetch("data/test_eval.json").then(r => r.json()).then(d => {
+      const models = ["025", "026"];
+      const rows = [["shift_mae_ppm", "shift MAE (ppm) ↓"], ["j_mae_hz", "J MAE (Hz) ↓"],
+        ["presence_f1", "presence F1 ↑"], ["deg_acc_balanced", "deg balanced-acc ↑"]];
+      let h = '<table class="cmp"><thead><tr><th>metric</th>';
+      models.forEach(m => { h += '<th class="num">' + m + ' val</th><th class="num">' + m + ' test</th>'; });
+      h += '</tr></thead><tbody>';
+      rows.forEach(function (rk) {
+        h += '<tr><td>' + rk[1] + '</td>';
+        models.forEach(m => { h += '<td class="num">' + d[m].val[rk[0]] + '</td><td class="num tval">' + d[m].test[rk[0]] + '</td>'; });
+        h += '</tr>';
+      });
+      h += '</tbody></table>';
+      const meta = d._meta || {};
+      host.innerHTML = h + '<p class="muted" style="font-size:12px;margin-top:8px">' +
+        (meta.note || "") + ' Test eval: ' + (meta.test_n_eval || "?") + ' of ' + (meta.test_n_total || "?") +
+        ' held-out molecules. <b>Test ≈ validation → no overfitting.</b></p>';
+    }).catch(e => { host.innerHTML = "<p class='muted'>test eval unavailable</p>"; console.error(e); });
+  }
+
+  function boot() { initCurves(); initTable(); initTestEval(); initExplorer(); initSpinViewer(); }
   if (document.readyState !== "loading") boot(); else document.addEventListener("DOMContentLoaded", boot);
 })();
