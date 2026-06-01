@@ -22,7 +22,7 @@ import numpy as np
 
 from simulation.graph_io import read_spin_systems, record_to_arrays
 
-__all__ = ["load_records"]
+__all__ = ["load_records", "load_pubchem_records"]
 
 
 def load_records(spin_systems_json, spectra_root, fields=(90,), require_spectra=True):
@@ -54,4 +54,30 @@ def load_records(spin_systems_json, spectra_root, fields=(90,), require_spectra=
     if missing:
         print(f"[records] WARNING: {len(missing)} molecules missing spectra "
               f"(e.g. {missing[:3]}) — skipped.")
+    return records
+
+
+def load_pubchem_records(spin_systems_json, max_mol=0):
+    """Records for the PubChem 3M+ regime: spectra come from stacked ``part_<k>.npy``
+    shards (``model.data.stacked_spectra.StackedSpectra``), not per-molecule files.
+    Each record carries ``row`` = its global index in record order, which is also
+    its row in the concatenated shards; the dataset's ``spectra_source[row]`` fetches
+    the spectrum. ``max_mol`` truncates for quick prelim runs (streaming, so it stops
+    early without parsing the whole file)."""
+    records = []
+    for idx, rec in read_spin_systems(spin_systems_json):
+        _labels, shifts, couplings, degeneracy = record_to_arrays(rec)
+        records.append({
+            "mol_id": f"mol_{idx:06d}",
+            "row": idx,
+            "shifts": np.asarray(shifts, dtype=float),
+            "couplings": np.asarray(couplings, dtype=float),
+            "degeneracy": np.asarray(degeneracy, dtype=int),
+            "smiles": rec.get("smiles"),
+            "chembl_id": rec.get("chembl_id"),
+            "inchikey": rec.get("inchikey"),
+            "n_spins": int(sum(degeneracy)),
+        })
+        if max_mol and len(records) >= max_mol:
+            break
     return records

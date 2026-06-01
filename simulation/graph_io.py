@@ -139,21 +139,41 @@ def record_to_xml(record: dict, frequency_mhz: float = 90.0, **kwargs) -> ET.Ele
 def read_spin_systems(path: str | Path):
     """Yield ``(index, record)`` for each molecule.
 
-    Accepts Task 2's single JSON array, and also tolerates JSONL (one object
-    per line) so either layout works.
+    Accepts Task 2's single JSON array and also tolerates JSONL (one object per
+    line). ``.gz`` files are decompressed transparently; JSONL is streamed line
+    by line (so the 3M+ PubChem ``spin_systems_pubchem.json.gz`` never has to
+    materialise the whole file as one string), while a JSON array is parsed in
+    one shot.
     """
+    import gzip
     path = Path(path)
-    text = path.read_text().lstrip()
-    if text.startswith("version https://git-lfs"):
-        raise ValueError(
-            f"{path} is an unresolved git-LFS pointer, not the data. "
-            "Run `git lfs pull` (or `git lfs checkout`) to materialise it.")
-    if text.startswith("["):
-        for i, rec in enumerate(json.loads(text)):
-            yield i, rec
-    else:
-        for i, line in enumerate(l for l in text.splitlines() if l.strip()):
-            yield i, json.loads(line)
+    opener = gzip.open if str(path).endswith(".gz") else open
+    with opener(path, "rt") as f:
+        first = f.read(1)
+        while first and first.isspace():
+            first = f.read(1)
+        if first == "v":                                  # git-LFS pointer guard
+            if (first + f.readline()).startswith("version https://git-lfs"):
+                raise ValueError(
+                    f"{path} is an unresolved git-LFS pointer, not the data. "
+                    "Run `git lfs pull` (or `git lfs checkout`) to materialise it.")
+            raise ValueError(f"{path}: unrecognised content")
+        if first == "[":                                  # JSON array (parse whole)
+            for i, rec in enumerate(json.loads(first + f.read())):
+                yield i, rec
+        else:                                             # JSONL (stream)
+            i = 0
+            for line in _iter_jsonl(first, f):
+                if line.strip():
+                    yield i, json.loads(line)
+                    i += 1
+
+
+def _iter_jsonl(first_char: str, f):
+    """Yield JSONL lines, re-attaching the already-consumed first character."""
+    rest = f.readline()
+    yield first_char + rest
+    yield from f
 
 
 def write_spin_systems(path: str | Path, records) -> int:

@@ -26,6 +26,10 @@ SIZE_PRESETS = {
     "small":  (24, (32, 64, 128, 192), (1, 1, 1, 1)),
     "medium": (32, (64, 128, 256, 512), (2, 2, 2, 2)),
     "large":  (48, (96, 192, 384, 768), (2, 2, 3, 2)),
+    # xl: deeper/wider conv stem for the 3M+ PubChem regime. Paired with the
+    # transformer at dim=512, enc=4, dec=6 this lands at ~50M params (the "48M
+    # tier") — ~5x the medium production model, justified by 50x more data.
+    "xl":     (64, (128, 256, 512, 768), (2, 3, 4, 3)),
 }
 
 

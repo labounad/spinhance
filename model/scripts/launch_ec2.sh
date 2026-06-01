@@ -22,6 +22,9 @@ RUN_TAG="${RUN_TAG:-rebuild}"                    # suffixes local tmp files + Na
 # (the surrogate_spectral loss config references model_artifacts/surrogate/...):
 SURROGATE_CKPT_S3="${SURROGATE_CKPT_S3:-}"
 SURROGATE_CKPT_DEST="${SURROGATE_CKPT_DEST:-model_artifacts/surrogate/session012_best.pt}"
+# DATA_MODE=chembl (default, 64k per-file) | pubchem (3M+ stacked part_<k>.npy from S3).
+DATA_MODE="${DATA_MODE:-chembl}"
+EBS_GB="${EBS_GB:-120}"                          # bump for pubchem (196GB of 90MHz parts)
 
 BUCKET="spinhance-data"
 SUBNET="subnet-0096ffc9c05bebab3"
@@ -71,7 +74,7 @@ _launch() {
   aws ec2 run-instances --profile "$PROFILE" --region "$REGION" \
     --image-id "$AMI" --instance-type "$INSTANCE_TYPE" --subnet-id "$subnet" \
     --security-group-ids "$SG" --iam-instance-profile "Name=$INST_PROFILE" \
-    --block-device-mappings '[{"DeviceName":"/dev/xvda","Ebs":{"VolumeSize":120,"VolumeType":"gp3"}}]' \
+    --block-device-mappings "[{\"DeviceName\":\"/dev/xvda\",\"Ebs\":{\"VolumeSize\":$EBS_GB,\"VolumeType\":\"gp3\"}}]" \
     --metadata-options '{"HttpTokens":"required"}' \
     --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=spinhance-$RUN_TAG}]" \
     --query 'Instances[0].InstanceId' --output text $opts 2>/dev/null
@@ -117,13 +120,25 @@ _ssh "mkdir -p $WORKSPACE && aws s3 cp s3://$BUCKET/code/spinhance-$RUN_TAG.tar.
   tar xzf /tmp/c.tar.gz -C $WORKSPACE && rm /tmp/c.tar.gz"
 rm "$ARCHIVE"
 
-echo "[4/5] Downloading data on instance..."
-_ssh "set -e
-  mkdir -p $WORKSPACE/mol_to_spin_system/data $WORKSPACE/simulation/data/spectra/90MHz
-  aws s3 cp s3://$BUCKET/spin_systems_chembl.json \
-    $WORKSPACE/mol_to_spin_system/data/spin_systems_chembl.json --no-progress
-  aws s3 cp s3://$BUCKET/spectra/90MHz/mol_all.tar.gz /tmp/mol_all.tar.gz --no-progress
-  tar xzf /tmp/mol_all.tar.gz -C $WORKSPACE/simulation/data/spectra/90MHz/ && rm /tmp/mol_all.tar.gz"
+echo "[4/5] Downloading data on instance ($DATA_MODE)..."
+if [ "$DATA_MODE" = "pubchem" ]; then
+  # 3M+ PubChem: gz records + stacked 90 MHz shards (90 MHz ONLY — model input constraint)
+  _ssh "set -e
+    mkdir -p $WORKSPACE/data/pubchem/spectra_parts/90MHz
+    aws s3 cp s3://$BUCKET/pubchem/spin_systems_pubchem.json.gz \
+      $WORKSPACE/data/pubchem/spin_systems_pubchem.json.gz --no-progress
+    echo '  syncing 90MHz parts (~196GB)...'
+    aws s3 sync s3://$BUCKET/pubchem/spectra_parts/90MHz/ \
+      $WORKSPACE/data/pubchem/spectra_parts/90MHz/ --no-progress
+    echo \"  parts on disk: \$(ls $WORKSPACE/data/pubchem/spectra_parts/90MHz/ | grep -c part_)\""
+else
+  _ssh "set -e
+    mkdir -p $WORKSPACE/mol_to_spin_system/data $WORKSPACE/simulation/data/spectra/90MHz
+    aws s3 cp s3://$BUCKET/spin_systems_chembl.json \
+      $WORKSPACE/mol_to_spin_system/data/spin_systems_chembl.json --no-progress
+    aws s3 cp s3://$BUCKET/spectra/90MHz/mol_all.tar.gz /tmp/mol_all.tar.gz --no-progress
+    tar xzf /tmp/mol_all.tar.gz -C $WORKSPACE/simulation/data/spectra/90MHz/ && rm /tmp/mol_all.tar.gz"
+fi
 
 # Pull the frozen surrogate checkpoint (Branch 6 spectral-consistency loss)
 if [ -n "$SURROGATE_CKPT_S3" ]; then

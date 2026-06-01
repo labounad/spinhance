@@ -1,0 +1,62 @@
+# PRELIMINARY 3M+ run — "xl 025": session025's recipe at xl scale, on the full
+# PubChem set. Deliberately NOT the 026 features (peak channel / soft-equiv are
+# still being validated in session026) so this isolates the effect of MORE DATA +
+# a BIGGER MODEL on the proven 025 matrix recipe.
+#   model : spingraph_decoder size=xl (deeper/wider conv stem) + dim512 enc4 dec6
+#           => ~57M params, ~5.6x the 10M medium production model.
+#   data  : PubChem 3.2M, 90 MHz ONLY (hard input constraint), stacked part_<k>.npy
+#           shards (data.parts) keyed to spin_systems_pubchem.json.gz by record order.
+#   loss  : matrix only, shift weighted 2x (identical to 025).
+# Fewer epochs than the 64k runs: 50x more data converges in far fewer passes.
+run:
+  name: spingraph_xl_025_3M
+  output_dir: model/runs
+
+data:
+  records: data/pubchem/spin_systems_pubchem.json.gz
+  parts: data/pubchem/spectra_parts/90MHz      # stacked shards -> StackedSpectra
+  field: 90
+  split: none                                   # random 70/20/10 (scaffold too slow at 3M)
+  max_mol: 0                                     # 0 = full 3.2M (set >0 for a faster prelim subset)
+
+model:
+  name: spingraph_decoder
+  size: xl
+  dim: 512
+  enc_layers: 4
+  dec_layers: 6
+  n_heads: 8
+  dropout: 0.1
+  # NO use_peak_channel here — keep this a clean 025-recipe scale-up.
+
+loss:
+  name: composite
+  terms:
+    - name: matrix
+      weight: 1.0
+      weights:                  # shift weighted 2x (same as 025)
+        shift: 2.0
+        jmag: 1.0
+        presence: 0.5
+        deg: 0.5
+
+training:
+  epochs: 25
+  batch_size: 256
+  lr: 0.0004
+  weight_decay: 0.01
+  amp: bf16
+  warmup_frac: 0.02
+  lr_stable_frac: 0.50
+  lr_min_factor: 0.30
+  grad_clip: 1.0
+  patience: 6
+  num_workers: 8
+  val_every: 1
+  seed: 0
+
+diagnostics:
+  enabled: true
+  log_every_steps: 200
+  probe_every_epochs: 2
+  probe_count: 16
