@@ -27,7 +27,10 @@ mkdir -p logs data/processed/shards
 INPUT="${INPUT:-generate/data/chembl_8spin.xyz.gz}"
 MM="$HOME/.local/bin/micromamba"
 
-"$MM" run -n spinhance python -m mol_to_spin_system.xyz \
+eval "$("$MM" shell hook --shell bash)"
+micromamba activate spinhance
+
+python -m mol_to_spin_system.xyz \
     "$INPUT" \
     "data/processed/shards/shard_${SLURM_ARRAY_TASK_ID}.json" \
     --workers "$SLURM_CPUS_PER_TASK" \
