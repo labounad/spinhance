@@ -256,7 +256,7 @@
 
   /* generic figure caption + frame */
   .figcap{font-size:13px;color:var(--ink-faint);text-align:center;margin-top:6px;letter-spacing:.02em;}
-  .fig-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;
+  .fig-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;box-sizing:border-box;
     box-shadow:var(--shadow);padding:16px 18px;display:flex;flex-direction:column;min-height:0;}
 
   /* node-embedded mini glyphs (Goal/Scope flow) */
@@ -671,9 +671,17 @@
           <g transform="translate(556,52)">
             <g class="grp-dot" stroke="var(--panel)" stroke-width="1.2">
               <g fill="var(--accent)"><rect x="0" y="0" width="11" height="11" rx="2"/><rect x="12" y="12" width="11" height="11" rx="2"/><rect x="24" y="24" width="11" height="11" rx="2"/><rect x="36" y="36" width="11" height="11" rx="2"/><rect x="48" y="48" width="11" height="11" rx="2"/><rect x="60" y="60" width="11" height="11" rx="2"/><rect x="72" y="72" width="11" height="11" rx="2"/><rect x="84" y="84" width="11" height="11" rx="2"/></g>
-              <g fill="var(--accent-3)" opacity=".5"><rect x="12" y="0" width="11" height="11" rx="2"/><rect x="0" y="12" width="11" height="11" rx="2"/><rect x="36" y="0" width="11" height="11" rx="2"/><rect x="0" y="36" width="11" height="11" rx="2"/><rect x="48" y="24" width="11" height="11" rx="2"/><rect x="24" y="48" width="11" height="11" rx="2"/><rect x="72" y="60" width="11" height="11" rx="2"/><rect x="60" y="72" width="11" height="11" rx="2"/><rect x="84" y="48" width="11" height="11" rx="2"/><rect x="48" y="84" width="11" height="11" rx="2"/></g>
-              <g fill="var(--line)"><rect x="24" y="0" width="11" height="11" rx="2"/><rect x="60" y="0" width="11" height="11" rx="2"/><rect x="84" y="0" width="11" height="11" rx="2"/><rect x="72" y="12" width="11" height="11" rx="2"/></g>
-              <g fill="var(--accent-2)"><rect x="106" y="0" width="11" height="11" rx="2"/><rect x="106" y="12" width="11" height="11" rx="2"/><rect x="106" y="24" width="11" height="11" rx="2"/><rect x="106" y="36" width="11" height="11" rx="2"/><rect x="106" y="48" width="11" height="11" rx="2"/><rect x="106" y="60" width="11" height="11" rx="2"/><rect x="106" y="72" width="11" height="11" rx="2"/><rect x="106" y="84" width="11" height="11" rx="2"/></g>
+              <g fill="var(--accent-3)" opacity=".5">
+                <rect x="12" y="0" width="11" height="11" rx="2"/><rect x="0" y="12" width="11" height="11" rx="2"/>
+                <rect x="24" y="0" width="11" height="11" rx="2"/><rect x="0" y="24" width="11" height="11" rx="2"/>
+                <rect x="36" y="12" width="11" height="11" rx="2"/><rect x="12" y="36" width="11" height="11" rx="2"/>
+                <rect x="36" y="24" width="11" height="11" rx="2"/><rect x="24" y="36" width="11" height="11" rx="2"/>
+                <rect x="48" y="36" width="11" height="11" rx="2"/><rect x="36" y="48" width="11" height="11" rx="2"/>
+                <rect x="60" y="48" width="11" height="11" rx="2"/><rect x="48" y="60" width="11" height="11" rx="2"/>
+                <rect x="72" y="60" width="11" height="11" rx="2"/><rect x="60" y="72" width="11" height="11" rx="2"/>
+                <rect x="72" y="24" width="11" height="11" rx="2"/><rect x="24" y="72" width="11" height="11" rx="2"/>
+                <rect x="84" y="72" width="11" height="11" rx="2"/><rect x="72" y="84" width="11" height="11" rx="2"/></g>
+              <g fill="var(--accent-2)"><rect x="96" y="0" width="11" height="11" rx="2"/><rect x="96" y="12" width="11" height="11" rx="2"/><rect x="96" y="24" width="11" height="11" rx="2"/><rect x="96" y="36" width="11" height="11" rx="2"/><rect x="96" y="48" width="11" height="11" rx="2"/><rect x="96" y="60" width="11" height="11" rx="2"/><rect x="96" y="72" width="11" height="11" rx="2"/><rect x="96" y="84" width="11" height="11" rx="2"/></g>
             </g>
             <text x="58" y="118" class="af-l">8 × 9 spin matrix</text>
           </g>
@@ -1110,17 +1118,17 @@ function graphSVG(opts) {
       edges += `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${_cv('--accent')}" stroke-width="${strong ? 2.4 : 1.6}" opacity="${strong ? .72 : .42}"/>`;
       if (opts.jlabels && strong) { const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
         jl += `<rect x="${(mx - 21).toFixed(1)}" y="${(my - 8).toFixed(1)}" width="42" height="14" rx="4" fill="${_cv('--panel-2')}" stroke="${_cv('--line')}"/>`
-            + `<text x="${mx.toFixed(1)}" y="${(my + 2.5).toFixed(1)}" text-anchor="middle" style="font:600 9px ui-sans-serif" fill="${_cv('--ink-soft')}">${j.toFixed(1)} Hz</text>`; }
+            + `<text x="${mx.toFixed(1)}" y="${(my + 2.5).toFixed(1)}" text-anchor="middle" style="font:600 9px system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" fill="${_cv('--ink-soft')}">${j.toFixed(1)} Hz</text>`; }
     });
   }
   let nodes = "";
   order.forEach(l => { const gg = byLabel[l], [x, y] = pos[l];
     nodes += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r}" fill="${gg.color}" stroke="${_cv('--panel')}" stroke-width="2.5"/>`;
     if (opts.delta)
-      nodes += `<text x="${x.toFixed(1)}" y="${(y - 1).toFixed(1)}" text-anchor="middle" style="font:700 11px ui-sans-serif" fill="#fff">${gg.delta.toFixed(1)}</text>`
-             + `<text x="${x.toFixed(1)}" y="${(y + 10).toFixed(1)}" text-anchor="middle" style="font:600 8px ui-sans-serif" fill="#fff" opacity=".85">${gg.label}${gg.h_count > 1 ? '·' + gg.h_count + 'H' : ''}</text>`;
+      nodes += `<text x="${x.toFixed(1)}" y="${(y - 1).toFixed(1)}" text-anchor="middle" style="font:700 11px system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" fill="#fff">${gg.delta.toFixed(1)}</text>`
+             + `<text x="${x.toFixed(1)}" y="${(y + 10).toFixed(1)}" text-anchor="middle" style="font:600 8px system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" fill="#fff" opacity=".85">${gg.label}${gg.h_count > 1 ? '·' + gg.h_count + 'H' : ''}</text>`;
     else
-      nodes += `<text x="${x.toFixed(1)}" y="${(y + 4).toFixed(1)}" text-anchor="middle" style="font:700 12px ui-sans-serif" fill="#fff">${gg.label}</text>`;
+      nodes += `<text x="${x.toFixed(1)}" y="${(y + 4).toFixed(1)}" text-anchor="middle" style="font:700 12px system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" fill="#fff">${gg.label}</text>`;
   });
   return `<svg viewBox="0 0 ${2 * cx} ${2 * cy}" style="width:100%;height:auto;max-height:${opts.maxh || 300}px;overflow:visible">${edges}${jl}${nodes}</svg>`;
 }
