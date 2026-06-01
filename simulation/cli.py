@@ -30,19 +30,20 @@ from simulation.mnova_runner import MNOVA_DEFAULT
 from simulation.pipeline import DEFAULT_FIELDS_MHZ, run_pipeline
 from simulation.plotting import plot_field_comparison
 
-_REPO_DATA = _REPO_ROOT / "data" / "processed"
+_SIM_DATA = Path(__file__).resolve().parent / "data"       # simulation/data/
 
 
 def _add_run(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser("run", help="Run the full simulation pipeline")
-    p.add_argument("--xml_dir", type=Path, default=_REPO_DATA / "xmls_source",
+    p.add_argument("--xml_dir", type=Path, default=_SIM_DATA / "xmls_source",
                    help="Directory of source mnova-spinsim XML files")
-    p.add_argument("--graphs", type=Path, default=None,
-                   help="Task-2 spin-graph JSONL (alternative to --xml_dir). "
+    p.add_argument("--graphs", type=Path,
+                   default=_REPO_ROOT / "mol_to_spin_system" / "data" / "spin_systems.json",
+                   help="Task-2 spin-graph JSON (alternative to --xml_dir). "
                         "engine=python consumes it directly; mnova/auto "
                         "materialize XMLs first")
-    p.add_argument("--out_dir", type=Path, default=_REPO_DATA,
-                   help="Root output directory")
+    p.add_argument("--out_dir", type=Path, default=_SIM_DATA,
+                   help="Root output directory (default: simulation/data/)")
     p.add_argument("--mnova", type=Path, default=MNOVA_DEFAULT,
                    help="Path to the MestReNova executable")
     p.add_argument("--fields", type=float, nargs="+", default=list(DEFAULT_FIELDS_MHZ),
@@ -76,17 +77,19 @@ def _add_plot(sub: argparse._SubParsersAction) -> None:
 
 def _add_export(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser("export", help="Pack a spectra/ dir into one .tar.gz")
-    p.add_argument("--spectra_dir", type=Path, required=True,
-                   help="Dir containing <field>MHz/<stem>.npy subfolders and index.csv")
-    p.add_argument("--out", type=Path, required=True,
-                   help="Output tarball path (e.g. simulation/data/spectra/90MHz.tar.gz)")
+    p.add_argument("--spectra_dir", type=Path, default=_SIM_DATA / "spectra",
+                   help="Dir containing <field>MHz/ subfolders and index.csv "
+                        "(default: simulation/data/spectra/)")
+    p.add_argument("--out", type=Path, default=None,
+                   help="Output tarball path; defaults to "
+                        "<spectra_dir>/<field>MHz.tar.gz")
     p.add_argument("--field", default="90",
-                   help="Field to pack, e.g. 90 or 90MHz (default: 90); "
-                        "omit to pack all fields")
-    p.add_argument("--no-sparsify", action="store_true",
-                   help="Store dense spectra instead of sparsifying")
+                   help="Field to pack, e.g. 90 or 90MHz (default: 90)")
+    p.add_argument("--sparsify", action="store_true",
+                   help="Convert dense .npy to sparse .npz (saves disk, "
+                        "load with simulation.spectrum_io.load_spectrum)")
     p.add_argument("--cutoff", type=float, default=0.001,
-                   help="Sparsify: drop points <= cutoff x max per spectrum (default 0.001)")
+                   help="Sparsify cutoff: drop points <= cutoff × max (default 0.001)")
     p.add_argument("--no-renormalize", action="store_true",
                    help="Do not rescale sparse spectra back to integral 1")
 
@@ -149,10 +152,14 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "export":
         from simulation.export import export_spectra
+        out = args.out
+        if out is None:
+            digits = "".join(c for c in str(args.field) if c.isdigit()) if args.field else "all"
+            out = args.spectra_dir / f"{digits}MHz.tar.gz"
         export_spectra(
-            args.spectra_dir, args.out,
+            args.spectra_dir, out,
             field=args.field or None,
-            sparsify_data=not args.no_sparsify,
+            sparsify_data=args.sparsify,
             cutoff=args.cutoff,
             renormalize=not args.no_renormalize,
         )

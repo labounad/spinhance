@@ -143,13 +143,36 @@ def run_pyspin_batch(
 
 # ── Graph input (Task 2 JSONL → npy), pyspin engine ──────────────────────────
 
+# Process-local array cache; populated by _init_graph_workers in each worker.
+# The main process sets this directly for the workers==1 path (no IPC).
+_worker_graphs: dict | None = None  # idx -> (shifts, couplings, degeneracy)
+
+
+def _init_graph_workers(jsonl_path: str) -> None:
+    """Initializer: parse the spin-system file ONCE per worker process.
+
+    Stores pre-extracted numeric arrays so task tuples only carry an index,
+    eliminating the per-task IPC cost of pickling full graph dicts.
+    """
+    global _worker_graphs
+    from simulation.graph_io import read_spin_systems, record_to_arrays
+    _worker_graphs = {
+        idx: record_to_arrays(rec)[1:]  # drop labels → (shifts, couplings, degeneracy)
+        for idx, rec in read_spin_systems(jsonl_path)
+    }
+
+
 def _graph_worker(task):
-    """Top-level (picklable) worker: one (graph, field) -> spectrum file task."""
-    graph, field, out_path, points, ppm_from, ppm_to, linewidth, fmt = task
+    """Top-level picklable worker: (idx, field) → spectrum file.
+
+    Reads spin-system arrays from the process-local cache set by
+    ``_init_graph_workers``; task tuple carries only an integer index so IPC
+    cost is O(1) per task regardless of molecule size.
+    """
+    idx, field, out_path, points, ppm_from, ppm_to, linewidth, fmt = task
     try:
-        from simulation.graph_io import record_to_arrays
         from simulation.spectrum_io import save_dense, save_peaks
-        _labels, shifts, couplings, degeneracy = record_to_arrays(graph)
+        shifts, couplings, degeneracy = _worker_graphs[idx]
         if fmt == "peaks":
             from simulation.pyspin.cluster import transitions_pyspin
             centers, amps = transitions_pyspin(shifts, couplings, degeneracy, field)
@@ -182,11 +205,19 @@ def run_pyspin_batch_graphs(
     ``"peaks"`` (``mol_<i>.npz`` line list, lineshape applied on load). Output:
     ``<out_dir>/spectra/<field>MHz/mol_<i>.{npy,npz}`` (index = record line) +
     shared ``ppm_axis.npy`` per field + ``index.csv`` (index → molecule id).
+
+    IPC design: graphs are loaded ONCE per worker process via
+    ``_init_graph_workers`` (pool initializer). Task tuples carry only an
+    integer index — not the graph dict — so the main process is never the
+    serialization bottleneck regardless of worker count or dataset size.
+    Tasks are generated lazily so the 2 × N_molecules task list is never fully
+    materialised in RAM.
     """
     import csv
 
     from simulation.graph_io import molecule_id, read_spin_systems
 
+    jsonl_path = Path(jsonl_path)
     out_dir = Path(out_dir)
     ext = "npz" if fmt == "peaks" else "npy"
     graphs = list(read_spin_systems(jsonl_path))   # [(idx, record), ...]
@@ -196,14 +227,10 @@ def run_pyspin_batch_graphs(
 
     spectra_root = out_dir / "spectra"
     ppm_axis = np.linspace(ppm_from, ppm_to, points)
-    tasks = []
     for field in fields_mhz:
         fdir = spectra_root / f"{field:.0f}MHz"
         fdir.mkdir(parents=True, exist_ok=True)
         np.save(fdir / "ppm_axis.npy", ppm_axis)
-        for idx, graph in graphs:
-            tasks.append((graph, float(field), str(fdir / f"mol_{idx:06d}.{ext}"),
-                          points, ppm_from, ppm_to, linewidth_hz, fmt))
 
     # id manifest: index → molecule identifier
     spectra_root.mkdir(parents=True, exist_ok=True)
@@ -213,21 +240,35 @@ def run_pyspin_batch_graphs(
         for idx, graph in graphs:
             w.writerow([f"mol_{idx:06d}", molecule_id(graph, "")])
 
-    print(f"pyspin graph batch: {len(graphs)} molecules × {len(fields_mhz)} fields "
-          f"= {len(tasks)} sims on {workers} workers")
+    n = len(graphs)
+    total = n * len(fields_mhz)
+
+    def _task_gen():
+        for field in fields_mhz:
+            fdir = spectra_root / f"{field:.0f}MHz"
+            for idx, _ in graphs:
+                yield (idx, float(field), str(fdir / f"mol_{idx:06d}.{ext}"),
+                       points, ppm_from, ppm_to, linewidth_hz, fmt)
+
+    print(f"pyspin graph batch: {n} molecules × {len(fields_mhz)} fields "
+          f"= {total} sims on {workers} workers")
 
     if workers == 1:
-        results = [_graph_worker(t) for t in _progress(tasks, len(tasks), "simulating")]
+        _init_graph_workers(str(jsonl_path))
+        results = [_graph_worker(t) for t in _progress(_task_gen(), total, "simulating")]
     else:
         ctx = mp.get_context("spawn")
-        with ctx.Pool(processes=workers) as pool:
-            results = list(_progress(pool.imap_unordered(_graph_worker, tasks, chunksize=4),
-                                     len(tasks), "simulating"))
+        with ctx.Pool(processes=workers,
+                      initializer=_init_graph_workers,
+                      initargs=(str(jsonl_path),)) as pool:
+            results = list(_progress(
+                pool.imap_unordered(_graph_worker, _task_gen(), chunksize=16),
+                total, "simulating"))
 
     failures = [(o, err) for o, ok, err in results if not ok]
     succeeded = len(results) - len(failures)
-    print(f"  done: {succeeded}/{len(tasks)} succeeded")
+    print(f"  done: {succeeded}/{total} succeeded")
     for o, err in failures[:10]:
         print(f"  FAILED {o}: {err}")
-    return {"tasks": len(tasks), "succeeded": succeeded,
+    return {"tasks": total, "succeeded": succeeded,
             "failed": len(failures), "failures": failures}
