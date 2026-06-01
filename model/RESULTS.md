@@ -1,4 +1,52 @@
-# SpinHance Model Results — Reference Baseline
+# SpinHance Model Results
+
+## ⭐⭐ PRODUCTION MODEL — `spingraph_decoder` (structured query decoder)
+
+The IDEAS north-star architecture (Families C+G+L) **dramatically beats the dense-CNN
+baseline** and is the new production model. session022 (`train_64k_spingraph_canonical.yaml`):
+
+| metric | CNN baseline floor | **spingraph_decoder (022)** | improvement |
+|--------|--------------------|-----------------------------|-------------|
+| shift MAE (ppm) | 0.279 | **0.064** | **4.4×** |
+| J MAE (Hz) | 1.80 | **0.91** | **2.0×** |
+| presence F1 | 0.807 | **0.916** | +0.11 |
+| deg acc | 0.987 | **0.996** | + |
+| deg **balanced**-acc | 0.732 | **0.928** | rare-class problem solved |
+
+(h_shift 0.062 ≈ shift 0.064 → not a permutation artifact. best ep71, early-stopped ep91.
+checkpoint: `s3://spinhance-data/training/session022/runs/.../checkpoints/best.pt`.)
+
+**Architecture:** ResNet1D conv stem → dim-projected global tokens + ppm positional
+encoding → pre-LN Transformer encoder → 8 learned spin-group queries → Transformer
+decoder → per-node heads (shift + degeneracy) + symmetric pairwise edge head
+(`edge_ij = MLP([h_i+h_j, |h_i−h_j|])`). Returns the standard `ModelOutput`.
+
+**What worked / what didn't (ablation findings):**
+1. **The set-structured decoder is the big win** — 8 queries + symmetric edges suit the
+   unordered spin-graph output far better than CNN+typed-heads. Even the canonical-only
+   warmup phase hit shift 0.080 (session021).
+2. **Hungarian set-matching loss HURT** (session021): for distinct-shift NMR data the
+   canonical shift-sorted order is unambiguous and highly learnable; Hungarian's assignment
+   freedom scrambled the relational coupling structure (J 1.35→2.1, never recovered → early
+   stop). → use the **canonical `matrix` loss**, not Hungarian, for this architecture.
+3. **The surrogate spectral loss (Branch 5/6) adds substantially on top** — once it ramped in
+   (ep20), J MAE halved (1.35 → 0.91) and shift improved (0.080 → 0.064). The full stack
+   composes: structured decoder + canonical anchor + surrogate spectral consistency.
+4. **Support-region tokens (Family D/E/H) did NOT help** (session023): at matched epochs they
+   were no better than global-only and ~2.5–2.8× slower (per-item region extraction
+   bottlenecks the dataloader). The transformer's attention over the full spectrum already
+   captures the region structure. → region tokens dropped; the `data.region_tokens` flag and
+   `model/data/regions.py` remain (off by default) for future revisit.
+5. **Integration-aware aux loss (Family H) unnecessary** — the architecture already solved the
+   rare-class degeneracy imbalance (balanced-acc 0.73 → 0.93).
+
+**Winning recipe:** `spingraph_decoder` (medium, ~10M params) + canonical `matrix` anchor
+(weight 1.0) + early-ramp `surrogate_spectral` to 0.6 (ep20→30, hold) + WSD LR. Config
+`train_64k_spingraph_canonical.yaml`.
+
+---
+
+# Reference Baseline (superseded — kept for the record)
 
 Reference results for the **dense-CNN + attention-pool + typed-heads** architecture
 (`resnet1d_attention_pool`, IDEAS Families A/B) with the Branch-5 differentiable
