@@ -135,13 +135,16 @@
   .spin-toggle input{position:absolute;opacity:0;pointer-events:none}
   .spin-toggle input:checked + .switch{background:linear-gradient(90deg,var(--accent),var(--accent-2))}
   .spin-toggle input:checked + .switch::after{transform:translateX(17px)}
-  .matrix{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:var(--shadow);
+  .matrix{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px 16px;box-shadow:var(--shadow);
     overflow:auto;display:flex;min-height:380px}
-  table.mx{border-collapse:collapse;font:12px/1 "SF Mono",ui-monospace,Menlo,monospace;width:100%;height:100%}
-  table.mx td,table.mx th{padding:6px 7px;text-align:center;border:1px solid var(--line);color:var(--ink-soft);white-space:nowrap}
-  table.mx th{color:var(--ink-faint);font-weight:600}
-  table.mx td.diag{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--ink);font-weight:700}
-  table.mx td.deg{background:color-mix(in srgb,var(--accent-2) 16%,transparent);color:var(--ink);font-weight:700}
+  table.mx{border-collapse:collapse;font:13px/1 "SF Mono",ui-monospace,Menlo,monospace;width:100%;height:100%}
+  table.mx td,table.mx th{padding:7px 9px;text-align:center;border:1px solid var(--line);color:var(--ink-soft);white-space:nowrap}
+  table.mx th{color:var(--ink-faint);font-weight:600;font-size:12px}
+  table.mx td.diag{color:var(--ink);font-weight:700;font-size:14px}
+  table.mx td.deg{background:color-mix(in srgb,var(--accent-2) 18%,transparent);color:var(--ink);font-weight:700}
+  table.mx td.zero{color:var(--ink-faint)}
+  /* widen the representation section beyond the default .wrap max-width */
+  #rep .wrap{max-width:1440px}
 
   /* ---- stage carousel ---- */
   .carousel-wrap{margin-top:36px}

@@ -192,13 +192,41 @@
     const host = document.getElementById("matrixHost");
     if (!host || !mol) return;
     const n = mol.n_groups, J = mol.couplings || [], labels = "ABCDEFGH".slice(0, n).split("");
+
+    // find max |J| for symmetric color scaling (mirrors GUI's zmin/zmax)
+    let maxJ = 0;
+    for (let i = 0; i < n; i++)
+      for (let j = 0; j < n; j++)
+        if (i !== j && J[i] && Math.abs(J[i][j]) > maxJ) maxJ = Math.abs(J[i][j]);
+
+    // RdBu-like diverging color: blue for +J, red for -J, transparent near 0
+    function jBg(v) {
+      if (!maxJ || Math.abs(v) < 0.3) return "";
+      const t = Math.abs(v) / maxJ;
+      const a = (0.12 + t * 0.50).toFixed(2);
+      return v > 0 ? `rgba(59,130,246,${a})` : `rgba(220,38,38,${a})`;
+    }
+    // shift diagonal: blue tint scaled to the shift's position in [0,12] ppm
+    function shiftBg(s) {
+      const t = Math.max(0, Math.min(1, s / 10));
+      return `rgba(34,193,195,${(0.08 + t * 0.22).toFixed(2)})`;
+    }
+
     let html = "<table class='mx'><tr><th></th>";
     labels.forEach(l => html += `<th>${l}</th>`); html += "<th>n</th></tr>";
     for (let i = 0; i < n; i++) {
       html += `<tr><th>${labels[i]}</th>`;
-      for (let j = 0; j < n; j++) {
-        if (i === j) html += `<td class="diag">${mol.shifts[i].toFixed(2)}</td>`;
-        else { const v = J[i] ? J[i][j] : 0; html += `<td>${v ? v.toFixed(1) : "·"}</td>`; }
+      for (let j2 = 0; j2 < n; j2++) {
+        if (i === j2) {
+          const bg = shiftBg(mol.shifts[i]);
+          html += `<td class="diag" style="background:${bg}">${mol.shifts[i].toFixed(2)}</td>`;
+        } else {
+          const v = J[i] ? J[i][j2] : 0;
+          const bg = jBg(v);
+          const style = bg ? ` style="background:${bg}"` : "";
+          const cls = Math.abs(v) < 0.3 ? " class='zero'" : "";
+          html += `<td${cls}${style}>${Math.abs(v) >= 0.3 ? v.toFixed(1) : "·"}</td>`;
+        }
       }
       html += `<td class="deg">${mol.degeneracy[i]}</td></tr>`;
     }
@@ -206,7 +234,9 @@
     const note = document.getElementById("repNote");
     if (note) note.innerHTML =
       `Diagonal = chemical shifts δ (ppm) of <b>${mol.chembl_id}</b>; right column = proton degeneracy <i>n</i>. ` +
-      `Off-diagonal couplings <i>J</i> (Hz) drive the second-order behaviour you see above.`;
+      `Off-diagonal: <span style="color:rgba(59,130,246,0.85)">blue = positive J</span>, ` +
+      `<span style="color:rgba(220,38,38,0.85)">red = negative J</span> (Hz). ` +
+      `Only |J| &gt; 0.3 Hz shown.`;
   }
 
   /* ---------- boot ---------- */
