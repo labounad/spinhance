@@ -252,10 +252,31 @@ def _simulate(shifts_t: tuple, couplings_t: tuple, degeneracy_t: tuple,
     return ppm_axis.astype(np.float64), intensity.astype(np.float64)
 
 
-def _run_inference(model, intensity: np.ndarray, std, vocab) -> dict:
+def _run_inference(model, intensity: np.ndarray, std, vocab, region_tokens: bool = False) -> dict:
+    """Run the model on one 90 MHz spectrum. If the model was trained WITH support
+    -region tokens, extract + pass them too (otherwise its region branch is starved
+    and predictions are garbage — a train/serve mismatch)."""
     import torch
     from model.evaluation.metrics import decode, _np_pred
-    x = torch.from_numpy(intensity.astype(np.float32)).unsqueeze(0)
+    inten = intensity.astype(np.float32)
+    spec = torch.from_numpy(inten).unsqueeze(0)
+    if region_tokens:
+        from model.data.regions import extract_support_regions
+        from model.schemas import SpinBatch
+        from model.schemas.batch import RegionTokenBatch
+        feats, mask = extract_support_regions(inten, 0.0, 12.0, max_regions=48)
+        G = 8
+        x = SpinBatch(
+            spectrum=spec, spectrum_ref=spec,
+            shifts=torch.zeros(1, G), couplings=torch.zeros(1, G, G),
+            coupling_mask=torch.zeros(1, G, G),
+            degeneracy_classes=torch.zeros(1, G, dtype=torch.long),
+            degeneracy_values=torch.ones(1, G, dtype=torch.long),
+            molecule_ids=["q"],
+            region_tokens=RegionTokenBatch(features=torch.from_numpy(feats)[None],
+                                           mask=torch.from_numpy(mask)[None]))
+    else:
+        x = spec
     with torch.no_grad():
         out = model(x)
     return decode(_np_pred(out), std, vocab)
@@ -478,6 +499,9 @@ def _page_analysis() -> None:
 
     seed = int(cfg.get("training", {}).get("seed", 0))
     compute_scaffold = (cfg.get("data", {}).get("split", "none") == "scaffold")
+    use_regions = bool(cfg.get("data", {}).get("region_tokens", False))   # model trained w/ region tokens?
+    if use_regions:
+        st.caption("ℹ️ This model uses **support-region tokens** — the inspector extracts + feeds them.")
     try:
         all_recs = _load_all_records(json_path, spectra_root, 90)
         test_recs = _test_records(json_path, spectra_root, 90, seed, compute_scaffold)
@@ -509,7 +533,7 @@ def _page_analysis() -> None:
                 _, in90 = _simulate(tuple(rec["shifts"].tolist()),
                                     tuple(map(tuple, rec["couplings"].tolist())),
                                     tuple(rec["degeneracy"].tolist()), 90)
-                dec = _run_inference(model, in90, std, vocab)
+                dec = _run_inference(model, in90, std, vocab, region_tokens=use_regions)
             st.session_state["mol_pred"] = {"dec": dec, "mol_id": rec["mol_id"]}
 
     with draw_col:
