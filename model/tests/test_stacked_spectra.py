@@ -85,6 +85,21 @@ def test_out_of_vocab_degeneracy_filtered(tmp_path):
     assert [r["row"] for r in recs] == [0, 2]            # idx 1 filtered, rows preserved
 
 
+def test_reservoir_sampling(tmp_path):
+    """sample_n draws a uniform random subset (seeded, reproducible) whose records
+    keep their global row; no duplicates."""
+    rp = tmp_path / "recs.json.gz"
+    _write_records(rp, 100)
+    a = load_pubchem_records(rp, sample_n=10, sample_seed=0)
+    b = load_pubchem_records(rp, sample_n=10, sample_seed=0)
+    c = load_pubchem_records(rp, sample_n=10, sample_seed=1)
+    assert len(a) == 10
+    assert [r["row"] for r in a] == [r["row"] for r in b]    # deterministic per seed
+    assert [r["row"] for r in a] != [r["row"] for r in c]    # seed changes the sample
+    assert all(0 <= r["row"] < 100 for r in a)
+    assert len(set(r["row"] for r in a)) == 10               # no duplicates
+
+
 def test_dataset_pulls_correct_spectrum(tmp_path):
     parts_dir = tmp_path / "parts"; parts_dir.mkdir()
     flat = _write_parts(parts_dir, sizes=[3, 3])

@@ -57,13 +57,21 @@ def load_records(spin_systems_json, spectra_root, fields=(90,), require_spectra=
     return records
 
 
-def load_pubchem_records(spin_systems_json, max_mol=0, allowed_degeneracy=None):
+def load_pubchem_records(spin_systems_json, max_mol=0, allowed_degeneracy=None,
+                         sample_n=0, sample_seed=0):
     """Records for the PubChem 3M+ regime: spectra come from stacked ``part_<k>.npy``
     shards (``model.data.stacked_spectra.StackedSpectra``), not per-molecule files.
     Each record carries ``row`` = its global index in record order, which is also
     its row in the concatenated shards; the dataset's ``spectra_source[row]`` fetches
-    the spectrum. ``max_mol`` truncates for quick prelim runs (streaming, so it stops
-    early without parsing the whole file).
+    the spectrum (so a sampled/filtered subset still maps to the full stacked set).
+
+    Three subset modes:
+      * default        — all valid records.
+      * ``max_mol``    — first N valid records (streams, stops early).
+      * ``sample_n``   — a uniform RANDOM sample of N valid records via reservoir
+                         sampling (single pass, O(N) memory, seeded). Use this for
+                         a representative "light" subset rather than the first-N
+                         block (which can be biased by PubChem CID ordering).
 
     Molecules whose degeneracy contains a value outside the model's vocab (default
     ``DEFAULT_DEG_VOCAB``) are skipped — ``row`` stays the global index so the
@@ -71,16 +79,18 @@ def load_pubchem_records(spin_systems_json, max_mol=0, allowed_degeneracy=None):
     ~8 groups in 25.6M); the model has no class for them and can't learn them from
     a few examples, so filtering beats expanding the vocab (keeps n_deg_classes ==
     the 64k production model)."""
+    import random
     from model.schemas.constants import DEFAULT_DEG_VOCAB
     allowed = set(allowed_degeneracy or DEFAULT_DEG_VOCAB)
-    records = []
-    skipped = 0
+    rng = random.Random(sample_seed) if sample_n > 0 else None
+    records, reservoir = [], []
+    skipped, kept = 0, 0
     for idx, rec in read_spin_systems(spin_systems_json):
         _labels, shifts, couplings, degeneracy = record_to_arrays(rec)
         if any(int(d) not in allowed for d in degeneracy):
             skipped += 1
             continue
-        records.append({
+        r = {
             "mol_id": f"mol_{idx:06d}",
             "row": idx,
             "shifts": np.asarray(shifts, dtype=float),
@@ -90,10 +100,24 @@ def load_pubchem_records(spin_systems_json, max_mol=0, allowed_degeneracy=None):
             "chembl_id": rec.get("chembl_id"),
             "inchikey": rec.get("inchikey"),
             "n_spins": int(sum(degeneracy)),
-        })
-        if max_mol and len(records) >= max_mol:
-            break
+        }
+        if sample_n > 0:                       # reservoir sampling (uniform, seeded)
+            kept += 1
+            if len(reservoir) < sample_n:
+                reservoir.append(r)
+            else:
+                j = rng.randint(0, kept - 1)
+                if j < sample_n:
+                    reservoir[j] = r
+        else:
+            records.append(r)
+            if max_mol and len(records) >= max_mol:
+                break
+    out = reservoir if sample_n > 0 else records
     if skipped:
         print(f"[pubchem] filtered {skipped} molecules with out-of-vocab degeneracy "
               f"(vocab {sorted(allowed)})")
-    return records
+    if sample_n > 0:
+        print(f"[pubchem] reservoir-sampled {len(out)} of {kept} valid molecules "
+              f"(seed {sample_seed})")
+    return out

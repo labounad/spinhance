@@ -19,7 +19,8 @@ def run_from_config(cfg: Config):
     spectra_source = None
     if cfg.data.parts:                       # PubChem 3M+: stacked part_<k>.npy shards
         from model.data.stacked_spectra import StackedSpectra
-        recs = load_pubchem_records(cfg.data.records, max_mol=cfg.data.max_mol)
+        recs = load_pubchem_records(cfg.data.records, max_mol=cfg.data.max_mol,
+                                    sample_n=cfg.data.sample_n, sample_seed=cfg.data.sample_seed)
         spectra_source = StackedSpectra(cfg.data.parts)
         # records may be fewer than spectra (out-of-vocab molecules filtered), but every
         # record's global row must index into the stacked spectra — catch real mismatch.

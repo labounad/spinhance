@@ -29,7 +29,9 @@ class DataCfg:
     parts: str = ""              # dir of stacked part_<k>.npy shards (PubChem 3M+); ""=per-file
     field: int = 90
     split: str = "scaffold"      # "scaffold" | "none"
-    max_mol: int = 0
+    max_mol: int = 0             # first-N subset (stacked path); 0 = all
+    sample_n: int = 0            # uniform RANDOM subset of N (reservoir); precedence over max_mol
+    sample_seed: int = 0
     region_tokens: bool = False  # extract support-region tokens (Family D/E/H); off = unchanged
     region_max: int = 48         # max regions per spectrum (padded/truncated)
     # NOTE: the attribute `field` (NMR field) above shadows dataclasses.field in
