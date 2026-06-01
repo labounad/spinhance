@@ -171,27 +171,43 @@ def _list_checkpoints(run_prefix: str) -> list[str]:
     return head + epochs
 
 
-def _download_ckpt(session: str, run_prefix: str, which: str) -> Path:
+@st.cache_data(ttl=20)
+def _ckpt_version(run_prefix: str, which: str) -> str:
+    """S3 identity (date/time/size) of the checkpoint — a cache-buster so that a
+    checkpoint REWRITTEN during a still-running job invalidates both the locally
+    downloaded file and the cached model object (otherwise the prediction tool
+    serves stale weights that disagree with the live val metrics)."""
+    r = subprocess.run(["aws", "s3", "ls", f"{run_prefix}/checkpoints/{which}.pt",
+                        "--profile", AWS_PROFILE, "--region", AWS_REGION],
+                       capture_output=True, text=True, timeout=30)
+    return r.stdout.strip() or "missing"        # "<date> <time> <size> <name>"
+
+
+def _download_ckpt(session: str, run_prefix: str, which: str, version: str) -> Path:
     local = CACHE_DIR / session / f"{which}.pt"
+    ver_file = local.with_suffix(".ver")
     local.parent.mkdir(parents=True, exist_ok=True)
-    if not local.exists():
+    cached = ver_file.read_text() if ver_file.exists() else None
+    if (not local.exists()) or cached != version:        # re-download when S3 changed
         r = subprocess.run(["aws", "s3", "cp", f"{run_prefix}/checkpoints/{which}.pt",
                             str(local), "--profile", AWS_PROFILE, "--region", AWS_REGION],
                            capture_output=True, timeout=300)
         if r.returncode != 0:
             local.unlink(missing_ok=True)
             raise RuntimeError(r.stderr.decode()[:300])
+        ver_file.write_text(version)
     return local
 
 
 @st.cache_resource(show_spinner="Loading model weights…")
-def _load_model(session: str, run_prefix: str, which: str):
-    """Rebuild model + standardizer from a checkpoint via the architecture registry."""
+def _load_model(session: str, run_prefix: str, which: str, version: str):
+    """Rebuild model + standardizer from a checkpoint via the architecture registry.
+    ``version`` is part of the cache key so a new checkpoint invalidates the model."""
     import torch
     from model.architectures import build_architecture
     from model.data.standardization import DegeneracyVocab, Standardizer
 
-    local = _download_ckpt(session, run_prefix, which)
+    local = _download_ckpt(session, run_prefix, which, version)
     ckpt = torch.load(str(local), map_location="cpu", weights_only=False)
     vocab = DegeneracyVocab()
     std = Standardizer().load_state_dict(ckpt["standardizer"])
@@ -448,11 +464,13 @@ def _page_analysis() -> None:
 
     # ── Load model (best/last) ────────────────────────────────────────────────
     st.divider()
+    version = _ckpt_version(run_prefix, which)       # cache-buster: re-loads if S3 changed
     try:
-        model, std, vocab, cfg = _load_model(session, run_prefix, which)
+        model, std, vocab, cfg = _load_model(session, run_prefix, which, version)
     except Exception as exc:
         st.error(f"Failed to load {which}.pt: {exc}")
         return
+    st.caption(f"Loaded `{which}.pt` · {version.rsplit(' ', 1)[0] if version != 'missing' else version}")
 
     if not Path(json_path).exists() or not (Path(spectra_root) / "90MHz").exists():
         st.info("Set a valid Molecules JSON + spectra root in the sidebar to browse the test set.")
