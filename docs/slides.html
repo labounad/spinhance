@@ -286,6 +286,11 @@
   .af-arrow{stroke:var(--ink-faint);stroke-width:1.6;marker-end:url(#ah);fill:none;}
   .af-attn{stroke:var(--accent);stroke-width:1;opacity:.4;fill:none;}
 
+  /* Stage-1 real molecule depiction (RDKit SVG + proton-group overlay) */
+  #s1mol .molwrap{position:relative;width:100%;}
+  #s1mol .molwrap > svg{width:100%!important;height:auto!important;display:block;}
+  #s1mol .molwrap > svg.ovl{position:absolute;inset:0;height:100%!important;overflow:visible;}
+
   /* MathJax sizing */
   mjx-container[jax="SVG"]{color:var(--ink);}
   .mjx-wrap{display:flex;justify-content:center;align-items:center;gap:18px;flex-wrap:wrap;margin:8px 0 2px;}
@@ -526,55 +531,18 @@
       <h2>Group a molecule's protons → read off its spin graph.</h2>
       <div class="twocol wide-left" style="margin-top:8px;align-items:center">
         <div class="fig-card" style="align-self:stretch;justify-content:center">
-          <svg viewBox="0 0 470 180" style="width:100%;height:auto;overflow:visible" aria-hidden="true">
-            <!-- ===== representative molecule: benzocaine (ethyl 4-aminobenzoate) ===== -->
-            <g>
-              <!-- benzene ring: regular hexagon + aromatic circle -->
-              <polygon points="140,90 125,116 95,116 80,90 95,64 125,64" class="mol-bond"/>
-              <circle cx="110" cy="90" r="17" class="mol-bond" fill="none"/>
-              <!-- amino (bond stops short of the label) -->
-              <line x1="80" y1="90" x2="58" y2="90" class="mol-bond"/>
-              <text x="52" y="94" class="mol-atom" text-anchor="end">H₂N</text>
-              <!-- ester chain: ring → C(=O) → O → CH₂ → CH₃ -->
-              <line x1="140" y1="90" x2="166" y2="75" class="mol-bond"/>
-              <line x1="163" y1="73" x2="163" y2="52" class="mol-bond"/><line x1="169" y1="73" x2="169" y2="52" class="mol-bond"/>
-              <text x="166" y="46" class="mol-atom">O</text>
-              <line x1="166" y1="75" x2="185" y2="86" class="mol-bond"/>
-              <text x="192" y="95" class="mol-atom">O</text>
-              <line x1="199" y1="86" x2="218" y2="75" class="mol-bond"/>
-              <line x1="218" y1="75" x2="244" y2="90" class="mol-bond"/>
-              <!-- proton-group markers (one colour per equivalence group) -->
-              <circle cx="86" cy="55" r="5" class="grp-dot" fill="var(--accent)"/>
-              <circle cx="86" cy="125" r="5" class="grp-dot" fill="var(--accent)"/>
-              <circle cx="134" cy="55" r="5" class="grp-dot" fill="var(--accent-2)"/>
-              <circle cx="134" cy="125" r="5" class="grp-dot" fill="var(--accent-2)"/>
-              <circle cx="54" cy="74" r="5" class="grp-dot" fill="var(--accent-3)"/>
-              <circle cx="218" cy="59" r="5" class="grp-dot" fill="#f5a623"/>
-              <circle cx="252" cy="102" r="5" class="grp-dot" fill="#e0567a"/>
-            </g>
-            <text x="118" y="160" class="af-s">benzocaine · grouped by equivalence</text>
-            <path class="af-arrow" d="M250 92 L292 92"/><text x="271" y="84" class="af-s">→ graph</text>
-            <!-- ===== spin graph (nodes = groups, edges = couplings) ===== -->
-            <g transform="translate(308,0)">
-              <g class="ge" stroke-width="2" fill="none">
-                <line x1="80" y1="40" x2="132" y2="74"/><line x1="132" y1="74" x2="112" y2="130"/>
-                <line x1="112" y1="130" x2="48" y2="130"/><line x1="48" y1="130" x2="28" y2="74"/>
-                <line x1="28" y1="74" x2="80" y2="40"/><line x1="80" y1="40" x2="112" y2="130" opacity=".35"/>
-                <line x1="132" y1="74" x2="48" y2="130" opacity=".35"/></g>
-              <circle cx="80"  cy="40"  r="15" class="grp-dot" fill="var(--accent)"   stroke="var(--panel)" stroke-width="2.5"/>
-              <circle cx="132" cy="74"  r="15" class="grp-dot" fill="var(--accent-2)" stroke="var(--panel)" stroke-width="2.5"/>
-              <circle cx="112" cy="130" r="15" class="grp-dot" fill="#e0567a"        stroke="var(--panel)" stroke-width="2.5"/>
-              <circle cx="48"  cy="130" r="15" class="grp-dot" fill="#f5a623"        stroke="var(--panel)" stroke-width="2.5"/>
-              <circle cx="28"  cy="74"  r="15" class="grp-dot" fill="var(--accent-3)" stroke="var(--panel)" stroke-width="2.5"/>
-              <text x="80" y="160" class="af-s">5 groups → 5 nodes</text>
-            </g>
-          </svg>
-          <div class="figcap">3D embed → protons classed by <b>chemical &amp; magnetic equivalence</b> → one node per group, edges = couplings</div>
+          <div class="af-s" style="text-align:center;margin-bottom:8px">CHEMBL1413718 · C₁₇H₁₂N₄O₄ · 10 protons</div>
+          <div style="display:flex;align-items:center;gap:6px;justify-content:center">
+            <div id="s1mol" style="position:relative;flex:1 1 58%;min-width:0"></div>
+            <div style="flex:none;color:var(--ink-faint);font-size:22px">→</div>
+            <div id="s1graph" style="flex:1 1 38%;min-width:0;display:flex;justify-content:center"></div>
+          </div>
+          <div class="figcap">3D embed → protons classed by <b>chemical &amp; magnetic equivalence</b> → one node per group (a real 8-group system from our dataset)</div>
         </div>
         <div>
           <ul class="clean">
             <li>RDKit <b>force-field 3D embedding</b>, then classify protons by equivalence into <b>spin groups</b>.</li>
-            <li>Keep only molecules with <b>exactly 8</b> groups (the example shows the grouping idea).</li>
+            <li>Keep only molecules that reduce to <b>exactly 8</b> groups — like the one shown (A is the OCH₃, 3 equivalent protons; B–H each a unique aromatic H).</li>
           </ul>
           <div class="metric-grid" style="grid-template-columns:1fr;gap:12px;margin-top:14px">
             <div class="metric"><div class="v">64k</div><div class="l">8-group systems from <b>ChEMBL</b> (2.9M curated, bioactive, drug-like)</div></div>
@@ -584,10 +552,11 @@
       </div>
     </div>
     <aside class="notes">Yiming. Take a molecule, embed it in 3D with an RDKit force field, then classify its protons by chemical and
-      magnetic equivalence into spin groups — each group becomes a node in a graph whose edges are the couplings. We keep only
-      molecules that reduce to exactly 8 groups. The worked example is benzocaine (a real drug-like molecule): two aromatic
-      environments, the NH₂, the OCH₂ and the CH₃ → five groups → five nodes. We started on ChEMBL (drug-like, 2.9M → 64k
-      8-group systems) and scaled to PubChem (123M → 3.1M).</aside>
+      magnetic equivalence into spin groups — each group becomes a node in the spin graph. We keep only molecules that reduce to
+      exactly 8 groups. The worked example is a real one from our dataset (CHEMBL1413718): the methoxy OCH₃ is one group of 3
+      equivalent protons (A), and the seven aromatic CH's are each their own group (B–H) → 8 groups, 10 protons. This is the same
+      molecule/graph the live site's 8-spin library viewer shows. We started on ChEMBL (drug-like, 2.9M → 64k 8-group systems)
+      and scaled to PubChem (123M → 3.1M).</aside>
   </section>
 
   <!-- ============================ PIPELINE 2 — ESTIMATE ============================ -->
@@ -596,36 +565,9 @@
       <div class="kicker">Stage 2 · estimate shifts &amp; couplings</div>
       <h2>The model needs <i>plausible</i> spin systems — not measured ones.</h2>
       <div class="twocol" style="margin-top:8px;align-items:center">
-        <div class="fig-card" style="align-self:stretch;justify-content:center">
-          <svg viewBox="0 0 300 230" style="width:100%;height:auto;max-height:300px;overflow:visible" aria-hidden="true">
-            <!-- edges, with J labels on the two ³J couplings -->
-            <g class="ge" fill="none" stroke-width="2">
-              <line x1="90" y1="50" x2="210" y2="50"/>
-              <line x1="236" y1="150" x2="150" y2="198"/>
-              <line x1="210" y1="50" x2="236" y2="150" opacity=".3"/>
-              <line x1="64" y1="150" x2="90" y2="50" opacity=".3"/>
-              <line x1="64" y1="150" x2="150" y2="198" opacity=".3"/>
-              <line x1="90" y1="50" x2="64" y2="150" opacity=".3"/></g>
-            <g style="font:600 11px ui-sans-serif,system-ui" fill="var(--ink-soft)" text-anchor="middle">
-              <rect x="120" y="29" width="60" height="15" rx="4" fill="var(--panel-2)" stroke="var(--line)"/>
-              <text x="150" y="40">³J ≈ 8.5 Hz</text>
-              <rect x="176" y="175" width="60" height="15" rx="4" fill="var(--panel-2)" stroke="var(--line)"/>
-              <text x="206" y="186">³J ≈ 7.1 Hz</text></g>
-            <!-- nodes with δ -->
-            <g class="grp-dot" stroke="var(--panel)" stroke-width="2.5">
-              <circle cx="90"  cy="50"  r="24" fill="var(--accent)"/>
-              <circle cx="210" cy="50"  r="24" fill="var(--accent-2)"/>
-              <circle cx="236" cy="150" r="24" fill="#f5a623"/>
-              <circle cx="150" cy="198" r="24" fill="#e0567a"/>
-              <circle cx="64"  cy="150" r="24" fill="var(--accent-3)"/></g>
-            <g fill="#fff" style="font:700 13px ui-sans-serif,system-ui" text-anchor="middle">
-              <text x="90"  y="48">δ 6.6</text><text x="90"  y="62" font-size="9" opacity=".85">Ar</text>
-              <text x="210" y="48">δ 7.8</text><text x="210" y="62" font-size="9" opacity=".85">Ar</text>
-              <text x="236" y="148">δ 4.3</text><text x="236" y="162" font-size="9" opacity=".85">OCH₂</text>
-              <text x="150" y="196">δ 1.4</text><text x="150" y="210" font-size="9" opacity=".85">CH₃</text>
-              <text x="64"  y="148">δ 4.0</text><text x="64"  y="162" font-size="9" opacity=".85">NH₂</text></g>
-          </svg>
-          <div class="figcap">heuristics fill in each node's <b>δ</b> and each edge's <b>J</b> — a complete, plausible spin system</div>
+        <div class="fig-card" style="align-self:center;width:100%">
+          <div id="s2graph" style="width:100%;display:flex;justify-content:center"></div>
+          <div class="figcap">heuristics fill in each node's <b>δ</b> (ppm) and each edge's <b>J</b> (Hz) — the same molecule's complete spin system</div>
         </div>
         <div>
           <p class="lead" style="font-size:20px">The hypothesis: to learn the inverse map, the model only needs spin systems
@@ -642,8 +584,9 @@
     <aside class="notes">Yiming. The bet is that plausible beats accurate-but-scarce for training the inverse map — the model just needs
       to see realistic spin systems. We fill the graph in by substructure-matching δ and J (²J/³J/⁴J) against reference tables
       (nmrdb2 and the Pretsch Tables of Spectral Data), use the Karplus equation for ³J from the 3D dihedral angles, and add
-      small Gaussian jitter for diversity. The benzocaine graph from Stage 1 now carries δ on every node and J on every edge —
-      done with no per-molecule quantum chemistry, so it scales to millions.</aside>
+      small Gaussian jitter for diversity. The same molecule's graph from Stage 1 now carries δ on every node and J on every edge
+      (note the two real coupling networks — the methoxyphenyl ring B·C·D·H and the nitro ring E·F·G; the OCH₃ singlet A is
+      uncoupled) — done with no per-molecule quantum chemistry, so it scales to millions.</aside>
   </section>
 
   <!-- ============================ PIPELINE 3 — PYSPIN ============================ -->
@@ -1144,6 +1087,63 @@ function sizeFor(slide) {
   else if (slide && slide.id === "s-proof") Sweep.paintProof();
 }
 
+/* ===== Stage 1 / 2: render a REAL dataset molecule + its generated spin graph ===== */
+let MOL = null;
+const _cv = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+function graphSVG(opts) {
+  // 8 nodes on a circle; colours/δ/couplings come straight from the dataset record
+  const g = MOL.groups, N = g.length;
+  const cx = opts.cx, cy = opts.cy, R = opts.R, r = opts.r;
+  const pos = {};
+  g.forEach((gg, i) => { const a = -Math.PI / 2 + i * 2 * Math.PI / N;
+    pos[gg.label] = [cx + R * Math.cos(a), cy + R * Math.sin(a)]; });
+  let edges = "", jl = "";
+  if (opts.edges) {
+    MOL.couplings.forEach(([u, v, j]) => {
+      const [x1, y1] = pos[u], [x2, y2] = pos[v], strong = j >= 5;
+      edges += `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${_cv('--accent')}" stroke-width="2" opacity="${strong ? .75 : .3}"/>`;
+      if (strong) { const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+        jl += `<rect x="${(mx - 21).toFixed(1)}" y="${(my - 8).toFixed(1)}" width="42" height="14" rx="4" fill="${_cv('--panel-2')}" stroke="${_cv('--line')}"/>`
+            + `<text x="${mx.toFixed(1)}" y="${(my + 2.5).toFixed(1)}" text-anchor="middle" style="font:600 9px ui-sans-serif" fill="${_cv('--ink-soft')}">${j.toFixed(1)} Hz</text>`; }
+    });
+  }
+  let nodes = "";
+  g.forEach(gg => { const [x, y] = pos[gg.label];
+    nodes += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r}" fill="${gg.color}" stroke="${_cv('--panel')}" stroke-width="2.5"/>`;
+    if (opts.delta)
+      nodes += `<text x="${x.toFixed(1)}" y="${(y - 1).toFixed(1)}" text-anchor="middle" style="font:700 11px ui-sans-serif" fill="#fff">${gg.delta.toFixed(1)}</text>`
+             + `<text x="${x.toFixed(1)}" y="${(y + 10).toFixed(1)}" text-anchor="middle" style="font:600 8px ui-sans-serif" fill="#fff" opacity=".85">${gg.label}${gg.h_count > 1 ? '·' + gg.h_count + 'H' : ''}</text>`;
+    else
+      nodes += `<text x="${x.toFixed(1)}" y="${(y + 4).toFixed(1)}" text-anchor="middle" style="font:700 12px ui-sans-serif" fill="#fff">${gg.label}</text>`;
+  });
+  return `<svg viewBox="0 0 ${2 * cx} ${2 * cy}" style="width:100%;height:auto;max-height:${opts.maxh || 300}px;overflow:visible">${edges}${jl}${nodes}</svg>`;
+}
+
+function renderStages() {
+  if (!MOL) return;
+  const mol = document.getElementById("s1mol");
+  if (mol) {
+    const w = MOL.svg_w, h = MOL.svg_h;
+    let dots = "";
+    MOL.groups.forEach(g => g.atoms.forEach(([ax, ay]) => {
+      const x = (ax * w).toFixed(1), y = (ay * h).toFixed(1);
+      dots += `<circle cx="${x}" cy="${y}" r="6" fill="${g.color}" stroke="${_cv('--panel')}" stroke-width="1.4"/>`
+            + `<text x="${x}" y="${(ay * h - 8).toFixed(1)}" text-anchor="middle" style="font:700 7.5px ui-sans-serif" fill="${g.color}">${g.label}</text>`;
+    }));
+    mol.innerHTML = `<div class="molwrap">${MOL.svg}<svg class="ovl" viewBox="0 0 ${w} ${h}">${dots}</svg></div>`;
+  }
+  const s1g = document.getElementById("s1graph");
+  if (s1g) s1g.innerHTML = graphSVG({ cx: 92, cy: 92, R: 70, r: 14, edges: false, delta: false, maxh: 220 });
+  const s2g = document.getElementById("s2graph");
+  if (s2g) s2g.innerHTML = graphSVG({ cx: 150, cy: 130, R: 104, r: 22, edges: true, delta: true, maxh: 300 });
+}
+
+function loadStageMol() {
+  fetch("data/stage1_mol.json").then(r => r.json()).then(d => { MOL = d; renderStages(); })
+    .catch(e => console.error("stage1_mol.json failed", e));
+}
+
 // typeset LaTeX once MathJax has loaded (the 2MB engine may arrive after Reveal is ready)
 function typesetMath(tries) {
   tries = tries || 0;
@@ -1162,6 +1162,7 @@ Reveal.on("ready", (ev) => {
     });
   } catch (e) {}
   Sweep.load(() => sizeFor(ev.currentSlide));
+  loadStageMol();
 });
 Reveal.on("slidechanged", (ev) => sizeFor(ev.currentSlide));
 
@@ -1193,6 +1194,7 @@ document.addEventListener("keydown", (e) => {
     const root = document.documentElement;
     root.setAttribute("data-theme", root.getAttribute("data-theme") === "dark" ? "light" : "dark");
     Sweep.refreshColors();
+    renderStages();   // graph/overlay colours read CSS vars
     const s = Reveal.getCurrentSlide();
     if (s && s.id === "s-hero") Sweep.paintHero();
     else if (s && s.id === "s-proof") Sweep.paintProof();
