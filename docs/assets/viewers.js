@@ -231,7 +231,7 @@
       var boxW = overlay.width, boxH = overlay.height;
       var offX = (boxW - current._dispW) / 2;
       var offY = (boxH - current._dispH) / 2;
-      return {x: offX + p[0] * current._dispW + 11, y: offY + p[1] * current._dispH - 14};
+      return {x: offX + p[0] * current._dispW, y: offY + p[1] * current._dispH};   // RDKit GetDrawCoords are exact atom centres (no ChemDraw label-anchor offset)
     }
 
     function drawOverlay(activeLabel) {
