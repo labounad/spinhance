@@ -71,6 +71,20 @@ def test_records_gzip_jsonl_and_max_mol(tmp_path):
     assert recs[0]["shifts"].shape == (2,)
 
 
+def test_out_of_vocab_degeneracy_filtered(tmp_path):
+    """A molecule with an out-of-vocab degeneracy (e.g. 5) is skipped, and the
+    surviving records keep their global ``row`` (so the spectrum mapping holds)."""
+    rp = tmp_path / "recs.json.gz"
+    with gzip.open(rp, "wt") as f:
+        # idx 0,2 valid (deg 1,3); idx 1 has deg 5 (out of vocab) -> dropped
+        for i, degs in enumerate([(1, 3), (1, 5), (3, 1)]):
+            f.write(json.dumps({"chembl_id": f"m{i}", "labels": ["A", "B"],
+                                "spin_groups": [[2.0, degs[0]], [4.0, degs[1]]],
+                                "couplings": []}) + "\n")
+    recs = load_pubchem_records(rp)
+    assert [r["row"] for r in recs] == [0, 2]            # idx 1 filtered, rows preserved
+
+
 def test_dataset_pulls_correct_spectrum(tmp_path):
     parts_dir = tmp_path / "parts"; parts_dir.mkdir()
     flat = _write_parts(parts_dir, sizes=[3, 3])

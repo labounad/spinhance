@@ -15,6 +15,7 @@ from pathlib import Path
 
 import torch
 from torch.utils.data import DataLoader
+from torch.utils.data.distributed import DistributedSampler
 
 from model.architectures import build_architecture
 from model.data.collate import collate_spin_batch
@@ -22,6 +23,7 @@ from model.data.dataset import SpectrumMatrixDataset, worker_init_fn
 from model.data.standardization import DegeneracyVocab, Standardizer, class_balance
 from model.diagnostics import DiagnosticsWriter
 from model.losses import build_composite
+from model.training import distributed as dist_utils
 from model.training.checkpointing import save_checkpoint
 from model.training.config import Config
 from model.training.loops import evaluate, train_epoch
@@ -101,41 +103,65 @@ class Trainer:
 
     def fit(self):
         cfg = self.cfg
+        # DDP: no-op (world_size=1) for single-GPU/CPU runs and the test suite.
+        self.dist = dist_utils.init_distributed()
+        if self.dist.enabled:
+            self.device = f"cuda:{self.dist.local_rank}"
+        is_main = self.dist.is_main
         seed_everything(cfg.training.seed)
         ds, std, vocab, model, loss_fn, cb, val_records = self._build()
+        core = model                       # underlying model (checkpoint / n_params / .module-free)
 
         nw = cfg.training.num_workers
         pin = self.device != "cpu"
         dl_kw = dict(collate_fn=collate_spin_batch, num_workers=nw, pin_memory=pin,
                      persistent_workers=nw > 0, worker_init_fn=worker_init_fn)
-        train_dl = DataLoader(ds["train"], batch_size=cfg.training.batch_size,
-                              shuffle=True, drop_last=True, **dl_kw)
-        val_dl = DataLoader(ds["val"], batch_size=cfg.training.batch_size,
-                            shuffle=False, **dl_kw)
+        if self.dist.enabled:
+            # each rank trains on a disjoint shard; drop_last keeps step counts equal
+            # across ranks (unequal counts deadlock the backward all-reduce)
+            train_sampler = DistributedSampler(
+                ds["train"], num_replicas=self.dist.world_size, rank=self.dist.rank,
+                shuffle=True, drop_last=True)
+            train_dl = DataLoader(ds["train"], batch_size=cfg.training.batch_size,
+                                  sampler=train_sampler, drop_last=True, **dl_kw)
+            model = torch.nn.parallel.DistributedDataParallel(
+                model, device_ids=[self.dist.local_rank],
+                find_unused_parameters=True)   # region/soft_equiv heads can be unused
+        else:
+            train_sampler = None
+            train_dl = DataLoader(ds["train"], batch_size=cfg.training.batch_size,
+                                  shuffle=True, drop_last=True, **dl_kw)
+        # validation runs on the main rank only (full set, non-distributed)
+        val_dl = (DataLoader(ds["val"], batch_size=cfg.training.batch_size, shuffle=False, **dl_kw)
+                  if is_main else None)
 
         opt, sched = build_optimizer_and_scheduler(
-            model, cfg.training.lr, cfg.training.weight_decay, cfg.training.warmup_frac,
+            core, cfg.training.lr, cfg.training.weight_decay, cfg.training.warmup_frac,
             max(1, len(train_dl)), cfg.training.epochs,
             min_factor=cfg.training.lr_min_factor, stable_frac=cfg.training.lr_stable_frac)
         amp_ctx, scaler = amp_context(cfg.training.amp, self.device)
 
-        run_dir = _make_run_dir(cfg)
-        run_id = run_dir.name
-        ckpt_dir = run_dir / "checkpoints"
-        diag = DiagnosticsWriter(run_dir, enabled=cfg.diagnostics.enabled)
-        diag.reset_live_files()
-        diag.write_config(cfg.raw)
-        diag.log_event("run_start", {"run_id": run_id, "device": self.device,
-                                     "epochs": cfg.training.epochs,
-                                     "n_train": len(ds["train"]), "n_val": len(ds["val"]),
-                                     "deg_counts": cb["deg_counts"].tolist()})
-        print(f"[trainer] run {run_id} | device {self.device} | "
-              f"train {len(ds['train'])} val {len(ds['val'])} | params {model.n_params/1e6:.2f}M")
+        run_dir = run_id = ckpt_dir = diag = None
+        if is_main:
+            run_dir = _make_run_dir(cfg)
+            run_id = run_dir.name
+            ckpt_dir = run_dir / "checkpoints"
+            diag = DiagnosticsWriter(run_dir, enabled=cfg.diagnostics.enabled)
+            diag.reset_live_files()
+            diag.write_config(cfg.raw)
+            diag.log_event("run_start", {"run_id": run_id, "device": self.device,
+                                         "world_size": self.dist.world_size,
+                                         "epochs": cfg.training.epochs,
+                                         "n_train": len(ds["train"]), "n_val": len(ds["val"]),
+                                         "deg_counts": cb["deg_counts"].tolist()})
+            print(f"[trainer] run {run_id} | device {self.device} | "
+                  f"world_size {self.dist.world_size} | "
+                  f"train {len(ds['train'])} val {len(ds['val'])} | params {core.n_params/1e6:.2f}M")
 
         # Probe evaluator (fixed stratified val molecules). Guarded so a probe
         # failure never kills training.
         probe_eval = None
-        if cfg.diagnostics.enabled and cfg.diagnostics.probe_count > 0 and val_records:
+        if is_main and cfg.diagnostics.enabled and cfg.diagnostics.probe_count > 0 and val_records:
             try:
                 from model.evaluation.probes import ProbeEvaluator
                 probe_eval = ProbeEvaluator(val_records, ds["val"], vocab, std,
@@ -149,102 +175,117 @@ class Trainer:
         va: dict[str, float] = {}
 
         for epoch in range(cfg.training.epochs):
+            if train_sampler is not None:
+                train_sampler.set_epoch(epoch)            # reshuffle each rank's shard
             loss_fn.set_epoch(epoch)
+            # train runs on ALL ranks (grad all-reduce every step); diag=None off main
             tr, global_step = train_epoch(
                 model, train_dl, loss_fn, opt, sched, scaler, amp_ctx, self.device,
                 epoch=epoch, global_step=global_step, grad_clip=cfg.training.grad_clip,
                 log_every_steps=cfg.diagnostics.log_every_steps, stage="1",
                 diagnostics=diag)
-            diag.log_metrics(split="train", epoch=epoch, step=global_step, metrics=tr,
-                             extra={"stage": "1"})
 
             do_val = (epoch % cfg.training.val_every == 0) or (epoch == cfg.training.epochs - 1)
-            if do_val:
-                va = evaluate(model, val_dl, loss_fn, std, vocab, amp_ctx, self.device)
-                diag.log_metrics(split="val", epoch=epoch, step=global_step, metrics=va,
+            stop = False
+            # eval/checkpoint/diagnostics on the main rank only (uses the unwrapped
+            # `core`, no collectives — other ranks wait at broadcast_stop below)
+            if is_main:
+                diag.log_metrics(split="train", epoch=epoch, step=global_step, metrics=tr,
                                  extra={"stage": "1"})
+                if do_val:
+                    va = evaluate(core, val_dl, loss_fn, std, vocab, amp_ctx, self.device)
+                    diag.log_metrics(split="val", epoch=epoch, step=global_step, metrics=va,
+                                     extra={"stage": "1"})
 
-            score = va.get("shift_mae_ppm", float("inf")) + va.get("j_mae_hz", float("inf")) / 10.0
-            is_best = do_val and score < best
-            if is_best:
-                best, best_epoch, bad = score, epoch, 0
-                diag.log_event("best_checkpoint", {"epoch": epoch, "score": float(score)})
-            elif do_val:
-                bad += 1
+                score = va.get("shift_mae_ppm", float("inf")) + va.get("j_mae_hz", float("inf")) / 10.0
+                is_best = do_val and score < best
+                if is_best:
+                    best, best_epoch, bad = score, epoch, 0
+                    diag.log_event("best_checkpoint", {"epoch": epoch, "score": float(score)})
+                elif do_val:
+                    bad += 1
 
-            save_checkpoint(ckpt_dir / "last.pt", model, std, cfg.raw, epoch, va)
-            if is_best:
-                save_checkpoint(ckpt_dir / "best.pt", model, std, cfg.raw, epoch, va)
-            # Per-epoch snapshots so the viewer can inspect any epoch's weights.
-            if cfg.training.save_every and epoch % cfg.training.save_every == 0:
-                save_checkpoint(ckpt_dir / f"epoch_{epoch:04d}.pt", model, std, cfg.raw, epoch, va)
+                save_checkpoint(ckpt_dir / "last.pt", core, std, cfg.raw, epoch, va)
+                if is_best:
+                    save_checkpoint(ckpt_dir / "best.pt", core, std, cfg.raw, epoch, va)
+                # Per-epoch snapshots so the viewer can inspect any epoch's weights.
+                if cfg.training.save_every and epoch % cfg.training.save_every == 0:
+                    save_checkpoint(ckpt_dir / f"epoch_{epoch:04d}.pt", core, std, cfg.raw, epoch, va)
 
-            diag.update_status({
-                "state": "running", "run_id": run_id, "epoch": epoch,
-                "epochs": cfg.training.epochs, "stage": "1", "global_step": global_step,
-                "best_score": (float(best) if best != float("inf") else None),
-                "best_epoch": best_epoch, "device": self.device,
-                "last_update_time": time.time(),
-                "checkpoint_best": "checkpoints/best.pt", "checkpoint_last": "checkpoints/last.pt",
-            })
-            print(f"epoch {epoch:3d} | train {tr.get('total', 0):.4f}"
-                  + (f" | val shift {va.get('shift_mae_ppm', 0):.3f}ppm "
-                     f"J {va.get('j_mae_hz', 0):.2f}Hz f1 {va.get('presence_f1', 0):.3f} "
-                     f"deg {va.get('deg_acc_balanced', 0):.3f}" if do_val else " | val skipped"))
+                diag.update_status({
+                    "state": "running", "run_id": run_id, "epoch": epoch,
+                    "epochs": cfg.training.epochs, "stage": "1", "global_step": global_step,
+                    "best_score": (float(best) if best != float("inf") else None),
+                    "best_epoch": best_epoch, "device": self.device,
+                    "last_update_time": time.time(),
+                    "checkpoint_best": "checkpoints/best.pt", "checkpoint_last": "checkpoints/last.pt",
+                })
+                print(f"epoch {epoch:3d} | train {tr.get('total', 0):.4f}"
+                      + (f" | val shift {va.get('shift_mae_ppm', 0):.3f}ppm "
+                         f"J {va.get('j_mae_hz', 0):.2f}Hz f1 {va.get('presence_f1', 0):.3f} "
+                         f"deg {va.get('deg_acc_balanced', 0):.3f}" if do_val else " | val skipped"))
 
-            # ── Probes + failure analysis (every probe_every_epochs + last) ──────
-            run_probe = (cfg.diagnostics.enabled
-                         and (epoch % cfg.diagnostics.probe_every_epochs == 0
-                              or epoch == cfg.training.epochs - 1))
-            if run_probe and probe_eval is not None:
-                try:
-                    pagg = probe_eval.run(model, epoch, amp_ctx)
-                    if pagg:
-                        diag.log_metrics(split="probe", epoch=epoch, step=global_step, metrics=pagg)
-                    from model.evaluation.failure_analysis import (
-                        per_sample_evaluate, save_failure_cases)
-                    per_sample = per_sample_evaluate(
-                        model, val_records, ds["val"], cfg.training.batch_size,
-                        std, vocab, self.device, amp_ctx)
-                    fsummary = save_failure_cases(per_sample, run_dir, epoch)
-                    diag.log_event("failure_analysis", {"epoch": epoch, **fsummary})
-                except Exception as e:
-                    print(f"[trainer] probe/failure analysis failed at epoch {epoch}: {e}")
+                # ── Probes + failure analysis (every probe_every_epochs + last) ──────
+                run_probe = (cfg.diagnostics.enabled
+                             and (epoch % cfg.diagnostics.probe_every_epochs == 0
+                                  or epoch == cfg.training.epochs - 1))
+                if run_probe and probe_eval is not None:
+                    try:
+                        pagg = probe_eval.run(core, epoch, amp_ctx)
+                        if pagg:
+                            diag.log_metrics(split="probe", epoch=epoch, step=global_step, metrics=pagg)
+                        from model.evaluation.failure_analysis import (
+                            per_sample_evaluate, save_failure_cases)
+                        per_sample = per_sample_evaluate(
+                            core, val_records, ds["val"], cfg.training.batch_size,
+                            std, vocab, self.device, amp_ctx)
+                        fsummary = save_failure_cases(per_sample, run_dir, epoch)
+                        diag.log_event("failure_analysis", {"epoch": epoch, **fsummary})
+                    except Exception as e:
+                        print(f"[trainer] probe/failure analysis failed at epoch {epoch}: {e}")
 
-            if bad >= cfg.training.patience:
-                diag.log_event("early_stop", {"epoch": epoch, "patience": cfg.training.patience})
-                print(f"early stop at epoch {epoch}")
+                stop = bad >= cfg.training.patience
+
+            stop = dist_utils.broadcast_stop(stop)        # all ranks agree + this syncs the epoch
+            if stop:
+                if is_main:
+                    diag.log_event("early_stop", {"epoch": epoch, "patience": cfg.training.patience})
+                    print(f"early stop at epoch {epoch}")
                 break
 
-        # Latest failure summary -> summary.json + a coarse recommendation.
-        failure_summary, recommendation = {}, ""
-        probe_dir = run_dir / "probes"
-        if probe_dir.exists():
-            eps = sorted((d for d in probe_dir.iterdir() if d.is_dir()), reverse=True)
-            for d in eps:
-                fp = d / "failure_summary.json"
-                if fp.exists():
-                    import json as _json
-                    failure_summary = _json.loads(fp.read_text())
-                    recommendation = _FAILURE_HINTS.get(
-                        failure_summary.get("dominant_failure", ""), "")
-                    break
+        result = {}
+        if is_main:
+            # Latest failure summary -> summary.json + a coarse recommendation.
+            failure_summary, recommendation = {}, ""
+            probe_dir = run_dir / "probes"
+            if probe_dir.exists():
+                eps = sorted((d for d in probe_dir.iterdir() if d.is_dir()), reverse=True)
+                for d in eps:
+                    fp = d / "failure_summary.json"
+                    if fp.exists():
+                        import json as _json
+                        failure_summary = _json.loads(fp.read_text())
+                        recommendation = _FAILURE_HINTS.get(
+                            failure_summary.get("dominant_failure", ""), "")
+                        break
 
-        summary = {
-            "run_id": run_id, "state": "finished", "best_epoch": best_epoch,
-            "best_score": (float(best) if best != float("inf") else None),
-            "best_metrics": va, "score_formula": "shift_mae_ppm + j_mae_hz / 10.0",
-            "failure_summary": failure_summary, "recommendation": recommendation,
-        }
-        diag.finalize(summary)
-        diag.update_status({
-            "state": "finished", "run_id": run_id, "epoch": best_epoch,
-            "epochs": cfg.training.epochs, "stage": "1", "global_step": global_step,
-            "best_score": (float(best) if best != float("inf") else None),
-            "best_epoch": best_epoch, "device": self.device, "last_update_time": time.time(),
-            "checkpoint_best": "checkpoints/best.pt", "checkpoint_last": "checkpoints/last.pt",
-        })
-        diag.log_event("run_end", {"run_id": run_id, "best_epoch": best_epoch})
-        print(f"[trainer] done -> {run_dir}")
-        return {"run_dir": str(run_dir), "best_metrics": va, "best_epoch": best_epoch,
-                "model": model, "standardizer": std, "vocab": vocab}
+            summary = {
+                "run_id": run_id, "state": "finished", "best_epoch": best_epoch,
+                "best_score": (float(best) if best != float("inf") else None),
+                "best_metrics": va, "score_formula": "shift_mae_ppm + j_mae_hz / 10.0",
+                "failure_summary": failure_summary, "recommendation": recommendation,
+            }
+            diag.finalize(summary)
+            diag.update_status({
+                "state": "finished", "run_id": run_id, "epoch": best_epoch,
+                "epochs": cfg.training.epochs, "stage": "1", "global_step": global_step,
+                "best_score": (float(best) if best != float("inf") else None),
+                "best_epoch": best_epoch, "device": self.device, "last_update_time": time.time(),
+                "checkpoint_best": "checkpoints/best.pt", "checkpoint_last": "checkpoints/last.pt",
+            })
+            diag.log_event("run_end", {"run_id": run_id, "best_epoch": best_epoch})
+            print(f"[trainer] done -> {run_dir}")
+            result = {"run_dir": str(run_dir), "best_metrics": va, "best_epoch": best_epoch,
+                      "model": core, "standardizer": std, "vocab": vocab}
+        dist_utils.cleanup()
+        return result

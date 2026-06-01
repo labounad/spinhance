@@ -21,8 +21,11 @@ def run_from_config(cfg: Config):
         from model.data.stacked_spectra import StackedSpectra
         recs = load_pubchem_records(cfg.data.records, max_mol=cfg.data.max_mol)
         spectra_source = StackedSpectra(cfg.data.parts)
-        if cfg.data.max_mol == 0 and len(recs) != len(spectra_source):
-            raise ValueError(f"records ({len(recs)}) != stacked spectra "
+        # records may be fewer than spectra (out-of-vocab molecules filtered), but every
+        # record's global row must index into the stacked spectra — catch real mismatch.
+        max_row = max((r["row"] for r in recs), default=-1)
+        if max_row >= len(spectra_source):
+            raise ValueError(f"record row {max_row} >= stacked spectra "
                              f"({len(spectra_source)}) — order/count mismatch")
     else:
         recs = load_records(cfg.data.records, cfg.data.spectra, fields=(cfg.data.field,))

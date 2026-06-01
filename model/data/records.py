@@ -57,16 +57,29 @@ def load_records(spin_systems_json, spectra_root, fields=(90,), require_spectra=
     return records
 
 
-def load_pubchem_records(spin_systems_json, max_mol=0):
+def load_pubchem_records(spin_systems_json, max_mol=0, allowed_degeneracy=None):
     """Records for the PubChem 3M+ regime: spectra come from stacked ``part_<k>.npy``
     shards (``model.data.stacked_spectra.StackedSpectra``), not per-molecule files.
     Each record carries ``row`` = its global index in record order, which is also
     its row in the concatenated shards; the dataset's ``spectra_source[row]`` fetches
     the spectrum. ``max_mol`` truncates for quick prelim runs (streaming, so it stops
-    early without parsing the whole file)."""
+    early without parsing the whole file).
+
+    Molecules whose degeneracy contains a value outside the model's vocab (default
+    ``DEFAULT_DEG_VOCAB``) are skipped — ``row`` stays the global index so the
+    spectrum mapping is unaffected. In PubChem this drops only a handful (deg 5/8,
+    ~8 groups in 25.6M); the model has no class for them and can't learn them from
+    a few examples, so filtering beats expanding the vocab (keeps n_deg_classes ==
+    the 64k production model)."""
+    from model.schemas.constants import DEFAULT_DEG_VOCAB
+    allowed = set(allowed_degeneracy or DEFAULT_DEG_VOCAB)
     records = []
+    skipped = 0
     for idx, rec in read_spin_systems(spin_systems_json):
         _labels, shifts, couplings, degeneracy = record_to_arrays(rec)
+        if any(int(d) not in allowed for d in degeneracy):
+            skipped += 1
+            continue
         records.append({
             "mol_id": f"mol_{idx:06d}",
             "row": idx,
@@ -80,4 +93,7 @@ def load_pubchem_records(spin_systems_json, max_mol=0):
         })
         if max_mol and len(records) >= max_mol:
             break
+    if skipped:
+        print(f"[pubchem] filtered {skipped} molecules with out-of-vocab degeneracy "
+              f"(vocab {sorted(allowed)})")
     return records
