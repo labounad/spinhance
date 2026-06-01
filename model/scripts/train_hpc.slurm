@@ -9,7 +9,7 @@
 #SBATCH -p rtxa6000
 #SBATCH --gres=gpu:rtxa6000:1
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=96G
+#SBATCH --mem=200G
 #SBATCH -t 24:00:00
 #SBATCH -o /gpfs/home/labounader/code/spinhance/hpc_logs/%x_%j.out
 #SBATCH -e /gpfs/home/labounader/code/spinhance/hpc_logs/%x_%j.err
@@ -26,7 +26,7 @@ DATA_OV="--set data.records=/gpfs/home/yimingzhang/hackathon-shared/spin_systems
  --set data.parts=/gpfs/home/yimingzhang/hackathon-shared/spectra_run/out/90MHz \
  --set data.max_mol=0 \
  --set training.batch_size=512 \
- --set training.num_workers=8"
+ --set training.num_workers=4"
 
 echo "host $(hostname) | gpu: $(nvidia-smi --query-gpu=name --format=csv,noheader)"
 echo "config $CONFIG | run $RUN_NAME"
