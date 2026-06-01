@@ -145,8 +145,8 @@
   table.mx td.zero{color:var(--ink-faint)}
   /* widen the representation section; keep intro text constrained and separated */
   #rep .wrap{max-width:1440px}
-  #rep .wrap > .kicker, #rep .wrap > h2, #rep .wrap > .lead{max-width:760px}
-  #rep .wrap > .lead{padding-bottom:24px;border-bottom:1px solid var(--line);margin-bottom:28px}
+  /* rep-intro: centred at the same visual position as the old 1080px wrap */
+  .rep-intro{max-width:1032px;margin:0 auto;padding-bottom:24px;border-bottom:1px solid var(--line);margin-bottom:28px}
   /* pipeline card svg icons */
   .pipe-ic{width:30px;height:30px;display:block;margin-bottom:8px;color:var(--accent-2)}
 
@@ -315,15 +315,17 @@
       </div>
       <div class="card">
         <!-- Spectral peaks above a baseline: simulated NMR multiplets -->
+        <!-- NMR multiplets: AB quartet (second-order, short-tall-tall-short) + doublet -->
         <svg class="pipe-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
-          <line x1="2" y1="20" x2="22" y2="20"/>
-          <line x1="6"  y1="20" x2="6"  y2="16"/>
-          <line x1="8"  y1="20" x2="8"  y2="8"/>
-          <line x1="10" y1="20" x2="10" y2="14"/>
-          <line x1="13" y1="20" x2="13" y2="4"/>
-          <line x1="15" y1="20" x2="15" y2="8"/>
-          <line x1="17" y1="20" x2="17" y2="13"/>
-          <line x1="19" y1="20" x2="19" y2="17"/>
+          <line x1="1" y1="20" x2="23" y2="20"/>
+          <!-- AB quartet: outer lines short, inner tall — the second-order low-field signature -->
+          <line x1="3"   y1="20" x2="3"   y2="17.5"/>
+          <line x1="5"   y1="20" x2="5"   y2="7"/>
+          <line x1="7"   y1="20" x2="7"   y2="7"/>
+          <line x1="9"   y1="20" x2="9"   y2="17.5"/>
+          <!-- Doublet: two equal lines (first-order, resolved at high field) -->
+          <line x1="15"  y1="20" x2="15"  y2="10"/>
+          <line x1="17.5" y1="20" x2="17.5" y2="10"/>
         </svg>
         <div class="step">TASK 3 · SIMULATE</div>
         <h3>Exact spin sim</h3>
@@ -332,26 +334,31 @@
       </div>
       <div class="card">
         <!-- Neural network: three layers with connection lines -->
+        <!-- Neural network: 3-layer (3 → 4 → 2), nodes fitted within 24×24 -->
         <svg class="pipe-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
-          <circle cx="3.5" cy="8"  r="2"/>
-          <circle cx="3.5" cy="14" r="2"/>
-          <circle cx="3.5" cy="20" r="2"/>
-          <circle cx="12"  cy="5"  r="2"/>
-          <circle cx="12"  cy="11" r="2"/>
-          <circle cx="12"  cy="17" r="2"/>
-          <circle cx="12"  cy="23" r="2"/>
-          <circle cx="20.5" cy="9.5"  r="2"/>
-          <circle cx="20.5" cy="17.5" r="2"/>
-          <line x1="5.5"  y1="8"  x2="10" y2="5.5"  stroke-opacity="0.35"/>
-          <line x1="5.5"  y1="8"  x2="10" y2="11"   stroke-opacity="0.35"/>
-          <line x1="5.5"  y1="14" x2="10" y2="11"   stroke-opacity="0.35"/>
-          <line x1="5.5"  y1="14" x2="10" y2="17"   stroke-opacity="0.35"/>
-          <line x1="5.5"  y1="20" x2="10" y2="17"   stroke-opacity="0.35"/>
-          <line x1="5.5"  y1="20" x2="10" y2="22.5" stroke-opacity="0.35"/>
-          <line x1="14"   y1="5.5"  x2="18.5" y2="9.5"  stroke-opacity="0.35"/>
-          <line x1="14"   y1="11"   x2="18.5" y2="9.5"  stroke-opacity="0.35"/>
-          <line x1="14"   y1="17"   x2="18.5" y2="17.5" stroke-opacity="0.35"/>
-          <line x1="14"   y1="22.5" x2="18.5" y2="17.5" stroke-opacity="0.35"/>
+          <!-- Input: 3 nodes -->
+          <circle cx="3.5" cy="7"  r="1.7"/>
+          <circle cx="3.5" cy="13" r="1.7"/>
+          <circle cx="3.5" cy="19" r="1.7"/>
+          <!-- Hidden: 4 nodes, r=1.7 so top=4.5-1.7=2.8>0, bottom=19.5+1.7=21.2<24 -->
+          <circle cx="12"  cy="4.5"  r="1.7"/>
+          <circle cx="12"  cy="10.5" r="1.7"/>
+          <circle cx="12"  cy="16.5" r="1.7"/>
+          <circle cx="12"  cy="21.5" r="1.7"/>
+          <!-- Output: 2 nodes -->
+          <circle cx="20.5" cy="9.5"  r="1.7"/>
+          <circle cx="20.5" cy="17.5" r="1.7"/>
+          <!-- Connections -->
+          <line x1="5.2"  y1="7"    x2="10.3" y2="5"    stroke-opacity="0.32"/>
+          <line x1="5.2"  y1="7"    x2="10.3" y2="11"   stroke-opacity="0.32"/>
+          <line x1="5.2"  y1="13"   x2="10.3" y2="11"   stroke-opacity="0.32"/>
+          <line x1="5.2"  y1="13"   x2="10.3" y2="17"   stroke-opacity="0.32"/>
+          <line x1="5.2"  y1="19"   x2="10.3" y2="17"   stroke-opacity="0.32"/>
+          <line x1="5.2"  y1="19"   x2="10.3" y2="21.5"   stroke-opacity="0.32"/>
+          <line x1="13.7" y1="5"    x2="18.8" y2="9.5"  stroke-opacity="0.32"/>
+          <line x1="13.7" y1="11"   x2="18.8" y2="9.5"  stroke-opacity="0.32"/>
+          <line x1="13.7" y1="17"   x2="18.8" y2="17.5" stroke-opacity="0.32"/>
+          <line x1="13.7" y1="21.5"   x2="18.8" y2="17.5" stroke-opacity="0.32"/>
         </svg>
         <div class="step">TASK 4 · MODEL</div>
         <h3>Spectrum → matrix</h3>
@@ -365,8 +372,9 @@
 <!-- ============ REPRESENTATION ============ -->
 <section class="block" id="rep">
   <div class="wrap">
+    <div class="rep-intro">
     <div class="kicker">The representation</div>
-    <h2>Every molecule is one labeled graph.</h2>
+    <h2>Molecular spin systems are labeled, undirected graphs.</h2>
     <p class="lead">The <b>spin graph</b> is the model's learned intermediate representation — a labeled,
       undirected graph that sits between the raw spectrum and the output matrix.
       <b>Nodes</b> carry a chemical shift δ (ppm) and a proton degeneracy <i>n</i>.
@@ -375,6 +383,7 @@
       Stored as a symmetric 8×8 matrix with shifts on the diagonal and an 8×1 degeneracy
       vector — defined only up to permutation of the 8 labels (S₈). The structure on
       the left and the matrix on the right are two views of the <i>same</i> molecule now in the hero.</p>
+    </div><!-- /rep-intro -->
     <div class="rep-pair">
       <div class="viewer-card">
         <span class="v-label">3D structure</span>
@@ -396,7 +405,7 @@
 <section class="block" id="results">
   <div class="wrap">
     <div class="kicker">Where we are</div>
-    <h2>From baseline to production — four stages.</h2>
+    <h2>See the development of the model architecture.</h2>
     <p class="lead">Each stage introduced a different architectural or loss innovation. All metrics are
       Hungarian-matched on 12,895 scaffold-split held-out molecules the model never saw.</p>
 
