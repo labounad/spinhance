@@ -1,0 +1,65 @@
+# Phase 1b — spingraph_decoder, CANONICAL loss (no Hungarian).
+# session021 finding: the query decoder reached shift 0.080 / J 1.35 / F1 0.875 /
+# deg-bal 0.901 under the canonical `matrix` loss (ep0–16) — crushing the CNN
+# baseline (0.279 / 1.80 / 0.807 / 0.732) — but the Hungarian crossover (ep15–20)
+# *degraded* it (J 1.31→2.1, F1 0.87→0.77, never recovered → early-stop). For
+# distinct-shift NMR data the canonical shift-sorted order is unambiguous and
+# highly learnable; Hungarian's assignment freedom only scrambled the relational
+# coupling structure. So: keep the canonical matrix anchor throughout, drop
+# Hungarian, ramp the surrogate spectral term for refinement.
+#
+# Same architecture + WSD LR as session021. Beat the baseline floor (RESULTS.md).
+run:
+  name: spingraph_canonical
+  output_dir: model/runs
+
+data:
+  records: mol_to_spin_system/data/spin_systems_chembl.json
+  spectra: simulation/data/spectra
+  field: 90
+  split: none
+
+model:
+  name: spingraph_decoder
+  size: medium
+  dim: 256
+  enc_layers: 2
+  dec_layers: 4
+  n_heads: 8
+  dropout: 0.1
+
+loss:
+  name: composite
+  terms:
+    - name: matrix              # canonical anchor, always on (no Hungarian)
+      weight: 1.0
+    - name: surrogate_spectral  # spectral refinement, ramped in after matrix settles
+      weight: 0.6
+      start_epoch: 20
+      ramp_epochs: 10
+      checkpoint: model_artifacts/surrogate/session012_best.pt
+      field: 90
+      w1_weight: 1.0
+      cosine_weight: 0.5
+      use_clean_target: true
+
+training:
+  epochs: 100
+  batch_size: 256
+  lr: 0.0003
+  weight_decay: 0.01
+  amp: bf16
+  warmup_frac: 0.05
+  lr_stable_frac: 0.60
+  lr_min_factor: 0.40
+  grad_clip: 1.0
+  patience: 20
+  num_workers: 8
+  val_every: 1
+  seed: 0
+
+diagnostics:
+  enabled: true
+  log_every_steps: 50
+  probe_every_epochs: 5
+  probe_count: 16
