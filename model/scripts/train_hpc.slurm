@@ -9,7 +9,7 @@
 #SBATCH -p rtxa6000
 #SBATCH --gres=gpu:rtxa6000:1
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=200G
+#SBATCH --mem=235G
 #SBATCH -t 24:00:00
 #SBATCH -o /gpfs/home/labounader/code/spinhance/hpc_logs/%x_%j.out
 #SBATCH -e /gpfs/home/labounader/code/spinhance/hpc_logs/%x_%j.err

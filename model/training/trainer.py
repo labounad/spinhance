@@ -116,6 +116,13 @@ class Trainer:
         pin = self.device != "cpu"
         dl_kw = dict(collate_fn=collate_spin_batch, num_workers=nw, pin_memory=pin,
                      persistent_workers=nw > 0, worker_init_fn=worker_init_fn)
+        if nw > 0:
+            # COW-share the dataset with workers via fork. With CUDA initialized, torch
+            # otherwise picks forkserver/spawn, which PICKLES the whole dataset (records +
+            # canonical orders + bucket keys) to each worker — fine at 64k but hangs worker
+            # spawn for minutes at 500k and effectively forever at 3M. Workers do CPU-only
+            # data loading, so fork-after-CUDA-init is safe here.
+            dl_kw["multiprocessing_context"] = "fork"
         if self.dist.enabled:
             # each rank trains on a disjoint shard; drop_last keeps step counts equal
             # across ranks (unequal counts deadlock the backward all-reduce)

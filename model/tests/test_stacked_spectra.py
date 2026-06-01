@@ -63,6 +63,21 @@ def test_open_mmaps_capped_lru(tmp_path):
     assert len(ss._mmaps) <= 5
 
 
+def test_preload_serves_from_ram(tmp_path):
+    """preload() loads requested rows into RAM (sequential shard reads) and
+    __getitem__ serves them, matching on-disk values; unrequested rows fall back
+    to mmap."""
+    flat = _write_parts(tmp_path, sizes=[3, 4, 3])      # 10 rows over 3 shards
+    ss = StackedSpectra(tmp_path)
+    want = [0, 1, 5, 9]
+    ss.preload(want)
+    assert ss._ram is not None and ss._ram.shape[0] == len(want)
+    for i in want:
+        assert ss[i][0] == i
+        assert np.array_equal(ss[i], flat[i])
+    assert np.array_equal(ss[3], flat[3])               # non-preloaded -> mmap fallback
+
+
 def test_parts_sorted_numerically_not_lexically(tmp_path):
     # 12 parts: lexical sort would put part_10 before part_2
     _write_parts(tmp_path, sizes=[1] * 12)

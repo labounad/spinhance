@@ -18,6 +18,7 @@ data:
   field: 90
   split: none                                   # random 70/20/10 (scaffold too slow at 3M)
   max_mol: 0                                     # 0 = full 3.2M (set >0 for a faster prelim subset)
+  preload: true            # RAM-resident (fast on GPFS); ~196GB for full 3.2M (needs big-RAM node)
 
 model:
   name: spingraph_decoder
