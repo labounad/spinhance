@@ -19,6 +19,7 @@ REPO=/gpfs/home/labounader/code/spinhance
 ENVPY=/gpfs/home/labounader/micromamba/envs/spinhance/bin/python
 cd "$REPO"
 export PYTHONPATH=.
+ulimit -n 16384 2>/dev/null || true    # headroom for stacked-shard mmaps (belt + LRU cap)
 
 # HPC data + scale overrides (full 3.2M; big batch — the xl model is memory-light;
 # 257GB RAM so workers are cheap). 90 MHz ONLY (model input constraint).

@@ -26,6 +26,7 @@ REPO=/gpfs/home/labounader/code/spinhance
 ENVPY=/gpfs/home/labounader/micromamba/envs/spinhance/bin/python
 cd "$REPO"
 export PYTHONPATH=.
+ulimit -n 16384 2>/dev/null || true    # headroom for stacked-shard mmaps (belt + LRU cap)
 export MASTER_ADDR=$(scontrol show hostnames "$SLURM_NODELIST" | head -1)
 export MASTER_PORT=29500
 export NCCL_DEBUG=WARN          # surface NCCL init/interface problems in the log

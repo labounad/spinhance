@@ -52,6 +52,17 @@ def test_index_maps_global_to_part_row(tmp_path):
         assert np.array_equal(ss[i], flat[i])
 
 
+def test_open_mmaps_capped_lru(tmp_path):
+    """Shuffled access across many shards must NOT leak file descriptors — the
+    LRU keeps at most max_open mmaps open (regression for OSError: Too many open
+    files at 3200 shards)."""
+    _write_parts(tmp_path, sizes=[2] * 20)              # 20 shards, 40 rows
+    ss = StackedSpectra(tmp_path, max_open=5)
+    for i in range(40):                                  # touch every shard
+        _ = ss[i]
+    assert len(ss._mmaps) <= 5
+
+
 def test_parts_sorted_numerically_not_lexically(tmp_path):
     # 12 parts: lexical sort would put part_10 before part_2
     _write_parts(tmp_path, sizes=[1] * 12)
