@@ -235,6 +235,10 @@
   table.cmp td.num{text-align:right;font-variant-numeric:tabular-nums}
   table.cmp tr.st-production td{background:color-mix(in srgb,var(--accent) 9%,transparent)}
   table.cmp tr.st-running td{color:var(--ink-faint);font-style:italic}
+  table.cmp td.tval{color:var(--accent);font-weight:700}
+  .split-tag{font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:2px 7px;border-radius:99px;margin-left:8px;vertical-align:middle}
+  .split-val{background:color-mix(in srgb,var(--ink-faint) 22%,transparent);color:var(--ink-soft)}
+  .split-test{background:color-mix(in srgb,var(--accent) 20%,transparent);color:var(--accent)}
   .tx-nav{display:flex;align-items:center;gap:10px}
   .tx-sel{font:inherit;font-size:13px;padding:5px 8px;border-radius:8px;border:1px solid var(--line-strong);background:var(--panel);color:var(--ink)}
   .tx-meta{font-size:13px;color:var(--ink-soft);margin-bottom:12px}
@@ -667,31 +671,38 @@
 <section class="block" id="explore">
   <div class="wrap">
     <div class="kicker">Explore the models</div>
-    <h2>Three interactive views into development &amp; testing.</h2>
-    <p class="lead">Training curves across the model lineage, a sortable comparison of every run, and a
-      held-out test-molecule explorer — pick a molecule the model never saw and compare its predicted
-      spin system against ground truth, then re-render the prediction through the exact simulator.</p>
+    <h2>Four interactive views into development &amp; testing.</h2>
+    <p class="lead">Training curves and the model comparison report <b>validation-split</b> metrics
+      (used for model selection); the held-out <b>test split</b> — never seen in training or selection —
+      is reported separately below and in the molecule explorer.</p>
 
     <!-- 1 + 2 side by side -->
     <div class="explore-row">
       <!-- 1. learning curves -->
       <div class="viewer-block" id="lcViewer">
-        <div class="vb-head"><h3>Learning curves</h3><div class="vb-controls" id="lcMetrics"></div></div>
+        <div class="vb-head"><h3>Learning curves <span class="split-tag split-val">validation</span></h3><div class="vb-controls" id="lcMetrics"></div></div>
         <div class="lc-legend" id="lcLegend"></div>
         <canvas id="lcCanvas" class="vb-canvas"></canvas>
       </div>
 
       <!-- 2. comparison table -->
       <div class="viewer-block">
-        <div class="vb-head"><h3>Model comparison</h3>
+        <div class="vb-head"><h3>Model comparison <span class="split-tag split-val">validation</span></h3>
           <span class="muted" style="font-size:13px">click to sort</span></div>
         <div id="cmpTable" class="cmp-wrap"></div>
       </div>
     </div>
 
-    <!-- 3. test-molecule explorer -->
+    <!-- 3. held-out test eval (val vs test) -->
+    <div class="viewer-block" id="testEvalWrap">
+      <div class="vb-head"><h3>Held-out test-set evaluation <span class="split-tag split-test">test</span></h3>
+        <span class="muted" style="font-size:13px">validation vs the never-seen test split</span></div>
+      <div id="testEval" class="cmp-wrap"></div>
+    </div>
+
+    <!-- 4. test-molecule explorer -->
     <div class="viewer-block" id="txViewer">
-      <div class="vb-head"><h3>Held-out test-molecule explorer</h3>
+      <div class="vb-head"><h3>Held-out test-molecule explorer <span class="split-tag split-test">test</span></h3>
         <div class="tx-nav">
           <button class="car-btn" id="txPrev" aria-label="Previous molecule">&#8249;</button>
           <select id="txSel" class="tx-sel"></select>
@@ -712,7 +723,8 @@
         </div>
       </div>
       <p class="muted" style="margin-top:12px;font-size:12.5px">Predictions from <b>session&nbsp;026</b> (medium,
-        10M params) on molecules held out of training. The rendered trace re-simulates the model&rsquo;s predicted
+        10M params) on the <b>held-out test split</b> — molecules never seen in training or model selection.
+        The rendered trace re-simulates the model&rsquo;s predicted
         spin system through the exact quantum simulator — a close overlay means the recovered parameters reproduce
         the input spectrum. Predicted values &gt; 0.1&nbsp;ppm / 1.5&nbsp;Hz off ground truth are shown in red.</p>
     </div>
