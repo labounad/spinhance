@@ -51,7 +51,13 @@ training:
   lr_min_factor: 0.30
   grad_clip: 1.0
   patience: 6
-  num_workers: 8
+  # LOW worker count on purpose: each persistent DataLoader worker (train AND val)
+  # forks a copy of the records list, and Python refcounting breaks copy-on-write,
+  # so 8 workers x ~1GB/500k-record copy thrashes a 16GB g6.xlarge. 2 is plenty
+  # since the xl model's per-step GPU time dwarfs item prep. NOTE: the FULL 3.2M set
+  # (~6-8GB/copy) needs a big-RAM instance (g6.2xlarge 32GB / g6.4xlarge 64GB) or a
+  # leaner dataset, regardless of this value.
+  num_workers: 2
   val_every: 1
   seed: 0
 

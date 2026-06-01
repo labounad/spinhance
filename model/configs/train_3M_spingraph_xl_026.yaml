@@ -52,7 +52,9 @@ training:
   lr_min_factor: 0.30
   grad_clip: 1.0
   patience: 6
-  num_workers: 8
+  # see train_3M_spingraph_xl_025.yaml — low workers to avoid the per-worker
+  # 500k-record copy thrashing a 16GB g6.xlarge. Full 3.2M needs a big-RAM box.
+  num_workers: 2
   val_every: 1
   seed: 0
 
