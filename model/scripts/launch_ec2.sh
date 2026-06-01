@@ -122,15 +122,31 @@ rm "$ARCHIVE"
 
 echo "[4/5] Downloading data on instance ($DATA_MODE)..."
 if [ "$DATA_MODE" = "pubchem" ]; then
-  # 3M+ PubChem: gz records + stacked 90 MHz shards (90 MHz ONLY — model input constraint)
-  _ssh "set -e
-    mkdir -p $WORKSPACE/data/pubchem/spectra_parts/90MHz
-    aws s3 cp s3://$BUCKET/pubchem/spin_systems_pubchem.json.gz \
-      $WORKSPACE/data/pubchem/spin_systems_pubchem.json.gz --no-progress
-    echo '  syncing 90MHz parts (~196GB)...'
-    aws s3 sync s3://$BUCKET/pubchem/spectra_parts/90MHz/ \
-      $WORKSPACE/data/pubchem/spectra_parts/90MHz/ --no-progress
-    echo \"  parts on disk: \$(ls $WORKSPACE/data/pubchem/spectra_parts/90MHz/ | grep -c part_)\""
+  # 3M+ PubChem: gz records + stacked 90 MHz shards (90 MHz ONLY — model input constraint).
+  # MAX_PARTS=N downloads only the first N shards (1000 mols each) for a subset prelim;
+  # unset = full ~196GB sync. Pair MAX_PARTS with --set data.max_mol=<N*1000>.
+  PD="$WORKSPACE/data/pubchem/spectra_parts/90MHz"
+  if [ -n "$MAX_PARTS" ]; then
+    _ssh "set -e
+      mkdir -p $PD
+      aws s3 cp s3://$BUCKET/pubchem/spin_systems_pubchem.json.gz \
+        $WORKSPACE/data/pubchem/spin_systems_pubchem.json.gz --no-progress
+      echo '  downloading first $MAX_PARTS parts (subset)...'
+      for k in \$(seq 0 $((MAX_PARTS-1))); do
+        f=\$(printf 'part_%05d.npy' \$k)
+        aws s3 cp s3://$BUCKET/pubchem/spectra_parts/90MHz/\$f $PD/\$f --no-progress &
+        while [ \$(jobs -r | wc -l) -ge 16 ]; do wait -n; done
+      done; wait
+      echo \"  parts on disk: \$(ls $PD | grep -c part_)\""
+  else
+    _ssh "set -e
+      mkdir -p $PD
+      aws s3 cp s3://$BUCKET/pubchem/spin_systems_pubchem.json.gz \
+        $WORKSPACE/data/pubchem/spin_systems_pubchem.json.gz --no-progress
+      echo '  syncing 90MHz parts (~196GB)...'
+      aws s3 sync s3://$BUCKET/pubchem/spectra_parts/90MHz/ $PD/ --no-progress
+      echo \"  parts on disk: \$(ls $PD | grep -c part_)\""
+  fi
 else
   _ssh "set -e
     mkdir -p $WORKSPACE/mol_to_spin_system/data $WORKSPACE/simulation/data/spectra/90MHz
