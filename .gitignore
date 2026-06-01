@@ -34,6 +34,7 @@ generate/data/buckets/
 mol_to_spin_system/data/spin_systems_chembl.json
 mol_to_spin_system/data/spin_systems_chembl_8spin_randomized.json
 mol_to_spin_system/data/spin_systems_pubchem.json.tar.gz
+mol_to_spin_system/data/spin_systems_pubchem.json.gz
 mol_to_spin_system/data/buckets/
 
 # Generated spectra (regenerate from spin_systems.json + simulation CLI)
