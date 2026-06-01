@@ -178,6 +178,68 @@
   .reveal .controls{color:var(--accent);}
   .reveal .progress{color:var(--accent);height:4px;}
   .footnote{position:absolute;left:64px;bottom:22px;font-size:13px;color:var(--ink-faint);z-index:3;}
+
+  /* ============ rework: shared helpers ============ */
+  .slidepad h2{font-size:34px;}
+  .twocol{display:grid;grid-template-columns:1fr 1fr;gap:30px;flex:1;min-height:0;margin-top:16px;align-items:center;}
+  .twocol.wide-left{grid-template-columns:1.15fr .85fr;}
+  ul.clean{margin:.2em 0 0;padding-left:0;list-style:none;}
+  ul.clean li{position:relative;padding-left:24px;margin:.55em 0;color:var(--ink-soft);font-size:19px;line-height:1.45;}
+  ul.clean li::before{content:"";position:absolute;left:2px;top:.62em;width:8px;height:8px;border-radius:50%;
+    background:linear-gradient(135deg,var(--accent),var(--accent-2));}
+  ul.clean li b{color:var(--ink);}
+  .plain{font-size:15px;color:var(--ink-faint);font-style:italic;margin-top:3px;}   /* plain-language translation */
+  .note-strip{margin-top:auto;font-size:16px;color:var(--ink-soft);border-left:3px solid var(--accent);padding-left:14px;}
+  .note-strip b{background:linear-gradient(90deg,var(--accent),var(--accent-2));-webkit-background-clip:text;background-clip:text;color:transparent;}
+
+  /* metric cards (gradient numbers, like the site) */
+  .metric-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:18px;}
+  .metric{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow);}
+  .metric .v{font-size:30px;font-weight:800;letter-spacing:-.03em;
+    background:linear-gradient(90deg,var(--accent),var(--accent-2));-webkit-background-clip:text;background-clip:text;color:transparent;}
+  .metric .l{font-size:13.5px;color:var(--ink-soft);margin-top:3px;line-height:1.3;}
+  .metric .d{font-size:12.5px;color:var(--accent-2);font-weight:700;margin-top:3px;}
+
+  /* horizontal flow (pipeline / architecture) */
+  .flow{display:flex;align-items:stretch;gap:0;margin-top:20px;flex:1;min-height:0;}
+  .flow .node{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 16px;
+    box-shadow:var(--shadow);display:flex;flex-direction:column;}
+  .flow .node .n{font-size:12px;font-weight:800;letter-spacing:.08em;color:var(--accent-2);}
+  .flow .node h3{font-size:18px;margin:6px 0 5px;}
+  .flow .node p{font-size:14px;color:var(--ink-soft);margin:0;line-height:1.45;}
+  .flow .node .big{margin-top:auto;padding-top:8px;font-size:15px;font-weight:800;
+    background:linear-gradient(90deg,var(--accent),var(--accent-2));-webkit-background-clip:text;background-clip:text;color:transparent;}
+  .flow .arrow{flex:none;width:34px;display:grid;place-items:center;color:var(--ink-faint);font-size:22px;}
+
+  /* hamiltonian + stick→lorentzian */
+  .ham{font-size:26px;color:var(--ink);text-align:center;margin:6px 0;font-weight:600;}
+  .ham .term{padding:4px 10px;border-radius:10px;border:1px solid var(--line-strong);}
+  .ham .zee{color:var(--accent);} .ham .cpl{color:var(--accent-3);}
+  .ham sub{font-size:.62em;}
+  .eqcap{display:flex;justify-content:center;gap:40px;font-size:14px;color:var(--ink-soft);margin-top:4px;}
+
+  /* comparison table */
+  table.deck-cmp{width:100%;border-collapse:collapse;font-size:17px;margin-top:14px;}
+  table.deck-cmp th{text-align:left;padding:10px 12px;border-bottom:2px solid var(--line-strong);color:var(--ink-soft);font-weight:700;}
+  table.deck-cmp td{padding:10px 12px;border-bottom:1px solid var(--line);color:var(--ink-soft);}
+  table.deck-cmp td.num{text-align:right;font-variant-numeric:tabular-nums;}
+  table.deck-cmp tr.win td{color:var(--ink);font-weight:700;}
+  table.deck-cmp tr.win td .g{background:linear-gradient(90deg,var(--accent),var(--accent-2));-webkit-background-clip:text;background-clip:text;color:transparent;}
+  .split-pill{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:2px 9px;border-radius:99px;margin-left:8px;vertical-align:middle;}
+  .sp-val{background:color-mix(in srgb,var(--ink-faint) 22%,transparent);color:var(--ink-soft);}
+  .sp-test{background:color-mix(in srgb,var(--accent) 20%,transparent);color:var(--accent);}
+
+  /* doublet -> singlet illustration */
+  .ds-row{display:flex;gap:30px;align-items:center;justify-content:center;margin-top:8px;}
+  .ds{display:flex;flex-direction:column;align-items:center;gap:6px;font-size:14px;color:var(--ink-soft);}
+  .ds svg{width:150px;height:64px;}
+
+  /* big-number cost contrast (motivation) */
+  .cost{display:flex;gap:24px;margin-top:6px;}
+  .cost .c{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow);}
+  .cost .c .amt{font-size:30px;font-weight:800;letter-spacing:-.02em;}
+  .cost .c.benchtop .amt{color:var(--accent-2);} .cost .c.cryo .amt{color:var(--ink-faint);}
+  .cost .c .lab{font-size:14px;color:var(--ink-soft);margin-top:2px;}
 </style>
 </head>
 <body>
@@ -197,28 +259,51 @@
         </svg>Spinhance
       </div>
       <blockquote>
-        A 90&nbsp;MHz benchtop spectrum looks blurry — but the blur isn't noise.
-        It's the <span class="hl">full spin system, just scrambled.</span>
+        Reading molecular structure out of a <span class="hl">cheap, blurry</span> NMR spectrum.
       </blockquote>
-      <p class="lead" style="max-width:60ch">We train a network to invert that blur back into
-        field-independent parameters (δ, <i>J</i>, degeneracies), so a cheap spectrum can be
-        re-simulated <b>exactly at any field</b>.</p>
+      <p class="lead" style="max-width:64ch">A 90&nbsp;MHz benchtop spectrum looks uninterpretable — but physics says it
+        encodes the <b>same</b> chemical shifts and couplings as a $1M magnet. We train a model to recover those
+        parameters, fully characterizing a molecule's spin system from low-field data.</p>
       <p class="faint" style="font-size:15px;margin-top:8px">
         Lucas Abounader · Sam Mansfield · Yiming Zhang &nbsp;·&nbsp; Scripps Hackathon 2026</p>
     </div>
     <aside class="notes">
-      Say the thesis verbatim. This is the sentence every slide ladders back to. Then advance.
+      Open on the goal in one line: recover full structural parameters from a cheap, low-field spectrum.
     </aside>
   </section>
 
-  <!-- ============================ SLIDE 1 — problem + the bet (LIVE SWEEP) ============================ -->
+  <!-- ============================ MOTIVATION ============================ -->
+  <section id="s-motiv" data-background-color="var(--bg)">
+    <div class="slidepad">
+      <div class="kicker">Motivation · chemical biology</div>
+      <h2>Drug discovery runs on synthesis — and synthesis runs on mechanistic insight.</h2>
+      <div class="twocol wide-left">
+        <div>
+          <ul class="clean">
+            <li>A drug campaign's success hinges on <b>efficiently synthesizing</b> its targets.</li>
+            <li>Synthesis is optimized best with a <b>mechanistic understanding</b> of the reaction — gained by <b>monitoring it live</b>.</li>
+            <li>A <b>benchtop NMR (90&nbsp;MHz)</b> couples directly to a reactor: <b>in situ, non-destructive, real-time</b> tracking as the reaction progresses.</li>
+          </ul>
+          <p class="plain">Plain version: watch a reaction happen — accurately — on an instrument that fits on a bench.</p>
+        </div>
+        <div class="cost">
+          <div class="c benchtop"><div class="amt">~$50k</div><div class="lab">benchtop · 90&nbsp;MHz · bench-side, in&nbsp;situ</div></div>
+          <div class="c cryo"><div class="amt">$2M+</div><div class="lab">cryomagnet · 600&nbsp;MHz · shared facility</div></div>
+        </div>
+      </div>
+      <div class="note-strip"><b>But the catch:</b> at 90&nbsp;MHz the lower field makes spectra second-order and hard to read by eye — so they get dismissed as "low-information."</div>
+    </div>
+    <aside class="notes">Lucas. Chem-bio framing: drugs need synthesis → optimizing synthesis needs mechanism → live reaction monitoring gives mechanism → a cheap benchtop NMR enables it in situ. Tee up the catch (next slide).</aside>
+  </section>
+
+  <!-- ============================ THE REFRAME (LIVE SWEEP) ============================ -->
   <section id="s-hero" data-background-color="var(--bg)">
     <div class="hero-stage">
     <div class="hero-head">
-      <div class="eyebrow">The problem &amp; the bet</div>
-      <h1>High-field structure, locked behind a $1M magnet.</h1>
-      <p>At low field, Δν shrinks toward <i>J</i> — multiplets overlap and the spectrum goes
-        <b>second-order</b>. Benchtops get dismissed as "low-information." <b>They aren't.</b></p>
+      <div class="eyebrow">The catch &amp; the reframe</div>
+      <h1>The blur is <i>scrambled</i> information — not lost information.</h1>
+      <p>As field drops, peak separation Δν shrinks toward the coupling <i>J</i>; multiplets overlap and go
+        <b>second-order</b>. But physics says the same δ and <i>J</i> are still encoded — drag 90→600&nbsp;MHz and watch the <b>same molecule</b> resolve.</p>
     </div>
     <canvas id="heroCanvas"></canvas>
     <div class="gauge">
@@ -248,159 +333,257 @@
     </aside>
   </section>
 
-  <!-- ============================ SLIDE 2 — four modules ============================ -->
-  <section id="s-pipe" data-background-color="var(--bg)">
+  <!-- ============================ THE OUTPUT / GOAL ============================ -->
+  <section id="s-output" data-background-color="var(--bg)">
     <div class="slidepad">
-      <div class="kicker">How it works · one molecule, four modules</div>
-      <h2 style="font-size:34px">SMILES → spin-system matrix → spectra → back to the matrix.</h2>
-      <div class="pipe">
-        <div class="card">
-          <div class="top"><span class="ic">⚗️</span><span class="step">1 · GENERATE</span><span class="who">Sam</span></div>
-          <h3>Label every proton</h3>
-          <p>SMILES → 3D, every proton tagged by spin group — distinguishing <b>hard</b> equivalence
-            (same shift, one group) from <b>soft</b> (same shift, separate groups). RDKit embedding +
-            a deuterium-substitution magnetic-equivalence test.</p>
-          <p class="fact"><b>69,324</b> exact-8-group ChEMBL molecules; one scan buckets <b>all</b> counts (1–10) at once.</p>
-        </div>
-        <div class="card">
-          <div class="top"><span class="ic">🧮</span><span class="step">2 · SPIN SYSTEM</span><span class="who">Yiming</span></div>
-          <h3>Shifts δ &amp; couplings J</h3>
-          <p>Molecule → parameters: δ via <b>NMRShiftDB2</b>, <i>J</i> via <b>Karplus + literature tables</b>,
-            a dedicated path per mechanism (geminal, vicinal, benzylic, allylic, aromatic…). Predictor spread
-            stored once, so spectra randomize without re-running it.</p>
-          <p class="fact">Nearly free, high quality: a <b>2M+ molecule</b> dataset generated in a weekend.</p>
-        </div>
-        <div class="card">
-          <div class="top"><span class="ic">📡</span><span class="step">3 · SIMULATE</span><span class="who">Lucas</span></div>
-          <h3>Exact spin Hamiltonian</h3>
-          <p>Diagonalize the spin Hamiltonian → realistic spectra at 90 &amp; 600 MHz, capturing the
-            higher-order coupling that makes low-field work. Started by scripting <b>MestReNova</b>;
-            then rebuilt from scratch as <b>pyspin</b>.</p>
-          <p class="fact">pyspin reproduces MestReNova to <b>r ≈ 0.999</b> — open-source, license-free, faster.</p>
-        </div>
-        <div class="card">
-          <div class="top"><span class="ic">🧠</span><span class="step">4 · MODEL</span><span class="who">Sam</span></div>
-          <h3>Spectrum → matrix</h3>
-          <p>One 90 MHz spectrum → field-independent matrix. <b>ResNet-1D → 4 typed heads</b>
-            (δ, |J|, J-presence, degeneracy). A canonical sort resolves the <b>S₈</b> label-permutation
-            problem; GroupNorm + EMA stabilize training.</p>
-          <p class="fact">Trained on AWS (L40S) over <b>2M+ PubChem</b>; leakage-safe scaffold + matrix-dedup splits.</p>
-        </div>
+      <div class="kicker">The goal · what we recover</div>
+      <h2>Recover the spin system → reconstruct the spectrum at <i>any</i> field.</h2>
+      <div class="flow">
+        <div class="node"><div class="n">INPUT</div><h3>90 MHz spectrum</h3><p>one cheap, second-order benchtop trace</p></div>
+        <div class="arrow">▶</div>
+        <div class="node"><div class="n">MODEL</div><h3>learned inversion</h3><p>spectrum → field-independent parameters</p></div>
+        <div class="arrow">▶</div>
+        <div class="node"><div class="n">SPIN SYSTEM</div><h3>8 δ · 28 J · 8 n</h3><p>shifts, couplings, degeneracies — a full ¹H description</p></div>
+        <div class="arrow">▶</div>
+        <div class="node"><div class="n">SIMULATE</div><h3>any field</h3><p>re-render at 600 MHz — clean &amp; readable</p></div>
       </div>
-      <div class="interdisc">
-        <b>Four fields in one pipeline:</b>
-        <span class="tag">cheminformatics (RDKit)</span><span class="tag">quantum spin physics</span><span class="tag">deep learning</span><span class="tag">cloud orchestration</span>
-      </div>
+      <ul class="clean" style="margin-top:20px">
+        <li><b>8 chemical shifts δ</b> (the matrix diagonal) · <b>28 scalar couplings J</b> (symmetric off-diagonal) · <b>8 degeneracies</b> (protons per group).</li>
+        <li>These numbers are <b>field-independent</b> — recover them once and the molecule's spectrum is fully determined at every field strength.</li>
+      </ul>
+      <div class="note-strip"><b>Why it matters:</b> we extract high-field-quality structure from a low-field instrument — turning a "blurry" benchtop spectrum into a complete answer.</div>
     </div>
-    <aside class="notes">
-      ~2:30, hand-offs Yiming→Lucas→Sam. Keep each box ~30s. RIGOR LINE: "splits are scaffold-grouped and
-      deduplicated, so test molecules are genuinely unseen — the numbers aren't memorization." INNOVATION (honest):
-      we also built a DIFFERENTIABLE pyspin renderer (regularized-eigh gradients verified ~1e-6 vs finite diff) so a
-      spectral-consistency loss is possible — this is a VALIDATED CAPABILITY + ROADMAP; the shipped modelv2 checkpoint
-      trains on the MATRIX LOSS ONLY. Don't imply the spectral loss is in the trained model. FROM-ZERO beat: "one
-      sentence from Lucas and an empty repo → ~2.5 days, 189 commits."
-    </aside>
+    <aside class="notes">The deliverable: the 8×9 spin-system table fully characterizes the molecule's ¹H NMR at any field. The live site has the interactive spin-graph + matrix + 90→600 viewer.</aside>
   </section>
 
-  <!-- ============================ SLIDE 3 — proof ============================ -->
-  <section id="s-proof" data-background-color="var(--bg)">
+  <!-- ============================ SCOPE + PIPELINE OVERVIEW ============================ -->
+  <section id="s-scope" data-background-color="var(--bg)">
     <div class="slidepad">
-      <div class="kicker">Proof · watch it invert the blur</div>
-      <h2 style="font-size:34px">Feed the blurry 90 MHz → reconstruct the clean 600 MHz.</h2>
-      <div class="proof">
-        <div class="specpane">
-          <span class="plabel">input</span><span class="ptag in" id="tagIn">90 MHz</span>
-          <canvas id="proofLo"></canvas>
-          <div class="cap">Overlapping second-order multiplets — the parameters are tangled together, not gone.</div>
-        </div>
-        <div class="specpane">
-          <span class="plabel">reconstructed</span><span class="ptag out" id="tagHi">600 MHz</span>
-          <canvas id="proofHi"></canvas>
-          <div class="cap">Re-simulated from the recovered δ / <i>J</i> / degeneracies — first-order &amp; readable.</div>
-        </div>
+      <div class="kicker">Scope &amp; data · making it tractable</div>
+      <h2>Fix the problem size, then build a large, plausible dataset.</h2>
+      <p class="lead">We scoped to molecules with <b>exactly 8 spin groups</b> — fixing the node count removes graph-size
+        variability, so the model always predicts the same-shape output. To train it, we built a <b>three-stage pipeline</b>:</p>
+      <div class="flow">
+        <div class="node"><div class="n">STAGE 1</div><h3>Screen molecules</h3><p>databases → molecules with exactly 8 spin groups</p><div class="big">64k → 3.1M</div></div>
+        <div class="arrow">▶</div>
+        <div class="node"><div class="n">STAGE 2</div><h3>Estimate δ &amp; J</h3><p>heuristics → plausible shift + coupling values</p><div class="big">physically realistic</div></div>
+        <div class="arrow">▶</div>
+        <div class="node"><div class="n">STAGE 3</div><h3>Simulate spectra</h3><p>pyspin → exact ¹H spectra (the training input)</p><div class="big">1500 / sec</div></div>
       </div>
-      <div class="honesty">
-        <span class="badge"><span class="dot"></span>shift MAE <b style="color:var(--accent-2)">0.33 ppm</b> — baseline 1.31 ppm &nbsp;(−74%)</span>
-        <span class="badge"><span class="dot"></span>J MAE <b style="color:var(--accent-2)">2.62 Hz</b> — baseline 4.07 Hz &nbsp;(−36%)</span>
-        <span class="badge"><span class="dot"></span>coupling presence F1 <b style="color:var(--accent-2)">0.79</b> · degeneracy acc <b style="color:var(--accent-2)">97.6%</b></span>
-        <span class="badge"><span class="dot"></span>12,895 held-out molecules · scaffold + matrix-dedup split</span>
-      </div>
+      <div class="note-strip"><b>Interdisciplinary by design:</b> cheminformatics · reference NMR chemistry · quantum spin physics · deep learning.</div>
     </div>
-    <aside class="notes">
-      Sam, ~1:30. Lead with the qualitative punch: "feed it a blurry 90 MHz, it reconstructs the clean 600 MHz, and
-      they overlay." Then the honesty beat: "evaluated on scaffolds the model never saw." NOTE: the two panels here
-      are the SAME molecule simulated by pyspin at 90 and 600 MHz (ground truth at both fields) — the visual of the
-      thesis. If the live in-browser model demo is ready, run it here instead: upload a 90 MHz spectrum → predicted
-      δ/J + reconstructed 600 overlaid on TRUE 600. Numbers only if ready, stated plainly; state which set the
-      checkpoint trained on (2M+ PubChem on S3). Record a fallback video regardless.
-    </aside>
-    <div class="footnote">Both panels: pyspin simulation of the molecule above, at 90 vs 600 MHz.</div>
+    <aside class="notes">Why 8 groups: fixed output shape, no variable node count. Then: screen → estimate → simulate. Long-term we lift the fixed-N restriction with a classifier (final slide).</aside>
   </section>
 
-  <!-- ============================ SLIDE 3.5 — training evidence ============================ -->
-  <section id="s-train" data-background-color="var(--bg)">
+  <!-- ============================ PIPELINE 1 — SCREEN ============================ -->
+  <section id="s-screen" data-background-color="var(--bg)">
     <div class="slidepad">
-      <div class="kicker">Training evidence · session014 · AWS L40S · 85 epochs</div>
-      <h2 style="font-size:34px">Steady convergence. Still room to run.</h2>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:26px;flex:1;margin-top:16px;min-height:0;align-items:start">
+      <div class="kicker">Stage 1 · screen molecules</div>
+      <h2>From molecular databases to 8-spin-group systems.</h2>
+      <div class="twocol wide-left">
         <div>
-          <img src="data/learning_curve.png" alt="Learning curves: shift MAE and J MAE vs epoch"
-               style="width:100%;border-radius:12px;border:1px solid var(--line);display:block" />
-          <p class="faint" style="font-size:13px;margin-top:9px">
-            Dashed line = mean-prediction baseline. Teal dot = best checkpoint.</p>
+          <ul class="clean">
+            <li>3D <b>force-field embedding</b> (RDKit) of each molecule, then classify protons by <b>chemical &amp; magnetic equivalence</b> into spin groups.</li>
+            <li>Keep only molecules with <b>exactly 8</b> distinct groups.</li>
+            <li>Started with <b>ChEMBL</b> — 2.9M curated, drug-like, bioactive molecules → <b>64k</b> 8-group systems.</li>
+            <li>Then scaled to <b>PubChem</b> — 123M molecules → <b>3.1M</b> 8-group systems.</li>
+          </ul>
         </div>
-        <div style="display:flex;flex-direction:column;gap:18px;justify-content:center">
-          <div class="card" style="padding:18px 20px">
-            <div class="step" style="margin-bottom:6px">SHIFT δ</div>
-            <div style="font-size:28px;font-weight:800;background:linear-gradient(90deg,var(--accent),var(--accent-2));-webkit-background-clip:text;background-clip:text;color:transparent">
-              0.33 ppm</div>
-            <div class="muted" style="font-size:14px;margin-top:4px">Hungarian MAE on 12,895 held-out molecules</div>
-            <div class="faint" style="font-size:13px;margin-top:4px">Baseline: 1.31 ppm &nbsp;→ &nbsp;<b style="color:var(--accent-2)">−74%</b></div>
+        <div class="metric-grid" style="grid-template-columns:1fr;gap:14px">
+          <div class="metric"><div class="v">64k</div><div class="l">8-group molecules from ChEMBL (bioactive, drug-like)</div></div>
+          <div class="metric"><div class="v">3.1M</div><div class="l">8-group molecules from PubChem (123M screened)</div></div>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">Yiming. Spin-group structure from 3D geometry + equivalence; fix at 8 groups. ChEMBL first (drug-like), then PubChem for scale.</aside>
+  </section>
+
+  <!-- ============================ PIPELINE 2 — ESTIMATE ============================ -->
+  <section id="s-estimate" data-background-color="var(--bg)">
+    <div class="slidepad">
+      <div class="kicker">Stage 2 · estimate shifts &amp; couplings</div>
+      <h2>The model needs <i>plausible</i> spin systems — not measured ones.</h2>
+      <div class="twocol">
+        <div>
+          <p class="lead">Key hypothesis: to learn the inverse map, the model only needs spin systems that <b>look like they
+            came from a real molecule</b> — physically and chemically plausible — not literature-accurate NMR.</p>
+          <p class="plain">So we estimate δ and J with fast heuristics instead of measuring or computing them.</p>
+        </div>
+        <div>
+          <ul class="clean">
+            <li>δ and <i>J</i> (²J, ³J, ⁴J) by <b>substructure matching</b> against reference tables.</li>
+            <li>Sourced from <b>nmrdb2</b> and <b>Pretsch et&nbsp;al.</b> (<i>Tables of Spectral Data</i>).</li>
+            <li><b>Karplus equation</b> for ³J (dihedral-angle dependence).</li>
+            <li>Small <b>Gaussian noise</b> regularizes the values — variety, not memorized constants.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="note-strip"><b>Payoff:</b> a near-free generator — millions of realistic spin systems, no quantum chemistry per molecule.</div>
+    </div>
+    <aside class="notes">Yiming. The bet: plausible > accurate for training the inverse map. Heuristics from nmrdb2 + Pretsch tables; Karplus for 3J; Gaussian jitter for diversity.</aside>
+  </section>
+
+  <!-- ============================ PIPELINE 3 — PYSPIN ============================ -->
+  <section id="s-pyspin" data-background-color="var(--bg)">
+    <div class="slidepad">
+      <div class="kicker">Stage 3 · pyspin — the physics engine</div>
+      <h2>Spin systems → exact spectra, from first principles.</h2>
+      <div class="ham" style="margin-top:14px">
+        <b>H</b> &nbsp;=&nbsp; <span class="term zee">&Sigma;<sub>i</sub> σ<sub>i</sub> I<sub>z,i</sub></span>
+        &nbsp;+&nbsp; <span class="term cpl">&Sigma;<sub>i&lt;j</sub> J<sub>ij</sub> <b>I</b><sub>i</sub>·<b>I</b><sub>j</sub></span>
+      </div>
+      <div class="eqcap"><span><b style="color:var(--accent)">Zeeman</b> — field &amp; shifts σ<sub>i</sub></span><span><b style="color:var(--accent-3)">coupling</b> — spin–spin J<sub>ij</sub></span></div>
+      <div class="twocol" style="margin-top:14px">
+        <div>
+          <ul class="clean">
+            <li>NMR records <b>energy transitions</b> between nuclear spin states; the energies are the <b>eigenvalues</b> of this spin Hamiltonian.</li>
+            <li>Selection rules pick the allowed gaps → a <b>stick spectrum</b>, convolved with a fixed-width <b>Lorentzian</b> to mimic the spectrometer.</li>
+          </ul>
+        </div>
+        <div>
+          <ul class="clean">
+            <li>N spin-½ nuclei → a <b>2<sup>N</sup>-dimensional</b> space — exact diagonalization is intractable.</li>
+            <li>pyspin uses <b>spin-cluster decomposition + local approximate bases</b> → <b>linear scaling</b>, near-exact accuracy.</li>
+          </ul>
+          <div class="metric" style="margin-top:6px"><div class="v">1500 / sec</div><div class="l">spin systems → spectra (license-free, open source)</div></div>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">Lucas. The Hamiltonian has a field-dependent Zeeman term (shifts) + a coupling term (J). Eigenvalues = state energies; transitions → sticks → Lorentzian broadening = the spectrum. 2^N is intractable; clustering + local bases give linear scaling at ~1500 spectra/s.</aside>
+  </section>
+
+  <!-- ============================ MODEL 1 — CNN BASELINE ============================ -->
+  <section id="s-cnn" data-background-color="var(--bg)">
+    <div class="slidepad">
+      <div class="kicker">Model · the baseline</div>
+      <h2>Start simple: a CNN reads the raw spectrum.</h2>
+      <div class="twocol">
+        <div>
+          <ul class="clean">
+            <li>An out-of-the-box <b>convolutional neural net</b> on the raw 16,384-point spectrum.</li>
+            <li>Three heads → <b>8 shifts · 28 couplings · 8 degeneracies</b>, assembled into one symmetric 8×9 matrix.</li>
+            <li>Errors <b>plateaued high</b> — but manual inspection showed it had <b>captured the matrix structure</b>.</li>
+          </ul>
+          <p class="plain">A flat regressor only got us so far — but it proved the signal is genuinely learnable.</p>
+        </div>
+        <div class="metric-grid" style="grid-template-columns:1fr 1fr">
+          <div class="metric"><div class="v">0.279</div><div class="l">shift MAE (ppm)</div></div>
+          <div class="metric"><div class="v">1.80</div><div class="l">J MAE (Hz)</div></div>
+          <div class="metric"><div class="v">0.81</div><div class="l">coupling presence F1</div></div>
+          <div class="metric"><div class="v">0.73</div><div class="l">degeneracy bal-acc</div></div>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">Sam. Baseline: vanilla CNN, 3 heads → matrix. Plateaued at 0.279/1.80 but visibly captured structure — the signal is there, the architecture isn't tailored yet.</aside>
+  </section>
+
+  <!-- ============================ MODEL 2 — STRUCTURED DECODER ============================ -->
+  <section id="s-decoder" data-background-color="var(--bg)">
+    <div class="slidepad">
+      <div class="kicker">Model · the structured decoder — the leap</div>
+      <h2>The spin system is a graph — so predict a graph.</h2>
+      <div class="flow" style="margin-top:14px">
+        <div class="node"><div class="n">SPECTRUM</div><h3>16,384 pts</h3><p>conv stem → ppm-tagged feature tokens</p></div>
+        <div class="arrow">▶</div>
+        <div class="node"><div class="n">ENCODER</div><h3>self-attention</h3><p>tokens attend across the whole spectrum — links coupled multiplets</p></div>
+        <div class="arrow">▶</div>
+        <div class="node"><div class="n">8 QUERIES → DECODER</div><h3>cross-attention</h3><p>one query per spin group gathers its evidence (set prediction)</p></div>
+        <div class="arrow">▶</div>
+        <div class="node"><div class="n">HEADS</div><h3>nodes + edges</h3><p>δ &amp; degeneracy per group; symmetric J &amp; presence per pair</p></div>
+      </div>
+      <p class="lead" style="margin-top:14px">Each <b>spin-group query</b> learns to look at the regions of the spectrum that belong to its group; a
+        <b>symmetric edge head</b> predicts all 28 couplings — so the unordered, graph-structured answer is built in.
+        <span class="faint">(We also tested support-region tokenization — feeding detected peak regions as tokens — but global attention already captured it, so we dropped it.)</span></p>
+      <div class="metric-grid" style="margin-top:14px">
+        <div class="metric"><div class="v">0.037</div><div class="l">shift MAE (ppm)</div><div class="d">7.5× the CNN</div></div>
+        <div class="metric"><div class="v">0.59</div><div class="l">J MAE (Hz)</div><div class="d">3× the CNN</div></div>
+        <div class="metric"><div class="v">0.94</div><div class="l">coupling presence F1</div></div>
+        <div class="metric"><div class="v">0.95</div><div class="l">degeneracy bal-acc</div></div>
+      </div>
+    </div>
+    <aside class="notes">Sam. The key idea: an unordered graph (8 nodes, 28 edges) deserves a structured decoder, not a flat regressor.
+      Encoder = self-attention over conv tokens (ppm-positioned). Decoder = 8 learned spin-group QUERIES cross-attend the
+      spectrum (DETR-style set prediction). Heads = node (δ, n) + symmetric edge (J, presence). Result: shift 7.5× better
+      (0.037 ppm), J 0.59 Hz, F1 0.94, deg 0.95. Support-region tokens were tested but added nothing — dropped.</aside>
+  </section>
+
+  <!-- ============================ MODEL 3 — REFINEMENTS + TEST ============================ -->
+  <section id="s-refine" data-background-color="var(--bg)">
+    <div class="slidepad">
+      <div class="kicker">Model · two refinements &amp; the honest test</div>
+      <h2>Polishing the last failure modes — and checking we didn't memorize.</h2>
+      <div class="twocol wide-left">
+        <div>
+          <ul class="clean">
+            <li><b>Peak-channel input:</b> annotate the spectrum with peak-pick information to sharpen shift localization.</li>
+            <li><b>Soft-equivalence flag:</b> a <b>learnable edge label</b> marking two groups that share a shift but differ in coupling. When flagged, their shifts are averaged — so an accidentally-degenerate pair renders as <b>one peak, not a spurious doublet</b>.</li>
+            <li>The flag <b>solved the visual artifact</b>; shift MAE matched its predecessor. Both are our <b>production models</b>.</li>
+          </ul>
+          <div class="note-strip"><b>No overfitting:</b> on the never-seen <b>held-out test split</b>, accuracy was identical to validation.</div>
+        </div>
+        <div class="ds-row" style="flex-direction:column;gap:18px">
+          <div class="ds">
+            <svg viewBox="0 0 150 64" aria-hidden="true"><line x1="6" y1="52" x2="144" y2="52" stroke="var(--grid)"/>
+              <path d="M58 52 C64 52 64 18 70 18 C76 18 76 52 82 52" fill="none" stroke="var(--ink-faint)" stroke-width="2.4"/>
+              <path d="M74 52 C80 52 80 18 86 18 C92 18 92 52 98 52" fill="none" stroke="var(--ink-faint)" stroke-width="2.4"/></svg>
+            <span>before: 3.59 / 3.61 ppm → <b style="color:var(--ink-faint)">false doublet</b></span>
           </div>
-          <div class="card" style="padding:18px 20px">
-            <div class="step" style="margin-bottom:6px">COUPLING J</div>
-            <div style="font-size:28px;font-weight:800;background:linear-gradient(90deg,var(--accent-3),var(--accent));-webkit-background-clip:text;background-clip:text;color:transparent">
-              2.62 Hz</div>
-            <div class="muted" style="font-size:14px;margin-top:4px">Hungarian MAE · presence F1 = 0.79</div>
-            <div class="faint" style="font-size:13px;margin-top:4px">Baseline: 4.07 Hz &nbsp;→ &nbsp;<b style="color:var(--accent-2)">−36%</b></div>
-          </div>
-          <div class="card" style="padding:18px 20px">
-            <div class="step" style="margin-bottom:6px">DEGENERACY</div>
-            <div style="font-size:28px;font-weight:800;background:linear-gradient(90deg,var(--accent-2),var(--accent-3));-webkit-background-clip:text;background-clip:text;color:transparent">
-              97.6%</div>
-            <div class="muted" style="font-size:14px;margin-top:4px">Accuracy · Pearson r = 0.94 (shift), 0.82 (J)</div>
-            <div class="faint" style="font-size:13px;margin-top:4px">Trained on 69,243 ChEMBL + 2M+ PubChem molecules</div>
+          <div class="ds">
+            <svg viewBox="0 0 150 64" aria-hidden="true"><line x1="6" y1="52" x2="144" y2="52" stroke="var(--grid)"/>
+              <path d="M62 52 C72 52 72 12 78 12 C84 12 84 52 94 52" fill="none" stroke="var(--accent)" stroke-width="2.6"/></svg>
+            <span>after: flagged &amp; averaged → <b style="color:var(--accent)">correct singlet</b></span>
           </div>
         </div>
       </div>
     </div>
-    <aside class="notes">
-      Sam, ~1:00. The curves show clean convergence — no plateau, no instability. Best checkpoint at epoch 85 of
-      120 planned, so the model is still learning. Key accuracy guard: "these are Hungarian-matched — we find the
-      best label permutation before measuring error, so we're not penalizing the model for an arbitrary ordering
-      choice." The baseline is just predicting the training-set mean for every molecule — shift is 74% better,
-      J is 36% better, and coupling detection F1 = 0.79 is a significant qualitative win (the model knows which
-      protons are coupled). Degeneracy at 97.6% is near-solved. The model was trained on 69k augmented ChEMBL
-      8-spin molecules + the full 2M+ PubChem set on S3.
-    </aside>
+    <aside class="notes">Sam. Two revisions: (1) peak-channel for shift localization; (2) soft-equivalence flag — a learnable edge label that
+      averages shifts of accidentally-degenerate groups so they render as one peak (fixes the false-doublet artifact). Shift MAE
+      unchanged; the artifact is gone. Held-out test ≈ validation → no overfitting. Both are production checkpoints.</aside>
+  </section>
+
+  <!-- ============================ SCALING + ROADMAP ============================ -->
+  <section id="s-scale" data-background-color="var(--bg)">
+    <div class="slidepad">
+      <div class="kicker">Scaling &amp; roadmap · where this goes</div>
+      <h2>From 64k ChEMBL to 3M+ PubChem — and beyond fixed N.</h2>
+      <div class="twocol">
+        <div>
+          <div class="eyebrow" style="margin-bottom:6px">Now</div>
+          <ul class="clean">
+            <li>Every model above was trained &amp; compared on the <b>64k ChEMBL</b> 8-group set.</li>
+            <li>The data pipeline is now scaled to <b>3.1M PubChem</b> 8-group systems → spectra.</li>
+            <li><b>Scaled-up production models</b> (more data → larger networks) are training on it now.</li>
+          </ul>
+        </div>
+        <div>
+          <div class="eyebrow" style="margin-bottom:6px">The long game</div>
+          <ul class="clean">
+            <li>Train a family of <b>fixed-N</b> spin-group models (N = 2, 3, … groups) on PubChem.</li>
+            <li>Train a <b>classifier</b> that reads the <b>number of spin groups</b> directly from a spectrum.</li>
+            <li>Compose them → spectrum&nbsp;→&nbsp;spin&nbsp;system for <b>arbitrary small molecules</b>, not just 8-group ones.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="note-strip"><b>The endgame:</b> any small-molecule ¹H spectrum, from any field — decoded into a complete structural answer.</div>
+    </div>
+    <aside class="notes">Lifting the fixed-N restriction is the path to generality: a classifier picks N, the matching fixed-N model recovers
+      the spin system. Pipeline already produces 3.1M PubChem systems; scaled production models are training now.</aside>
   </section>
 
   <!-- ============================ SLIDE 4 — impact + team + site ============================ -->
   <section id="s-close" data-background-color="var(--bg)">
     <div class="slidepad">
-      <div class="kicker">Impact · the tool · the team</div>
-      <h2 style="font-size:34px">Democratizing structure verification.</h2>
+      <div class="kicker">Conclusion</div>
+      <h2>A "low-information" benchtop spectrum → a complete structural answer.</h2>
       <div class="close">
         <div>
           <ul class="impact">
-            <li><b>Why it matters:</b> structure verification is the daily bottleneck of synthetic &amp;
-              medicinal chemistry — gating it behind million-dollar magnets gates <i>who</i> gets to do rigorous chemistry.</li>
-            <li><b>Biomedical tie:</b> faster, cheaper structure confirmation accelerates small-molecule
-              discovery — the front end of drug discovery.</li>
-            <li><b>A real, open tool:</b> public repo, README, validated license-free simulator — clone and run.</li>
-            <li><b>How it scales — <span class="mono">autoai</span>:</b> a two-level, human-out-of-the-loop
-              orchestrator — an Opus "scientist" picks strategies, a Sonnet "worker" writes &amp; trains, a Sonnet
-              "auditor" checks the claims. <span class="faint">Nascent, not the headline — but it's how this improves without us.</span></li>
+            <li><b>What we built:</b> a license-free, linear-scaling spin simulator (pyspin, 1500/s), a 3M-molecule
+              data pipeline, and a graph-structured decoder that recovers shifts to <b>0.037 ppm</b> and couplings to <b>0.59 Hz</b>.</li>
+            <li><b>What we learned:</b> low field genuinely <i>encodes</i> the full spin system; predicting it as a
+              <b>graph</b> (not 44 flat numbers) was the leap; and <b>plausible</b> training data beats expensive measured data.</li>
+            <li><b>Why it matters:</b> high-field-quality structure from a <b>~$50k benchtop</b> — enabling cheaper,
+              in-situ reaction monitoring that accelerates synthesis and small-molecule drug discovery.</li>
           </ul>
           <div class="team">
             <div class="member"><div class="av">LA</div><h3>Lucas Abounader</h3><span>Shenvi Lab · simulation &amp; model</span></div>
@@ -416,7 +599,7 @@
           </div>
         </div>
       </div>
-      <p class="thesis">The blur isn't noise — it's the full spin system, scrambled. We unscramble it.</p>
+      <p class="thesis">Low-field NMR isn't low-information — the structure is all there, just scrambled. Spinhance unscrambles it.</p>
     </div>
     <aside class="notes">
       Lucas closes, ~1:00. 1) Why it matters (accessibility → who gets to do rigorous chemistry). 2) Biomedical tie
