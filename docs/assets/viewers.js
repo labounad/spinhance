@@ -146,10 +146,16 @@
         let rows = "";
         for (let i = 0; i < G; i++)
           rows += `<tr><td class="gi">${i + 1}</td>${cell(m.true_shift[i].toFixed(2), m.pred_shift[i].toFixed(2), "ppm")}${cell(m.true_deg[i], m.pred_deg[i], "n")}</tr>`;
-        // J heatmaps (true vs pred) as a compact grid
+        // J heatmaps (true vs pred): 64 cells flattened into an 8-col grid
         const maxJ = Math.max(1, ...m.true_J.flat().map(Math.abs), ...m.pred_J.flat().map(Math.abs));
-        const grid = (M) => `<div class="jgrid">${M.map(row => row.map(v => {
-          const a = Math.min(1, Math.abs(v) / maxJ); return `<i style="opacity:${a.toFixed(2)}" title="${v} Hz"></i>`; }).join("")}</div>`;
+        const grid = (M) => {
+          let cells = "";
+          M.forEach(row => row.forEach(v => {
+            const a = Math.min(1, Math.abs(v) / maxJ);
+            cells += '<i style="opacity:' + a.toFixed(2) + '" title="' + v + ' Hz"></i>';
+          }));
+          return '<div class="jgrid">' + cells + '</div>';
+        };
         mat.innerHTML =
           `<table class="nodes"><thead><tr><th>#</th><th>δ true</th><th>δ pred</th><th>n true</th><th>n pred</th></tr></thead><tbody>${rows}</tbody></table>
            <div class="jwrap"><div><div class="jlbl">J — target</div>${grid(m.true_J)}</div><div><div class="jlbl">J — predicted</div>${grid(m.pred_J)}</div></div>`;
