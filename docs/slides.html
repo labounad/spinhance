@@ -563,7 +563,7 @@
   <section id="s-estimate" data-background-color="var(--bg)">
     <div class="slidepad">
       <div class="kicker">Stage 2 · estimate shifts &amp; couplings</div>
-      <h2>The model needs <i>plausible</i> spin systems — not measured ones.</h2>
+      <h2>The model needs <i>plausible</i> spin systems, not measured ones.</h2>
       <div class="twocol" style="margin-top:8px;align-items:center">
         <div class="fig-card" style="align-self:center;width:100%">
           <div id="s2graph" style="width:100%;display:flex;justify-content:center"></div>
@@ -593,7 +593,7 @@
   <section id="s-pyspin" data-background-color="var(--bg)">
     <div class="slidepad">
       <div class="kicker">Stage 3 · pyspin — the physics engine</div>
-      <h2>Spin systems → exact spectra, from first principles.</h2>
+      <h2>Spin systems → exact spectra from first principles.</h2>
       <div class="mjx-wrap" style="margin-top:10px">
         $$\hat H \;=\; \underbrace{-\,\gamma \sum_i (1-\sigma_i)\,\mathbf B\cdot\hat{\mathbf I}_i}_{\text{Zeeman (shifts)}} \;-\; \underbrace{\sum_{i&lt;j} J_{ij}\,\hat{\mathbf I}_i\!\cdot\!\hat{\mathbf I}_j}_{\text{coupling}}$$
       </div>
@@ -662,9 +662,9 @@
           <path class="af-arrow" d="M340 96 L372 96"/>
           <!-- three heads -->
           <g>
-            <rect x="376" y="40" width="120" height="34" rx="8" class="af-box"/><text x="436" y="61" class="af-l">δ head · 8 shifts</text>
-            <rect x="376" y="84" width="120" height="34" rx="8" class="af-box"/><text x="436" y="105" class="af-l">J head · 28 couplings</text>
-            <rect x="376" y="128" width="120" height="34" rx="8" class="af-box"/><text x="436" y="149" class="af-l">n head · 8 degens</text>
+            <rect x="376" y="40" width="120" height="34" rx="8" class="af-box"/><text x="436" y="61" class="af-l">δ · 8 shifts</text>
+            <rect x="376" y="84" width="120" height="34" rx="8" class="af-box"/><text x="436" y="105" class="af-l">J · 28 couplings</text>
+            <rect x="376" y="128" width="120" height="34" rx="8" class="af-box"/><text x="436" y="149" class="af-l">n · 8 degeneracies</text>
           </g>
           <path class="af-arrow" d="M500 96 L536 96"/>
           <!-- assembled 8x9 matrix -->
@@ -704,7 +704,7 @@
   <section id="s-decoder" data-background-color="var(--bg)">
     <div class="slidepad">
       <div class="kicker">Model · the structured decoder</div>
-      <h2>The spin system is a graph — so predict a graph.</h2>
+      <h2>The spin system is a graph, so predict a graph.</h2>
       <div class="flow" style="margin-top:14px">
         <div class="node"><div class="n">SPECTRUM</div><h3>→ tokens</h3>
           <div class="glyph"><svg viewBox="0 0 120 70">
@@ -766,7 +766,7 @@
   <section id="s-refine" data-background-color="var(--bg)">
     <div class="slidepad">
       <div class="kicker">Model · two refinements</div>
-      <h2>Polishing the last failure modes — and checking we didn't memorize.</h2>
+      <h2>Polishing the last failure modes and checking we didn't memorize.</h2>
       <div class="twocol wide-left">
         <div>
           <ul class="clean">
@@ -1130,10 +1130,12 @@ function renderStages() {
   const mol = document.getElementById("s1mol");
   if (mol) {
     const w = MOL.svg_w, h = MOL.svg_h;
-    // soft highlight halos BEHIND the structure (like the site's library viewer) — no labels on the molecule
+    // soft highlight halos BEHIND the structure (like the site's library viewer) — no labels on the molecule.
+    // label-anchor→atom-centre correction: the site nudges +11/-14 display-px at PIXEL_SCALE 2.5 → +4.4/-5.6 viewBox units.
+    const OX = 4.4, OY = -5.6;
     let halos = "";
     MOL.groups.forEach(g => g.atoms.forEach(([ax, ay]) => {
-      halos += `<circle cx="${(ax * w).toFixed(1)}" cy="${(ay * h).toFixed(1)}" r="8.5" fill="${g.color}" opacity="0.5"/>`;
+      halos += `<circle cx="${(ax * w + OX).toFixed(1)}" cy="${(ay * h + OY).toFixed(1)}" r="8.5" fill="${g.color}" opacity="0.5"/>`;
     }));
     mol.innerHTML = `<div class="molwrap"><svg class="ovl" viewBox="0 0 ${w} ${h}">${halos}</svg>${MOL.svg}</div>`;
   }
