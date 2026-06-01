@@ -249,18 +249,9 @@
     padding:2px 9px;border-radius:99px;background:color-mix(in srgb,var(--panel) 70%,transparent);
     border:1px solid var(--line);}
 
-  /* cover: a quiet living background (precessing spins + a ghost spectrum) */
-  .coverbg{position:absolute;inset:0;z-index:0;overflow:hidden;pointer-events:none;}
-  .coverbg svg{position:absolute;inset:0;width:100%;height:100%;}
-  .coverbg .ghost{stroke:var(--trace);fill:none;opacity:.10;}
-  .coverbg .ghost.g2{opacity:.05;}
-  .coverbg .axis{stroke:var(--grid);}
-  .coverbg .prec{animation:precess 11s linear infinite;transform-box:view-box;}
-  .coverbg .prec.d{animation-duration:15s;animation-direction:reverse;}
-  .coverbg .prec.s{animation-duration:8s;}
-  .coverbg .vec{stroke:var(--accent);stroke-width:2.4;stroke-linecap:round;opacity:.5;}
-  .coverbg .ball{fill:var(--accent-2);opacity:.55;}
-  @keyframes precess{to{transform:rotate(360deg);}}
+  /* cover: a faint, autoplaying real 90→600 sweep behind the title */
+  .coverbg{position:absolute;inset:0;z-index:0;overflow:hidden;pointer-events:none;opacity:.22;}
+  .coverbg canvas{position:absolute;inset:0;width:100%;height:100%;display:block;}
   #s-cover .slidepad{z-index:1;}
 
   /* generic figure caption + frame */
@@ -311,22 +302,7 @@
 
   <!-- ============================ SLIDE 0 — thesis cover ============================ -->
   <section id="s-cover" data-background-color="var(--bg)">
-    <div class="coverbg" aria-hidden="true">
-      <svg viewBox="0 0 1184 628" preserveAspectRatio="xMidYMid slice">
-        <!-- ghost spectra: a low-field (broad) and high-field (resolved) trace -->
-        <line class="axis" x1="0" y1="548" x2="1184" y2="548"/>
-        <path class="ghost g2" stroke-width="2.4" d="M0 548 L150 548 Q175 548 188 500 Q200 452 214 500 Q228 548 250 548
-          L470 548 Q486 548 496 470 Q506 392 518 470 Q528 548 548 548 L740 548 Q752 548 760 430 Q768 312 778 430 Q786 548 806 548
-          L980 548 Q994 548 1004 486 Q1014 424 1026 486 Q1036 548 1184 548"/>
-        <path class="ghost" stroke-width="2.6" d="M0 548 L470 548 Q500 548 512 360 Q524 172 540 360 Q552 548 600 548
-          L735 548 Q748 548 756 300 Q765 120 776 300 Q784 548 980 548 Q996 548 1006 470 Q1018 392 1030 470 Q1040 548 1184 548"/>
-        <!-- precessing nuclear spins -->
-        <g class="prec"   style="transform-origin:150px 150px"><line class="vec" x1="150" y1="150" x2="150" y2="112"/><circle class="ball" cx="150" cy="150" r="7"/></g>
-        <g class="prec d" style="transform-origin:1040px 120px"><line class="vec" x1="1040" y1="120" x2="1040" y2="86"/><circle class="ball" cx="1040" cy="120" r="6"/></g>
-        <g class="prec s" style="transform-origin:980px 250px"><line class="vec" x1="980" y1="250" x2="980" y2="216"/><circle class="ball" cx="980" cy="250" r="5"/></g>
-        <g class="prec"   style="transform-origin:300px 300px"><line class="vec" x1="300" y1="300" x2="300" y2="268"/><circle class="ball" cx="300" cy="300" r="5"/></g>
-      </svg>
-    </div>
+    <div class="coverbg" aria-hidden="true"><canvas id="coverCanvas"></canvas></div>
     <div class="slidepad quote-wrap">
       <div class="brand">
         <svg class="spin-dot" viewBox="0 0 32 32" aria-hidden="true">
@@ -369,20 +345,20 @@
           </div>
         </div>
         <div class="fig-card" style="align-self:center;width:100%;max-width:440px;margin:0 auto">
-          <svg viewBox="0 0 366 116" style="width:100%;height:auto;overflow:visible" aria-hidden="true">
+          <svg viewBox="0 0 366 126" style="width:100%;height:auto;overflow:visible" aria-hidden="true">
             <!-- reactor flask -->
             <rect x="40" y="12" width="18" height="9" rx="2" class="af-box"/>
             <path class="mol-bond" d="M44 21 L44 42 A26 26 0 1 0 54 42 L54 21"/>
             <path d="M24 60 A26 26 0 0 0 74 60 Z" fill="var(--accent)" opacity=".18"/>
             <circle cx="44" cy="70" r="2.6" fill="var(--accent-2)" opacity=".7" class="pulse"/>
             <circle cx="55" cy="62" r="2" fill="var(--accent-2)" opacity=".7" class="pulse" style="animation-delay:.6s"/>
-            <text x="49" y="100" class="af-s">reactor</text>
+            <text x="49" y="112" class="af-s">reactor</text>
             <!-- probe into the benchtop magnet (clear gaps, no overlap) -->
             <path class="af-arrow dash" d="M86 52 L116 52"/>
             <rect x="122" y="22" width="86" height="62" rx="10" class="af-box"/>
             <circle cx="165" cy="53" r="19" fill="none" stroke="var(--accent)" stroke-width="3"/>
             <circle cx="165" cy="53" r="8" fill="var(--accent)" opacity=".25"/>
-            <text x="165" y="100" class="af-l">90 MHz benchtop</text>
+            <text x="165" y="112" class="af-l">90 MHz benchtop</text>
             <!-- to the live stream of spectra -->
             <path class="af-arrow" d="M214 52 L244 52"/>
             <g transform="translate(252,16)" fill="none" stroke="var(--trace)" stroke-width="1.8">
@@ -390,7 +366,7 @@
               <path opacity=".6"  transform="translate(0,24)" d="M0 30 L18 30 Q24 30 28 10 Q32 30 38 30 L54 30 Q60 30 64 16 Q68 30 74 30 L92 30"/>
               <path opacity="1"   transform="translate(0,48)" stroke="var(--accent-2)" d="M0 30 L18 30 Q24 30 28 12 Q32 30 38 30 L54 30 Q60 30 64 14 Q68 30 74 30 L92 30"/>
             </g>
-            <text x="298" y="100" class="af-s">spectra · time →</text>
+            <text x="298" y="112" class="af-s">spectra · time →</text>
           </svg>
           <div class="figcap">live, in&nbsp;situ reaction monitoring on a bench-side instrument</div>
         </div>
@@ -406,10 +382,10 @@
   <section id="s-hero" data-background-color="var(--bg)">
     <div class="hero-stage">
     <div class="hero-head">
-      <div class="eyebrow">Why low-field spectra look unreadable</div>
+      <div class="eyebrow">The low-field problem</div>
       <h1>Low field scrambles the signal — it doesn't erase it.</h1>
-      <p>As the field drops, peak separation Δν shrinks toward the coupling <i>J</i>; multiplets overlap and the spectrum
-        goes <b>second-order</b>. The same δ and <i>J</i> are still encoded — drag 90→600&nbsp;MHz and watch the <b>same molecule</b> resolve.</p>
+      <p>As the field drops, peak separation Δν shrinks toward the coupling <i>J</i>; neighbouring multiplets overlap
+        and merge into complex, <b>second-order</b> patterns. The same δ and <i>J</i> are still encoded — drag 90→600&nbsp;MHz and watch the <b>same molecule</b> resolve.</p>
     </div>
     <canvas id="heroCanvas"></canvas>
     <div class="gauge">
@@ -444,10 +420,10 @@
     <div class="slidepad">
       <div class="kicker">The goal</div>
       <h2>Recover the spin system → reconstruct the spectrum at <i>any</i> field.</h2>
-      <div class="flow" style="margin-top:14px">
+      <div class="flow" style="margin-top:18px;flex:0 0 332px">
         <div class="node"><div class="n">INPUT</div><h3>90 MHz spectrum</h3>
           <div class="glyph"><svg viewBox="0 0 120 70"><line x1="4" y1="58" x2="116" y2="58" class="gw"/>
-            <path d="M8 58 Q26 58 32 30 Q38 8 46 30 Q52 50 58 36 Q64 22 72 40 Q78 56 86 40 Q92 26 100 44 Q106 58 116 58"
+            <path d="M8 58 L17 58 C24 58 28 22 32 22 C36 22 40 58 47 58 L49 58 C56 58 60 14 64 14 C68 14 72 58 79 58 L81 58 C88 58 92 28 96 28 C100 28 104 58 111 58 L116 58"
               fill="none" stroke="var(--ink-soft)" stroke-width="2.4"/></svg></div>
           <p>one cheap, second-order benchtop trace</p></div>
         <div class="arrow">▶</div>
@@ -466,17 +442,25 @@
         <div class="arrow">▶</div>
         <div class="node"><div class="n">SPIN SYSTEM</div><h3>8 δ · 28 J · 8 n</h3>
           <div class="glyph"><svg viewBox="0 0 120 70">
-            <!-- 8×8 matrix: accent diagonal (δ/n), purple off-diagonal (J) -->
+            <!-- 8×8 matrix: accent diagonal (δ/n) + SYMMETRIC purple off-diagonal (J=Jᵀ) -->
             <g transform="translate(28,7)">
               <g fill="var(--accent)"><rect x="0" y="0" width="6.5" height="6.5" rx="1.2"/><rect x="7" y="7" width="6.5" height="6.5" rx="1.2"/><rect x="14" y="14" width="6.5" height="6.5" rx="1.2"/><rect x="21" y="21" width="6.5" height="6.5" rx="1.2"/><rect x="28" y="28" width="6.5" height="6.5" rx="1.2"/><rect x="35" y="35" width="6.5" height="6.5" rx="1.2"/><rect x="42" y="42" width="6.5" height="6.5" rx="1.2"/><rect x="49" y="49" width="6.5" height="6.5" rx="1.2"/></g>
-              <g fill="var(--accent-3)" opacity=".45"><rect x="7" y="0" width="6.5" height="6.5" rx="1.2"/><rect x="0" y="7" width="6.5" height="6.5" rx="1.2"/><rect x="21" y="0" width="6.5" height="6.5" rx="1.2"/><rect x="0" y="21" width="6.5" height="6.5" rx="1.2"/><rect x="28" y="14" width="6.5" height="6.5" rx="1.2"/><rect x="14" y="28" width="6.5" height="6.5" rx="1.2"/><rect x="42" y="35" width="6.5" height="6.5" rx="1.2"/><rect x="35" y="42" width="6.5" height="6.5" rx="1.2"/><rect x="49" y="42" width="6.5" height="6.5" rx="1.2"/><rect x="42" y="49" width="6.5" height="6.5" rx="1.2"/></g>
-              <g fill="var(--line)"><rect x="14" y="0" width="6.5" height="6.5" rx="1.2"/><rect x="35" y="0" width="6.5" height="6.5" rx="1.2"/><rect x="49" y="0" width="6.5" height="6.5" rx="1.2"/></g>
+              <g fill="var(--accent-3)" opacity=".5">
+                <rect x="7" y="0" width="6.5" height="6.5" rx="1.2"/><rect x="0" y="7" width="6.5" height="6.5" rx="1.2"/>
+                <rect x="14" y="0" width="6.5" height="6.5" rx="1.2"/><rect x="0" y="14" width="6.5" height="6.5" rx="1.2"/>
+                <rect x="21" y="7" width="6.5" height="6.5" rx="1.2"/><rect x="7" y="21" width="6.5" height="6.5" rx="1.2"/>
+                <rect x="21" y="14" width="6.5" height="6.5" rx="1.2"/><rect x="14" y="21" width="6.5" height="6.5" rx="1.2"/>
+                <rect x="28" y="21" width="6.5" height="6.5" rx="1.2"/><rect x="21" y="28" width="6.5" height="6.5" rx="1.2"/>
+                <rect x="35" y="28" width="6.5" height="6.5" rx="1.2"/><rect x="28" y="35" width="6.5" height="6.5" rx="1.2"/>
+                <rect x="42" y="35" width="6.5" height="6.5" rx="1.2"/><rect x="35" y="42" width="6.5" height="6.5" rx="1.2"/>
+                <rect x="42" y="14" width="6.5" height="6.5" rx="1.2"/><rect x="14" y="42" width="6.5" height="6.5" rx="1.2"/>
+                <rect x="49" y="42" width="6.5" height="6.5" rx="1.2"/><rect x="42" y="49" width="6.5" height="6.5" rx="1.2"/></g>
             </g></svg></div>
           <p>shifts, couplings, degeneracies — the full ¹H description</p></div>
         <div class="arrow">▶</div>
         <div class="node"><div class="n">SIMULATE</div><h3>any field</h3>
           <div class="glyph"><svg viewBox="0 0 120 70"><line x1="4" y1="58" x2="116" y2="58" class="gw"/>
-            <path d="M8 58 L34 58 L36 18 L38 58 L52 58 L54 30 L56 58 L74 58 L76 10 L78 58 L92 58 L94 34 L96 58 L116 58"
+            <path d="M8 58 L29 58 L32 22 L35 58 L61 58 L64 14 L67 58 L93 58 L96 28 L99 58 L116 58"
               fill="none" stroke="var(--accent-2)" stroke-width="2.4"/></svg></div>
           <p>re-render at 600 MHz — clean &amp; readable</p></div>
       </div>
@@ -545,28 +529,28 @@
           <svg viewBox="0 0 470 180" style="width:100%;height:auto;overflow:visible" aria-hidden="true">
             <!-- ===== representative molecule: benzocaine (ethyl 4-aminobenzoate) ===== -->
             <g>
-              <!-- benzene ring -->
-              <polygon points="126,92 111,118 81,118 66,92 81,66 111,66" class="mol-bond"/>
-              <line x1="120" y1="96" x2="108" y2="114" class="mol-bond"/>
-              <line x1="84" y1="114" x2="72" y2="96" class="mol-bond"/>
-              <line x1="84" y1="70" x2="108" y2="70" class="mol-bond"/>
-              <!-- amino -->
-              <line x1="66" y1="92" x2="40" y2="92" class="mol-bond"/><text x="30" y="96" class="mol-atom" text-anchor="end">H₂N</text>
-              <!-- ester chain -->
-              <line x1="126" y1="92" x2="150" y2="79" class="mol-bond"/>
-              <line x1="147" y1="79" x2="147" y2="56" class="mol-bond"/><line x1="153" y1="79" x2="153" y2="56" class="mol-bond"/>
-              <text x="150" y="50" class="mol-atom">O</text>
-              <line x1="150" y1="79" x2="174" y2="92" class="mol-bond"/><text x="178" y="104" class="mol-atom">O</text>
-              <line x1="186" y1="92" x2="198" y2="79" class="mol-bond"/>
-              <line x1="198" y1="79" x2="222" y2="92" class="mol-bond"/>
-              <!-- proton-group markers -->
-              <circle cx="78" cy="58" r="5" class="grp-dot" fill="var(--accent)"/>
-              <circle cx="78" cy="126" r="5" class="grp-dot" fill="var(--accent)"/>
-              <circle cx="114" cy="58" r="5" class="grp-dot" fill="var(--accent-2)"/>
-              <circle cx="114" cy="126" r="5" class="grp-dot" fill="var(--accent-2)"/>
-              <circle cx="40" cy="76" r="5" class="grp-dot" fill="var(--accent-3)"/>
-              <circle cx="198" cy="64" r="5" class="grp-dot" fill="#f5a623"/>
-              <circle cx="230" cy="105" r="5" class="grp-dot" fill="#e0567a"/>
+              <!-- benzene ring: regular hexagon + aromatic circle -->
+              <polygon points="140,90 125,116 95,116 80,90 95,64 125,64" class="mol-bond"/>
+              <circle cx="110" cy="90" r="17" class="mol-bond" fill="none"/>
+              <!-- amino (bond stops short of the label) -->
+              <line x1="80" y1="90" x2="58" y2="90" class="mol-bond"/>
+              <text x="52" y="94" class="mol-atom" text-anchor="end">H₂N</text>
+              <!-- ester chain: ring → C(=O) → O → CH₂ → CH₃ -->
+              <line x1="140" y1="90" x2="166" y2="75" class="mol-bond"/>
+              <line x1="163" y1="73" x2="163" y2="52" class="mol-bond"/><line x1="169" y1="73" x2="169" y2="52" class="mol-bond"/>
+              <text x="166" y="46" class="mol-atom">O</text>
+              <line x1="166" y1="75" x2="185" y2="86" class="mol-bond"/>
+              <text x="192" y="95" class="mol-atom">O</text>
+              <line x1="199" y1="86" x2="218" y2="75" class="mol-bond"/>
+              <line x1="218" y1="75" x2="244" y2="90" class="mol-bond"/>
+              <!-- proton-group markers (one colour per equivalence group) -->
+              <circle cx="86" cy="55" r="5" class="grp-dot" fill="var(--accent)"/>
+              <circle cx="86" cy="125" r="5" class="grp-dot" fill="var(--accent)"/>
+              <circle cx="134" cy="55" r="5" class="grp-dot" fill="var(--accent-2)"/>
+              <circle cx="134" cy="125" r="5" class="grp-dot" fill="var(--accent-2)"/>
+              <circle cx="54" cy="74" r="5" class="grp-dot" fill="var(--accent-3)"/>
+              <circle cx="218" cy="59" r="5" class="grp-dot" fill="#f5a623"/>
+              <circle cx="252" cy="102" r="5" class="grp-dot" fill="#e0567a"/>
             </g>
             <text x="118" y="160" class="af-s">benzocaine · grouped by equivalence</text>
             <path class="af-arrow" d="M250 92 L292 92"/><text x="271" y="84" class="af-s">→ graph</text>
@@ -622,8 +606,11 @@
               <line x1="64" y1="150" x2="90" y2="50" opacity=".3"/>
               <line x1="64" y1="150" x2="150" y2="198" opacity=".3"/>
               <line x1="90" y1="50" x2="64" y2="150" opacity=".3"/></g>
-            <g class="af-s" fill="var(--accent-3)">
-              <text x="150" y="40">³J ≈ 8.5 Hz</text><text x="207" y="182">³J ≈ 7.1 Hz</text></g>
+            <g style="font:600 11px ui-sans-serif,system-ui" fill="var(--ink-soft)" text-anchor="middle">
+              <rect x="120" y="29" width="60" height="15" rx="4" fill="var(--panel-2)" stroke="var(--line)"/>
+              <text x="150" y="40">³J ≈ 8.5 Hz</text>
+              <rect x="176" y="175" width="60" height="15" rx="4" fill="var(--panel-2)" stroke="var(--line)"/>
+              <text x="206" y="186">³J ≈ 7.1 Hz</text></g>
             <!-- nodes with δ -->
             <g class="grp-dot" stroke="var(--panel)" stroke-width="2.5">
               <circle cx="90"  cy="50"  r="24" fill="var(--accent)"/>
@@ -711,7 +698,7 @@
       <div class="kicker">Model · the baseline</div>
       <h2>Start simple: a CNN reads the raw spectrum.</h2>
       <div class="archfig" style="max-height:230px">
-        <svg viewBox="0 0 880 200" aria-hidden="true">
+        <svg viewBox="0 0 680 200" aria-hidden="true">
           <!-- input spectrum -->
           <rect x="6" y="60" width="120" height="80" rx="8" class="af-box"/>
           <path d="M16 124 Q34 124 40 96 Q46 72 54 96 Q60 118 68 100 Q76 84 86 106 Q94 124 116 124"
@@ -778,9 +765,16 @@
       <div class="flow" style="margin-top:14px">
         <div class="node"><div class="n">SPECTRUM</div><h3>→ tokens</h3>
           <div class="glyph"><svg viewBox="0 0 120 70">
-            <path d="M6 30 Q20 30 26 14 Q32 2 40 16 Q46 28 54 18 Q62 8 70 22 Q78 32 114 30" fill="none" stroke="var(--ink-soft)" stroke-width="2"/>
-            <g fill="var(--accent)" opacity=".8"><rect x="8" y="46" width="12" height="16" rx="2"/><rect x="25" y="46" width="12" height="16" rx="2"/><rect x="42" y="46" width="12" height="16" rx="2"/><rect x="59" y="46" width="12" height="16" rx="2"/><rect x="76" y="46" width="12" height="16" rx="2"/><rect x="93" y="46" width="12" height="16" rx="2"/></g></svg></div>
-          <p>conv stem → ppm-tagged feature tokens</p></div>
+            <line x1="4" y1="50" x2="116" y2="50" class="gw"/>
+            <!-- a real multiplet spectrum: doublet · triplet · singlet -->
+            <path d="M4 50 L14 50 L18 28 L22 50 L26 28 L30 50 L44 50 L48 26 L52 50 L55 17 L58 50 L62 26 L66 50 L86 50 L92 13 L98 50 L116 50"
+              fill="none" stroke="var(--ink-soft)" stroke-width="2"/>
+            <!-- one token = one boxed peak region -->
+            <g fill="none" stroke="var(--accent)" stroke-width="1.4" stroke-dasharray="3 3">
+              <rect x="12" y="22" width="22" height="32" rx="3"/>
+              <rect x="42" y="11" width="28" height="43" rx="3"/>
+              <rect x="84" y="7" width="18" height="47" rx="3"/></g></svg></div>
+          <p>conv stem → ppm-tagged feature tokens (one box per peak region)</p></div>
         <div class="arrow">▶</div>
         <div class="node"><div class="n">ENCODER</div><h3>self-attention</h3>
           <div class="glyph"><svg viewBox="0 0 120 70">
@@ -791,11 +785,17 @@
         <div class="arrow">▶</div>
         <div class="node"><div class="n">8 QUERIES → DECODER</div><h3>cross-attention</h3>
           <div class="glyph"><svg viewBox="0 0 120 70">
-            <g stroke="var(--accent)" stroke-width="1" opacity=".4">
-              <line x1="22" y1="16" x2="92" y2="14"/><line x1="22" y1="35" x2="92" y2="34"/><line x1="22" y1="35" x2="92" y2="54"/><line x1="22" y1="54" x2="92" y2="34"/></g>
-            <g fill="var(--accent-3)"><circle cx="18" cy="10" r="3.5"/><circle cx="18" cy="22" r="3.5"/><circle cx="18" cy="34" r="3.5"/><circle cx="18" cy="46" r="3.5"/><circle cx="18" cy="58" r="3.5"/></g>
-            <g fill="var(--accent)" opacity=".85"><rect x="92" y="8" width="10" height="13" rx="2"/><rect x="92" y="28" width="10" height="13" rx="2"/><rect x="92" y="48" width="10" height="13" rx="2"/></g>
-            <text x="18" y="69" class="af-s">queries</text></svg></div>
+            <!-- spectrum tokens (the boxed peak regions, from the encoder) -->
+            <g fill="var(--accent)" opacity=".85"><rect x="16" y="6" width="16" height="12" rx="2"/><rect x="50" y="6" width="16" height="12" rx="2"/><rect x="84" y="6" width="16" height="12" rx="2"/></g>
+            <!-- cross-attention: each of the 8 queries gathers from the tokens -->
+            <g stroke="var(--accent)" stroke-width="1">
+              <line x1="10" y1="55" x2="24" y2="18" opacity=".5"/><line x1="24" y1="55" x2="24" y2="18" opacity=".3"/>
+              <line x1="38" y1="55" x2="58" y2="18" opacity=".5"/><line x1="38" y1="55" x2="24" y2="18" opacity=".2"/>
+              <line x1="52" y1="55" x2="58" y2="18" opacity=".5"/><line x1="66" y1="55" x2="58" y2="18" opacity=".35"/>
+              <line x1="66" y1="55" x2="92" y2="18" opacity=".2"/><line x1="80" y1="55" x2="92" y2="18" opacity=".5"/>
+              <line x1="94" y1="55" x2="92" y2="18" opacity=".5"/><line x1="108" y1="55" x2="92" y2="18" opacity=".3"/></g>
+            <!-- 8 learned spin-group queries -->
+            <g fill="var(--accent-3)"><circle cx="10" cy="58" r="3.4"/><circle cx="24" cy="58" r="3.4"/><circle cx="38" cy="58" r="3.4"/><circle cx="52" cy="58" r="3.4"/><circle cx="66" cy="58" r="3.4"/><circle cx="80" cy="58" r="3.4"/><circle cx="94" cy="58" r="3.4"/><circle cx="108" cy="58" r="3.4"/></g></svg></div>
           <p>one query per spin group gathers its own evidence (set prediction)</p></div>
         <div class="arrow">▶</div>
         <div class="node"><div class="n">HEADS</div><h3>nodes + edges</h3>
@@ -1093,6 +1093,23 @@ const Sweep = (() => {
 
   function refreshColors() { colors = readColors(); }
 
+  /* ---- cover: autoplaying real 90↔600 sweep as a faint background ---- */
+  let coverRaf = 0, coverP = 0, coverDir = 1;
+  function paintCover() {
+    const cv = document.getElementById("coverCanvas");
+    if (!cv || !meta) return;
+    render(cv, interp(coverP).cur, { fan: true });
+  }
+  function coverTick() {
+    coverP += 0.0017 * coverDir;
+    if (coverP >= 1) { coverP = 1; coverDir = -1; }
+    else if (coverP <= 0) { coverP = 0; coverDir = 1; }
+    paintCover();
+    coverRaf = requestAnimationFrame(coverTick);
+  }
+  function startCover() { if (!coverRaf && meta) coverRaf = requestAnimationFrame(coverTick); }
+  function stopCover() { cancelAnimationFrame(coverRaf); coverRaf = 0; }
+
   return {
     load(cb) {
       fetch("data/field_sweep.json").then(r => r.json()).then(d => {
@@ -1104,6 +1121,7 @@ const Sweep = (() => {
       const sl = document.getElementById("fieldSlider"); if (sl) sl.value = 0;
       paintHero(); paintProof(); },
     playHero, pauseHero, scrubHero, paintHero, paintProof, refreshColors,
+    startCover, stopCover, paintCover,
     get ready() { return !!meta; },
   };
 })();
@@ -1118,6 +1136,8 @@ Reveal.initialize({
 
 function sizeFor(slide) {
   if (!Sweep.ready) return;
+  // the cover background autoplays only while it's on screen
+  if (slide && slide.id === "s-cover") Sweep.startCover(); else Sweep.stopCover();
   // render the hero at its current field (manual control); the play button or
   // slider drives the sweep — don't force an autoplay on every slide entry.
   if (slide && slide.id === "s-hero") Sweep.paintHero();
@@ -1147,7 +1167,8 @@ Reveal.on("slidechanged", (ev) => sizeFor(ev.currentSlide));
 
 window.addEventListener("resize", () => {
   const s = Reveal.getCurrentSlide && Reveal.getCurrentSlide();
-  if (s && s.id === "s-hero") Sweep.paintHero();
+  if (s && s.id === "s-cover") Sweep.paintCover();
+  else if (s && s.id === "s-hero") Sweep.paintHero();
   else if (s && s.id === "s-proof") Sweep.paintProof();
 });
 
