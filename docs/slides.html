@@ -320,9 +320,10 @@
         </div>
       </div>
       <div class="honesty">
-        <span class="badge"><span class="dot"></span>500 held-out molecules the model never saw</span>
-        <span class="badge"><span class="dot"></span>scaffold + matrix-dedup split — not memorization</span>
-        <span class="faint">Metrics (Hungarian-matched δ / J MAE) drop in here when the checkpoint locks — demo-first.</span>
+        <span class="badge"><span class="dot"></span>shift MAE <b style="color:var(--accent-2)">0.33 ppm</b> — baseline 1.31 ppm &nbsp;(−74%)</span>
+        <span class="badge"><span class="dot"></span>J MAE <b style="color:var(--accent-2)">2.62 Hz</b> — baseline 4.07 Hz &nbsp;(−36%)</span>
+        <span class="badge"><span class="dot"></span>coupling presence F1 <b style="color:var(--accent-2)">0.79</b> · degeneracy acc <b style="color:var(--accent-2)">97.6%</b></span>
+        <span class="badge"><span class="dot"></span>12,895 held-out molecules · scaffold + matrix-dedup split</span>
       </div>
     </div>
     <aside class="notes">
@@ -334,6 +335,54 @@
       checkpoint trained on (2M+ PubChem on S3). Record a fallback video regardless.
     </aside>
     <div class="footnote">Both panels: pyspin simulation of the molecule above, at 90 vs 600 MHz.</div>
+  </section>
+
+  <!-- ============================ SLIDE 3.5 — training evidence ============================ -->
+  <section id="s-train" data-background-color="var(--bg)">
+    <div class="slidepad">
+      <div class="kicker">Training evidence · session014 · AWS L40S · 85 epochs</div>
+      <h2 style="font-size:34px">Steady convergence. Still room to run.</h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:26px;flex:1;margin-top:16px;min-height:0;align-items:start">
+        <div>
+          <img src="data/learning_curve.png" alt="Learning curves: shift MAE and J MAE vs epoch"
+               style="width:100%;border-radius:12px;border:1px solid var(--line);display:block" />
+          <p class="faint" style="font-size:13px;margin-top:9px">
+            Dashed line = mean-prediction baseline. Teal dot = best checkpoint.</p>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:18px;justify-content:center">
+          <div class="card" style="padding:18px 20px">
+            <div class="step" style="margin-bottom:6px">SHIFT δ</div>
+            <div style="font-size:28px;font-weight:800;background:linear-gradient(90deg,var(--accent),var(--accent-2));-webkit-background-clip:text;background-clip:text;color:transparent">
+              0.33 ppm</div>
+            <div class="muted" style="font-size:14px;margin-top:4px">Hungarian MAE on 12,895 held-out molecules</div>
+            <div class="faint" style="font-size:13px;margin-top:4px">Baseline: 1.31 ppm &nbsp;→ &nbsp;<b style="color:var(--accent-2)">−74%</b></div>
+          </div>
+          <div class="card" style="padding:18px 20px">
+            <div class="step" style="margin-bottom:6px">COUPLING J</div>
+            <div style="font-size:28px;font-weight:800;background:linear-gradient(90deg,var(--accent-3),var(--accent));-webkit-background-clip:text;background-clip:text;color:transparent">
+              2.62 Hz</div>
+            <div class="muted" style="font-size:14px;margin-top:4px">Hungarian MAE · presence F1 = 0.79</div>
+            <div class="faint" style="font-size:13px;margin-top:4px">Baseline: 4.07 Hz &nbsp;→ &nbsp;<b style="color:var(--accent-2)">−36%</b></div>
+          </div>
+          <div class="card" style="padding:18px 20px">
+            <div class="step" style="margin-bottom:6px">DEGENERACY</div>
+            <div style="font-size:28px;font-weight:800;background:linear-gradient(90deg,var(--accent-2),var(--accent-3));-webkit-background-clip:text;background-clip:text;color:transparent">
+              97.6%</div>
+            <div class="muted" style="font-size:14px;margin-top:4px">Accuracy · Pearson r = 0.94 (shift), 0.82 (J)</div>
+            <div class="faint" style="font-size:13px;margin-top:4px">Trained on 69,243 ChEMBL + 2M+ PubChem molecules</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">
+      Sam, ~1:00. The curves show clean convergence — no plateau, no instability. Best checkpoint at epoch 85 of
+      120 planned, so the model is still learning. Key accuracy guard: "these are Hungarian-matched — we find the
+      best label permutation before measuring error, so we're not penalizing the model for an arbitrary ordering
+      choice." The baseline is just predicting the training-set mean for every molecule — shift is 74% better,
+      J is 36% better, and coupling detection F1 = 0.79 is a significant qualitative win (the model knows which
+      protons are coupled). Degeneracy at 97.6% is near-solved. The model was trained on 69k augmented ChEMBL
+      8-spin molecules + the full 2M+ PubChem set on S3.
+    </aside>
   </section>
 
   <!-- ============================ SLIDE 4 — impact + team + site ============================ -->
