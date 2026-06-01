@@ -211,6 +211,44 @@
   footer{border-top:1px solid var(--line);padding:40px 0;color:var(--ink-faint);font-size:13.5px}
   .footer-in{display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px}
   .tag-pill{display:inline-block;font-size:12px;padding:3px 10px;border:1px solid var(--line-strong);border-radius:99px;color:var(--ink-soft);margin-right:6px}
+
+  /* ---- interactive viewers (Explore) ---- */
+  .viewer-block{margin-top:34px;padding:22px;border:1px solid var(--line);border-radius:16px;background:var(--panel)}
+  .vb-head{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:14px}
+  .vb-head h3{font-size:17px;margin:0}
+  .vb-controls{display:flex;gap:6px;flex-wrap:wrap}
+  .vb-controls button,.lc-legend button{font:inherit;font-size:12.5px;cursor:pointer;border:1px solid var(--line-strong);background:transparent;color:var(--ink-soft);padding:5px 11px;border-radius:99px}
+  .vb-controls button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .lc-legend{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+  .lc-legend button{display:inline-flex;align-items:center;gap:7px}
+  .lc-legend button i{width:11px;height:11px;border-radius:3px;background:var(--c)}
+  .lc-legend button:not(.on){opacity:.38}
+  .vb-canvas{width:100%;height:300px;display:block}
+  .cmp-wrap{overflow-x:auto}
+  table.cmp{width:100%;border-collapse:collapse;font-size:13px}
+  table.cmp th{text-align:left;padding:8px 10px;border-bottom:2px solid var(--line-strong);color:var(--ink-soft);font-weight:700;cursor:pointer;white-space:nowrap;user-select:none}
+  table.cmp th.srt.a::after{content:" \25B2";color:var(--accent)} table.cmp th.srt.d::after{content:" \25BC";color:var(--accent)}
+  table.cmp td{padding:8px 10px;border-bottom:1px solid var(--line)}
+  table.cmp td.num{text-align:right;font-variant-numeric:tabular-nums}
+  table.cmp tr.st-production td{background:color-mix(in srgb,var(--accent) 9%,transparent)}
+  table.cmp tr.st-running td{color:var(--ink-faint);font-style:italic}
+  .tx-nav{display:flex;align-items:center;gap:10px}
+  .tx-sel{font:inherit;font-size:13px;padding:5px 8px;border-radius:8px;border:1px solid var(--line-strong);background:var(--panel);color:var(--ink)}
+  .tx-meta{font-size:13px;color:var(--ink-soft);margin-bottom:12px}
+  .tx-meta .mono{font-family:ui-monospace,monospace;font-size:12px;color:var(--ink)}
+  .tx-grid{display:grid;grid-template-columns:1.25fr 1fr;gap:22px;align-items:start}
+  @media(max-width:760px){.tx-grid{grid-template-columns:1fr}}
+  .tx-legend{display:flex;gap:16px;font-size:12px;color:var(--ink-soft);margin-bottom:4px;flex-wrap:wrap}
+  .tx-legend .sw{display:inline-block;width:13px;height:3px;vertical-align:middle;margin-right:5px}
+  table.nodes{width:100%;border-collapse:collapse;font-size:12.5px;font-variant-numeric:tabular-nums}
+  table.nodes th{color:var(--ink-faint);font-weight:600;padding:4px 6px;text-align:right;border-bottom:1px solid var(--line)}
+  table.nodes td{padding:4px 6px;text-align:right;border-bottom:1px solid var(--line)}
+  table.nodes td.gi{color:var(--ink-faint);text-align:left}
+  table.nodes td.pred{color:var(--accent)} table.nodes td.pred.off{color:#e0564d;font-weight:700}
+  .jwrap{display:flex;gap:18px;margin-top:14px;flex-wrap:wrap}
+  .jlbl{font-size:11px;color:var(--ink-faint);margin-bottom:5px}
+  .jgrid{display:grid;grid-template-columns:repeat(8,13px);grid-auto-rows:13px;gap:1px}
+  .jgrid i{background:var(--accent);border-radius:2px;display:block;min-height:13px}
 </style>
 </head>
 <body>
@@ -234,6 +272,7 @@
       <a href="#overview">Overview</a>
       <a href="#pipeline">Pipeline</a>
       <a href="#results">Results</a>
+      <a href="#explore">Explore</a>
       <a href="#team">Team</a>
     </div>
     <button class="toggle" id="themeBtn" title="Toggle light / dark" aria-label="Toggle theme">🌙</button>
@@ -406,8 +445,9 @@
   <div class="wrap">
     <div class="kicker">Where we are</div>
     <h2>See the development of the model architecture.</h2>
-    <p class="lead">Each stage introduced a different architectural or loss innovation. All metrics are
-      Hungarian-matched on 12,895 scaffold-split held-out molecules the model never saw.</p>
+    <p class="lead">Each stage introduced a different architectural or loss innovation. Metrics are on
+      held-out molecules the model never saw. <a href="#explore">Explore the learning curves, a full
+      run comparison, and per-molecule test predictions ↓</a></p>
 
     <div class="carousel-wrap">
       <div class="carousel-nav">
@@ -545,7 +585,7 @@
           <div class="stage-body">
             <div class="stage-grid">
               <div>
-                <span class="stage-chip chip-026">In progress &middot; session 026</span>
+                <span class="stage-chip chip-026">Done &middot; session 026</span>
                 <h3 class="stage-h3">Peak channel &amp; soft equivalence</h3>
                 <p class="stage-desc">Two targeted innovations addressing the remaining qualitative failure
                   modes: imprecise shift localization and accidentally degenerate groups rendering as spurious
@@ -554,23 +594,23 @@
                   <div class="detail-row"><span class="dl">Peak channel:</span><span class="dv">A 2nd conv input channel computed inside <code>forward()</code> &mdash; local maxima above a per-sample threshold, Gaussian-smoothed &mdash; as a shift-localization prior. Zero train/serve skew</span></div>
                   <div class="detail-row"><span class="dl">Soft equivalence:</span><span class="dv">A 3rd <code>PairwiseEdgeHead</code> logit flags accidentally-degenerate pairs (same &delta;, different J). BCE vs |&delta;<sub>i</sub>&minus;&delta;<sub>j</sub>|&le;tol + consistency penalty pulling flagged shifts together; hard-averaged at decode</span></div>
                   <div class="detail-row"><span class="dl">Why it matters:</span><span class="dv">Without the flag, degenerate pairs drift to e.g. 3.59/3.61&nbsp;ppm and render a spurious split doublet &mdash; a qualitative failure that mean shift-MAE hides</span></div>
-                  <div class="detail-row"><span class="dl">Next:</span><span class="dv">Scale the 026 recipe to an XL model (~57M params, 5.6&times; medium) on 3M+ PubChem spectra (sessions 027&ndash;028)</span></div>
+                  <div class="detail-row"><span class="dl">Now training:</span><span class="dv">Scaling to 3.2M PubChem spectra &mdash; a medium model on a random 500k subset and an XL model (~57M params, 5.6&times; medium) on the full set, on the Scripps HPC GPU queue</span></div>
                 </div>
                 <div class="insight-box">
-                  <b>Soft-equiv flag at epoch 35:</b> 99% accuracy and recall on the ~8.5% of edges
-                  that are soft-equivalent. The peak channel and soft-equivalence flag are default-off
-                  in inference &mdash; they compose on top of the session025 production checkpoint without
-                  changing the output schema.
+                  <b>Verdict at 64k:</b> 026 matches the production 025 on aggregate metrics (shift 0.037, J 0.65) &mdash;
+                  the soft-equivalence flag reaches 99% accuracy/recall on the ~8.5% of edges that are degenerate, and its
+                  win is <i>qualitative</i> (correct peak multiplicity, which mean shift-MAE can&rsquo;t capture). Both ideas
+                  are default-off in inference and compose on the 025 checkpoint without changing the output schema.
                 </div>
               </div>
               <div class="metrics-stack">
                 <div class="metric-row" style="border-color:color-mix(in srgb,var(--accent-3) 35%,transparent)">
-                  <div class="metric-val" style="background:linear-gradient(90deg,var(--accent-3),var(--accent))">0.066</div>
-                  <div class="metric-lbl">ppm shift MAE &mdash; epoch 35<br><span style="font-size:11px;color:var(--ink-faint)">in progress, still converging</span></div>
+                  <div class="metric-val" style="background:linear-gradient(90deg,var(--accent-3),var(--accent))">0.037</div>
+                  <div class="metric-lbl">ppm shift MAE &mdash; final<br><span style="font-size:11px;color:var(--ink-faint)">matches production 025</span></div>
                 </div>
                 <div class="metric-row" style="border-color:color-mix(in srgb,var(--accent-3) 35%,transparent)">
-                  <div class="metric-val" style="background:linear-gradient(90deg,var(--accent-3),var(--accent))">1.00</div>
-                  <div class="metric-lbl">Hz coupling J MAE &mdash; epoch 35</div>
+                  <div class="metric-val" style="background:linear-gradient(90deg,var(--accent-3),var(--accent))">0.65</div>
+                  <div class="metric-lbl">Hz coupling J MAE &mdash; final</div>
                 </div>
                 <div class="metric-row" style="border-color:color-mix(in srgb,var(--accent-3) 35%,transparent)">
                   <div class="metric-val" style="background:linear-gradient(90deg,var(--accent-3),var(--accent))">99%</div>
@@ -578,7 +618,7 @@
                 </div>
                 <div class="metric-row" style="border-color:color-mix(in srgb,var(--accent-3) 35%,transparent)">
                   <div class="metric-val" style="background:linear-gradient(90deg,var(--accent-3),var(--accent))">57M</div>
-                  <div class="metric-lbl">params in XL model<br><span style="font-size:11px;color:var(--ink-faint)">queued for 3M+ PubChem training</span></div>
+                  <div class="metric-lbl">params in XL model<br><span style="font-size:11px;color:var(--ink-faint)">training now on the HPC GPU queue</span></div>
                 </div>
               </div>
             </div>
@@ -616,6 +656,56 @@
 })();
 </script>
 
+<!-- ============ EXPLORE (interactive viewers) ============ -->
+<section class="block" id="explore">
+  <div class="wrap">
+    <div class="kicker">Explore the models</div>
+    <h2>Three interactive views into development &amp; testing.</h2>
+    <p class="lead">Training curves across the model lineage, a sortable comparison of every run, and a
+      held-out test-molecule explorer — pick a molecule the model never saw and compare its predicted
+      spin system against ground truth, then re-render the prediction through the exact simulator.</p>
+
+    <!-- 1. learning curves -->
+    <div class="viewer-block" id="lcViewer">
+      <div class="vb-head"><h3>Learning curves</h3><div class="vb-controls" id="lcMetrics"></div></div>
+      <div class="lc-legend" id="lcLegend"></div>
+      <canvas id="lcCanvas" class="vb-canvas"></canvas>
+    </div>
+
+    <!-- 2. comparison table -->
+    <div class="viewer-block">
+      <div class="vb-head"><h3>Model comparison</h3>
+        <span class="muted" style="font-size:13px">click a column to sort</span></div>
+      <div id="cmpTable" class="cmp-wrap"></div>
+    </div>
+
+    <!-- 3. test-molecule explorer -->
+    <div class="viewer-block" id="txViewer">
+      <div class="vb-head"><h3>Held-out test-molecule explorer</h3>
+        <div class="tx-nav">
+          <button class="car-btn" id="txPrev" aria-label="Previous molecule">&#8249;</button>
+          <select id="txSel" class="tx-sel"></select>
+          <button class="car-btn" id="txNext" aria-label="Next molecule">&#8250;</button>
+        </div></div>
+      <div class="tx-meta" id="txMeta"></div>
+      <div class="tx-grid">
+        <div>
+          <div class="tx-legend">
+            <span><i class="sw" style="background:var(--ink-faint)"></i>target spectrum (90&nbsp;MHz)</span>
+            <span><i class="sw" style="background:var(--accent)"></i>rendered from prediction</span>
+          </div>
+          <canvas id="txSpec" class="vb-canvas"></canvas>
+        </div>
+        <div id="txMatrix" class="tx-matrix"></div>
+      </div>
+      <p class="muted" style="margin-top:12px;font-size:12.5px">Predictions from <b>session&nbsp;026</b> (medium,
+        10M params) on molecules held out of training. The rendered trace re-simulates the model&rsquo;s predicted
+        spin system through the exact quantum simulator — a close overlay means the recovered parameters reproduce
+        the input spectrum. Predicted values &gt; 0.1&nbsp;ppm / 1.5&nbsp;Hz off ground truth are shown in red.</p>
+    </div>
+  </div>
+</section>
+
 <!-- ============ TEAM ============ -->
 <section class="block" id="team">
   <div class="wrap">
@@ -629,7 +719,7 @@
       </div>
       <div class="member">
         <div class="av">SM</div>
-        <h3>Samuel Mansfield</h3>
+        <h3>Sam Mansfield</h3>
         <span>Seiple Lab · generation &amp; model</span>
       </div>
       <div class="member">
@@ -658,6 +748,7 @@
 <script src="https://cdn.jsdelivr.net/npm/3dmol@2.4.2/build/3Dmol-min.js"></script>
 <script src="assets/sweep.js"></script>
 <script src="assets/mol3d.js"></script>
+<script src="assets/viewers.js"></script>
 <script>
 /* ── Spin graph canvas renderer ─────────────────────────────────────────── */
 (function () {
