@@ -74,21 +74,18 @@
   .spin-dot .spin-vec{stroke:var(--trace);}
 
   /* ================= Slide 1 — the live sweep ================= */
-  .hero-stage{position:relative;width:1184px;height:628px;overflow:hidden;border-radius:16px;}
-  #heroCanvas{position:absolute;inset:0;width:100%;height:100%;display:block;z-index:0;}
-  .hero-grad{position:absolute;inset:0;z-index:1;pointer-events:none;
-    background:linear-gradient(180deg,var(--bg) 0%,color-mix(in srgb,var(--bg) 35%,transparent) 26%,transparent 50%,
-      color-mix(in srgb,var(--bg) 55%,transparent) 86%,var(--bg) 100%);}
-  /* header pinned top, gauge pinned bottom — absolute anchoring so the control
-     row is ALWAYS inside the slide no matter how the headline wraps */
-  .hero-head{position:absolute;left:60px;right:60px;top:46px;z-index:2;}
-  .hero-head h1{font-size:clamp(32px,4vw,54px);font-weight:800;max-width:18ch;}
-  .hero-head .eyebrow{margin-bottom:6px;}
-  .hero-head p{color:var(--ink-soft);font-size:20px;max-width:46ch;margin-top:12px;}
+  /* clean vertical zones: header (top) / spectrum band (middle, flex:1) /
+     gauge+controls (bottom) — nothing overlaps */
+  .hero-stage{position:relative;width:1184px;height:628px;overflow:hidden;border-radius:16px;
+    display:flex;flex-direction:column;padding:40px 56px 34px;gap:10px;}
+  #heroCanvas{position:relative;flex:1 1 auto;min-height:0;width:100%;display:block;z-index:0;}
+  .hero-head{flex:none;z-index:2;}
+  .hero-head h1{font-size:clamp(30px,3.4vw,46px);font-weight:800;max-width:26ch;}
+  .hero-head .eyebrow{margin-bottom:5px;}
+  .hero-head p{color:var(--ink-soft);font-size:18px;max-width:62ch;margin-top:9px;}
   .mol-tag{font-size:16px;color:var(--ink-soft);}
   .mol-tag b{color:var(--ink);} .mol-tag .smi{color:var(--accent);}
-  .gauge{position:absolute;left:60px;right:60px;bottom:42px;z-index:2;
-    display:flex;flex-direction:column;align-items:flex-start;gap:10px;}
+  .gauge{flex:none;z-index:2;display:flex;flex-direction:column;align-items:flex-start;gap:7px;}
   .field-read{font-weight:800;letter-spacing:-.03em;font-size:clamp(30px,3.6vw,44px);
     font-variant-numeric:tabular-nums;color:var(--ink);}
   .field-read .u{font-size:.42em;color:var(--ink-faint);font-weight:600;margin-left:6px;}
@@ -217,15 +214,13 @@
   <!-- ============================ SLIDE 1 — problem + the bet (LIVE SWEEP) ============================ -->
   <section id="s-hero" data-background-color="var(--bg)">
     <div class="hero-stage">
-    <canvas id="heroCanvas"></canvas>
-    <div class="hero-grad"></div>
     <div class="hero-head">
       <div class="eyebrow">The problem &amp; the bet</div>
       <h1>High-field structure, locked behind a $1M magnet.</h1>
-      <p>At low field the chemical-shift spread Δν shrinks toward <i>J</i>, so multiplets overlap —
-        the spectrum goes <b>second-order</b>. Peak-picking fails, and benchtops get dismissed as
-        "low information." <b>They aren't.</b></p>
+      <p>At low field, Δν shrinks toward <i>J</i> — multiplets overlap and the spectrum goes
+        <b>second-order</b>. Benchtops get dismissed as "low-information." <b>They aren't.</b></p>
     </div>
+    <canvas id="heroCanvas"></canvas>
     <div class="gauge">
       <div class="field-read"><span id="fieldVal">90</span><span class="u">MHz</span></div>
       <div class="slider-wrap">
