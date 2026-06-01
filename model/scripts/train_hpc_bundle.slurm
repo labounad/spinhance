@@ -24,7 +24,7 @@ BUNDLE="${BUNDLE:-/gpfs/home/labounader/bundle_500k_s0}"
 DATA_OV="--set data.records=$BUNDLE/records.json.gz \
  --set data.parts=$BUNDLE \
  --set data.sample_n=0 --set data.max_mol=0 \
- --set data.preload=true \
+ --set data.preload=false \
  --set training.batch_size=512 --set training.num_workers=4"
 
 echo "host $(hostname) | bundle $BUNDLE | config $CONFIG run $RUN_NAME"
