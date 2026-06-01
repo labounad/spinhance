@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Spinhance — Hackathon Deck</title>
+<meta name="description" content="Spinhance: recovering field-independent ¹H spin-system parameters from low-field NMR." />
+<link rel="icon" type="image/svg+xml" href="favicon.svg" />
+
+<!-- Reveal.js core (vendored locally — deck runs fully offline; PDF export = A/V backup) -->
+<link rel="stylesheet" href="vendor/reveal/dist/reveal.css" />
+
+<style>
+  /* ====================================================================
+     Design tokens lifted verbatim from docs/index.html so the deck and
+     the site speak ONE visual language.
+     ==================================================================== */
+  :root{
+    --bg:#fafafa; --bg-soft:#f0f1f3; --panel:#ffffff; --panel-2:#f5f6f8;
+    --ink:#15171c; --ink-soft:#4a4f5a; --ink-faint:#8a909c;
+    --line:#e3e6ea; --line-strong:#cdd2da;
+    --trace:#101114; --fan:rgba(20,22,28,0.06);
+    --accent:#3b6ef5; --accent-2:#22c1a5; --accent-3:#9b5cf6;
+    --shadow:0 1px 2px rgba(16,24,40,.06),0 8px 28px rgba(16,24,40,.06);
+    --grid:rgba(20,22,28,.07);
+  }
+  [data-theme="dark"]{
+    --bg:#07090d; --bg-soft:#0c0f15; --panel:#0f131b; --panel-2:#121826;
+    --ink:#eef1f6; --ink-soft:#aab2c2; --ink-faint:#6a7385;
+    --line:#1c2330; --line-strong:#2a3344;
+    --trace:#eaf2ff; --fan:rgba(120,170,255,0.08);
+    --accent:#5b8cff; --accent-2:#34e3c4; --accent-3:#b07bff;
+    --shadow:0 1px 2px rgba(0,0,0,.5),0 16px 48px rgba(0,0,0,.45);
+    --grid:rgba(150,180,230,.07);
+  }
+
+  /* ---- Reveal surface ---- */
+  .reveal{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+    color:var(--ink); font-size:30px;
+  }
+  html,body{background:var(--bg);}
+  .reveal .slides{text-align:left;}
+  .reveal section{height:100%;}
+  .reveal h1,.reveal h2,.reveal h3{
+    font-family:inherit; color:var(--ink); line-height:1.12; letter-spacing:-.02em;
+    margin:0; text-transform:none; font-weight:800;
+  }
+  .reveal p{margin:.4em 0;}
+  .reveal a{color:var(--accent);}
+  .reveal strong,.reveal b{color:var(--ink);font-weight:700;}
+  .reveal .mono{font-family:"SF Mono",ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace;}
+  .reveal ::selection{background:color-mix(in srgb,var(--accent) 40%,transparent);}
+
+  /* slide chrome */
+  .slidepad{padding:54px 64px; height:100%; display:flex; flex-direction:column;}
+  .eyebrow{font-size:15px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent-2);font-weight:700;margin-bottom:8px;}
+  .kicker{font-size:15px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);font-weight:700;margin-bottom:12px;}
+  .lead{color:var(--ink-soft);font-size:22px;max-width:1040px;}
+  .muted{color:var(--ink-soft);}
+  .faint{color:var(--ink-faint);}
+
+  /* brand mark */
+  .brand{display:flex;align-items:center;gap:12px;font-weight:800;letter-spacing:-.02em;font-size:24px;color:var(--ink);}
+  .spin-dot{width:26px;height:26px;flex:none;overflow:visible;
+    filter:drop-shadow(0 0 7px color-mix(in srgb,var(--accent) 75%,transparent));}
+  .spin-dot .ball-0{stop-color:var(--accent-2);} .spin-dot .ball-1{stop-color:var(--accent);}
+  .spin-dot .spin-vec{stroke:var(--trace);}
+
+  /* ================= Slide 1 — the live sweep ================= */
+  #s-hero{position:relative;overflow:hidden;}
+  #heroCanvas{position:absolute;inset:0;width:100%;height:100%;display:block;z-index:0;}
+  .hero-grad{position:absolute;inset:0;z-index:1;pointer-events:none;
+    background:linear-gradient(180deg,var(--bg) 0%,color-mix(in srgb,var(--bg) 35%,transparent) 26%,transparent 50%,
+      color-mix(in srgb,var(--bg) 55%,transparent) 86%,var(--bg) 100%);}
+  .hero-fg{position:relative;z-index:2;height:100%;display:flex;flex-direction:column;justify-content:space-between;}
+  .hero-head h1{font-size:clamp(34px,4.4vw,58px);font-weight:800;max-width:18ch;}
+  .hero-head .eyebrow{margin-bottom:6px;}
+  .hero-head p{color:var(--ink-soft);font-size:21px;max-width:46ch;margin-top:12px;}
+  .mol-tag{font-size:16px;color:var(--ink-soft);margin-top:14px;}
+  .mol-tag b{color:var(--ink);} .mol-tag .smi{color:var(--accent);}
+  .gauge{display:flex;flex-direction:column;align-items:flex-start;gap:9px;}
+  .field-read{font-weight:800;letter-spacing:-.03em;font-size:clamp(30px,3.6vw,44px);
+    font-variant-numeric:tabular-nums;color:var(--ink);}
+  .field-read .u{font-size:.42em;color:var(--ink-faint);font-weight:600;margin-left:6px;}
+  .bar{width:min(520px,60vw);height:6px;border-radius:99px;background:var(--line-strong);position:relative;overflow:hidden;}
+  .bar i{position:absolute;left:0;top:0;bottom:0;border-radius:99px;width:0%;
+    background:linear-gradient(90deg,var(--accent),var(--accent-2));}
+  .bar-tags{width:min(520px,60vw);display:flex;justify-content:space-between;font-size:14px;color:var(--ink-faint);}
+  .ctlrow{display:flex;gap:10px;align-items:center;margin-top:8px;}
+  .pill-btn{cursor:pointer;border:1px solid var(--line-strong);background:var(--panel);color:var(--ink);
+    padding:7px 14px;border-radius:99px;font-size:14px;font-weight:600;transition:.18s;}
+  .pill-btn:hover{border-color:var(--accent);color:var(--accent);}
+
+  /* ================= Slide 2 — four modules ================= */
+  .pipe{display:grid;grid-template-columns:repeat(2,1fr);grid-template-rows:repeat(2,1fr);
+    gap:20px;flex:1;margin-top:18px;min-height:0;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:20px 22px;
+    box-shadow:var(--shadow);position:relative;overflow:hidden;display:flex;flex-direction:column;}
+  .card .top{display:flex;align-items:baseline;gap:10px;}
+  .card .ic{font-size:24px;}
+  .card .step{font-size:13px;font-weight:800;color:var(--accent-2);letter-spacing:.09em;}
+  .card .who{margin-left:auto;font-size:12px;color:var(--ink-faint);font-weight:700;
+    border:1px solid var(--line-strong);border-radius:99px;padding:2px 10px;}
+  .card h3{font-size:21px;margin:8px 0 6px;}
+  .card p{font-size:15.5px;color:var(--ink-soft);margin:0;line-height:1.5;}
+  .card .fact{margin-top:auto;padding-top:10px;font-size:15px;}
+  .card .fact b{background:linear-gradient(90deg,var(--accent),var(--accent-2));
+    -webkit-background-clip:text;background-clip:text;color:transparent;font-weight:800;}
+  .interdisc{margin-top:16px;font-size:16px;color:var(--ink-soft);}
+  .interdisc .tag{display:inline-block;font-size:13px;padding:3px 11px;border:1px solid var(--line-strong);
+    border-radius:99px;color:var(--ink-soft);margin-right:6px;}
+
+  /* ================= Slide 3 — proof ================= */
+  .proof{display:grid;grid-template-columns:1fr 1fr;gap:26px;flex:1;margin-top:14px;min-height:0;}
+  .specpane{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:16px;
+    box-shadow:var(--shadow);overflow:hidden;display:flex;flex-direction:column;min-height:0;}
+  .specpane .plabel{position:absolute;left:16px;top:13px;z-index:2;font-size:13px;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--ink-faint);font-weight:700;}
+  .specpane .ptag{position:absolute;right:16px;top:11px;z-index:2;font-size:13px;font-weight:700;
+    padding:3px 11px;border-radius:99px;}
+  .ptag.in{color:#ffd9b0;background:color-mix(in srgb,#ff9f43 22%,transparent);}
+  .ptag.out{color:var(--accent-2);background:color-mix(in srgb,var(--accent-2) 18%,transparent);}
+  .specpane canvas{flex:1;width:100%;min-height:0;display:block;}
+  .specpane .cap{padding:0 18px 14px;font-size:14.5px;color:var(--ink-soft);}
+  .honesty{margin-top:14px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;font-size:15.5px;color:var(--ink-soft);}
+  .badge{display:inline-flex;align-items:center;gap:7px;font-size:13.5px;font-weight:700;
+    border:1px solid var(--line-strong);border-radius:99px;padding:4px 12px;color:var(--ink-soft);}
+  .badge .dot{width:8px;height:8px;border-radius:50%;background:var(--accent-2);}
+
+  /* ================= Slide 4 — impact / team ================= */
+  .close{display:grid;grid-template-columns:1.25fr .75fr;gap:36px;flex:1;min-height:0;margin-top:10px;}
+  .impact li{margin:.5em 0;color:var(--ink-soft);font-size:19px;line-height:1.45;}
+  .impact li b{color:var(--ink);}
+  .sitecard{background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);
+    padding:24px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center;}
+  #qr{width:188px;height:188px;background:#fff;border-radius:12px;padding:10px;display:grid;place-items:center;}
+  #qr img,#qr canvas{width:100%;height:100%;}
+  .sitelink{font-weight:800;font-size:19px;color:var(--ink);}
+  .team{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:18px;}
+  .member{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow);}
+  .member .av{width:42px;height:42px;border-radius:11px;display:grid;place-items:center;font-weight:800;color:#fff;
+    background:linear-gradient(135deg,var(--accent),var(--accent-3));}
+  .member h3{font-size:16px;margin:11px 0 2px;}
+  .member span{font-size:13px;color:var(--ink-soft);}
+  .thesis{margin-top:14px;font-size:17px;color:var(--ink-soft);border-left:3px solid var(--accent);
+    padding-left:16px;font-style:italic;max-width:62ch;}
+
+  /* big quote slide */
+  .quote-wrap{height:100%;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;gap:18px;}
+  .quote-wrap blockquote{margin:0;border:0;box-shadow:none;background:none;font-style:normal;
+    font-size:clamp(26px,3vw,40px);line-height:1.32;font-weight:700;color:var(--ink);max-width:24ch;}
+  .quote-wrap blockquote .hl{
+    background:linear-gradient(90deg,var(--accent),var(--accent-2));
+    -webkit-background-clip:text;background-clip:text;color:transparent;}
+
+  /* reveal slide-number + controls tinting */
+  .reveal .slide-number{background:transparent;color:var(--ink-faint);font-size:14px;}
+  .reveal .controls{color:var(--accent);}
+  .reveal .progress{color:var(--accent);height:4px;}
+  .footnote{position:absolute;left:64px;bottom:22px;font-size:13px;color:var(--ink-faint);z-index:3;}
+</style>
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+  <!-- ============================ SLIDE 0 — thesis cover ============================ -->
+  <section id="s-cover" data-background-color="var(--bg)">
+    <div class="slidepad quote-wrap">
+      <div class="brand">
+        <svg class="spin-dot" viewBox="0 0 32 32" aria-hidden="true">
+          <defs><radialGradient id="bg0" cx="32%" cy="30%" r="75%">
+            <stop class="ball-0" offset="0%"/><stop class="ball-1" offset="100%"/></radialGradient></defs>
+          <g class="spin-vec" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="5" y1="27" x2="27" y2="5"/><polyline points="20,5 27,5 27,12"/></g>
+          <circle cx="16" cy="16" r="7" fill="url(#bg0)"/>
+        </svg>Spinhance
+      </div>
+      <blockquote>
+        A 90&nbsp;MHz benchtop spectrum looks blurry — but the blur isn't noise.
+        It's the <span class="hl">full spin system, just scrambled.</span>
+      </blockquote>
+      <p class="lead" style="max-width:60ch">We train a network to invert that blur back into
+        field-independent parameters (δ, <i>J</i>, degeneracies), so a cheap spectrum can be
+        re-simulated <b>exactly at any field</b>.</p>
+      <p class="faint" style="font-size:15px;margin-top:8px">
+        Lucas Abounader · Samuel Mansfield · Yiming Zhang &nbsp;·&nbsp; Scripps Hackathon 2026</p>
+    </div>
+    <aside class="notes">
+      Say the thesis verbatim. This is the sentence every slide ladders back to. Then advance.
+    </aside>
+  </section>
+
+  <!-- ============================ SLIDE 1 — problem + the bet (LIVE SWEEP) ============================ -->
+  <section id="s-hero" data-background-color="var(--bg)">
+    <canvas id="heroCanvas"></canvas>
+    <div class="hero-grad"></div>
+    <div class="slidepad hero-fg">
+      <div class="hero-head">
+        <div class="eyebrow">The problem &amp; the bet</div>
+        <h1>High-field structure, locked behind a $1M magnet.</h1>
+        <p>At low field the chemical-shift spread Δν shrinks toward <i>J</i>, so multiplets overlap —
+          the spectrum goes <b>second-order</b>. Peak-picking fails, and benchtops get dismissed as
+          "low information." <b>They aren't.</b></p>
+      </div>
+      <div class="gauge">
+        <div class="field-read"><span id="fieldVal">90</span><span class="u">MHz</span></div>
+        <div class="bar"><i id="barFill"></i></div>
+        <div class="bar-tags"><span>90 MHz · benchtop · ~$50k</span><span>600 MHz · cryomagnet · ~$1M</span></div>
+        <div class="mol-tag" id="molTag">—</div>
+        <div class="ctlrow">
+          <button class="pill-btn" id="replayBtn">↻ sweep 90→600</button>
+          <button class="pill-btn" id="shuffleBtn">⤭ new molecule</button>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">
+      Lucas, ~1:30. 1) High-field NMR is the gold standard for structure, but expensive, centralized, gatekept.
+      2) At low field peaks overlap — naive peak-picking fails. 3) THE REFRAME (Ken is listening): appearance is
+      governed by Δν/J; at low field Δν/J≈1, so line positions+intensities are a nonlinear function of the ENTIRE
+      spin system — the info is encoded, not lost. 4) THE BET: if the info is there, a net can learn the inverse map.
+      ACCURACY GUARD: say "low-field second-order spectra PRESERVE/ENCODE the full parameter set; first-order
+      discards info like relative coupling signs." Do NOT say "low field has more info than high field."
+      Trigger the sweep live with the replay button as you say "watch the same molecule resolve."
+    </aside>
+  </section>
+
+  <!-- ============================ SLIDE 2 — four modules ============================ -->
+  <section id="s-pipe" data-background-color="var(--bg)">
+    <div class="slidepad">
+      <div class="kicker">How it works · one molecule, four modules</div>
+      <h2 style="font-size:34px">SMILES → spin-system matrix → spectra → back to the matrix.</h2>
+      <div class="pipe">
+        <div class="card">
+          <div class="top"><span class="ic">⚗️</span><span class="step">1 · GENERATE</span><span class="who">Sam</span></div>
+          <h3>Label every proton</h3>
+          <p>SMILES → 3D, every proton tagged by spin group — distinguishing <b>hard</b> equivalence
+            (same shift, one group) from <b>soft</b> (same shift, separate groups). RDKit embedding +
+            a deuterium-substitution magnetic-equivalence test.</p>
+          <p class="fact"><b>69,324</b> exact-8-group ChEMBL molecules; one scan buckets <b>all</b> counts (1–10) at once.</p>
+        </div>
+        <div class="card">
+          <div class="top"><span class="ic">🧮</span><span class="step">2 · SPIN SYSTEM</span><span class="who">Yiming</span></div>
+          <h3>Shifts δ &amp; couplings J</h3>
+          <p>Molecule → parameters: δ via <b>NMRShiftDB2</b>, <i>J</i> via <b>Karplus + literature tables</b>,
+            a dedicated path per mechanism (geminal, vicinal, benzylic, allylic, aromatic…). Predictor spread
+            stored once, so spectra randomize without re-running it.</p>
+          <p class="fact">Nearly free, high quality: a <b>2M+ molecule</b> dataset generated in a weekend.</p>
+        </div>
+        <div class="card">
+          <div class="top"><span class="ic">📡</span><span class="step">3 · SIMULATE</span><span class="who">Lucas</span></div>
+          <h3>Exact spin Hamiltonian</h3>
+          <p>Diagonalize the spin Hamiltonian → realistic spectra at 90 &amp; 600 MHz, capturing the
+            higher-order coupling that makes low-field work. Started by scripting <b>MestReNova</b>;
+            then rebuilt from scratch as <b>pyspin</b>.</p>
+          <p class="fact">pyspin reproduces MestReNova to <b>r ≈ 0.999</b> — open-source, license-free, faster.</p>
+        </div>
+        <div class="card">
+          <div class="top"><span class="ic">🧠</span><span class="step">4 · MODEL</span><span class="who">Sam</span></div>
+          <h3>Spectrum → matrix</h3>
+          <p>One 90 MHz spectrum → field-independent matrix. <b>ResNet-1D → 4 typed heads</b>
+            (δ, |J|, J-presence, degeneracy). A canonical sort resolves the <b>S₈</b> label-permutation
+            problem; GroupNorm + EMA stabilize training.</p>
+          <p class="fact">Trained on AWS (L40S) over <b>2M+ PubChem</b>; leakage-safe scaffold + matrix-dedup splits.</p>
+        </div>
+      </div>
+      <div class="interdisc">
+        <b>Four fields in one pipeline:</b>
+        <span class="tag">cheminformatics (RDKit)</span><span class="tag">quantum spin physics</span><span class="tag">deep learning</span><span class="tag">cloud orchestration</span>
+      </div>
+    </div>
+    <aside class="notes">
+      ~2:30, hand-offs Yiming→Lucas→Sam. Keep each box ~30s. RIGOR LINE: "splits are scaffold-grouped and
+      deduplicated, so test molecules are genuinely unseen — the numbers aren't memorization." INNOVATION (honest):
+      we also built a DIFFERENTIABLE pyspin renderer (regularized-eigh gradients verified ~1e-6 vs finite diff) so a
+      spectral-consistency loss is possible — this is a VALIDATED CAPABILITY + ROADMAP; the shipped modelv2 checkpoint
+      trains on the MATRIX LOSS ONLY. Don't imply the spectral loss is in the trained model. FROM-ZERO beat: "one
+      sentence from Lucas and an empty repo → ~2.5 days, 189 commits."
+    </aside>
+  </section>
+
+  <!-- ============================ SLIDE 3 — proof ============================ -->
+  <section id="s-proof" data-background-color="var(--bg)">
+    <div class="slidepad">
+      <div class="kicker">Proof · watch it invert the blur</div>
+      <h2 style="font-size:34px">Feed the blurry 90 MHz → reconstruct the clean 600 MHz.</h2>
+      <div class="proof">
+        <div class="specpane">
+          <span class="plabel">input</span><span class="ptag in" id="tagIn">90 MHz</span>
+          <canvas id="proofLo"></canvas>
+          <div class="cap">Overlapping second-order multiplets — the parameters are tangled together, not gone.</div>
+        </div>
+        <div class="specpane">
+          <span class="plabel">reconstructed</span><span class="ptag out" id="tagHi">600 MHz</span>
+          <canvas id="proofHi"></canvas>
+          <div class="cap">Re-simulated from the recovered δ / <i>J</i> / degeneracies — first-order &amp; readable.</div>
+        </div>
+      </div>
+      <div class="honesty">
+        <span class="badge"><span class="dot"></span>500 held-out molecules the model never saw</span>
+        <span class="badge"><span class="dot"></span>scaffold + matrix-dedup split — not memorization</span>
+        <span class="faint">Metrics (Hungarian-matched δ / J MAE) drop in here when the checkpoint locks — demo-first.</span>
+      </div>
+    </div>
+    <aside class="notes">
+      Sam, ~1:30. Lead with the qualitative punch: "feed it a blurry 90 MHz, it reconstructs the clean 600 MHz, and
+      they overlay." Then the honesty beat: "evaluated on scaffolds the model never saw." NOTE: the two panels here
+      are the SAME molecule simulated by pyspin at 90 and 600 MHz (ground truth at both fields) — the visual of the
+      thesis. If the live in-browser model demo is ready, run it here instead: upload a 90 MHz spectrum → predicted
+      δ/J + reconstructed 600 overlaid on TRUE 600. Numbers only if ready, stated plainly; state which set the
+      checkpoint trained on (2M+ PubChem on S3). Record a fallback video regardless.
+    </aside>
+    <div class="footnote">Both panels: pyspin simulation of the molecule above, at 90 vs 600 MHz.</div>
+  </section>
+
+  <!-- ============================ SLIDE 4 — impact + team + site ============================ -->
+  <section id="s-close" data-background-color="var(--bg)">
+    <div class="slidepad">
+      <div class="kicker">Impact · the tool · the team</div>
+      <h2 style="font-size:34px">Democratizing structure verification.</h2>
+      <div class="close">
+        <div>
+          <ul class="impact">
+            <li><b>Why it matters:</b> structure verification is the daily bottleneck of synthetic &amp;
+              medicinal chemistry — gating it behind million-dollar magnets gates <i>who</i> gets to do rigorous chemistry.</li>
+            <li><b>Biomedical tie:</b> faster, cheaper structure confirmation accelerates small-molecule
+              discovery — the front end of drug discovery.</li>
+            <li><b>A real, open tool:</b> public repo, README, validated license-free simulator — clone and run.</li>
+            <li><b>How it scales — <span class="mono">autoai</span>:</b> a two-level, human-out-of-the-loop
+              orchestrator — an Opus "scientist" picks strategies, a Sonnet "worker" writes &amp; trains, a Sonnet
+              "auditor" checks the claims. <span class="faint">Nascent, not the headline — but it's how this improves without us.</span></li>
+          </ul>
+          <div class="team">
+            <div class="member"><div class="av">LA</div><h3>Lucas Abounader</h3><span>Shenvi Lab · simulation &amp; model</span></div>
+            <div class="member"><div class="av">SM</div><h3>Samuel Mansfield</h3><span>Seiple Lab · generation &amp; model</span></div>
+            <div class="member"><div class="av">YZ</div><h3>Yiming Zhang</h3><span>Shenvi Lab · spin-system generation</span></div>
+          </div>
+        </div>
+        <div class="sitecard">
+          <div id="qr" title="labounad.github.io/spinhance">scan →</div>
+          <div>
+            <div class="sitelink">labounad.github.io/spinhance</div>
+            <div class="faint" style="font-size:14px;margin-top:6px">Every reload simulates a new molecule, live in your browser.</div>
+          </div>
+        </div>
+      </div>
+      <p class="thesis">The blur isn't noise — it's the full spin system, scrambled. We unscramble it.</p>
+    </div>
+    <aside class="notes">
+      Lucas closes, ~1:00. 1) Why it matters (accessibility → who gets to do rigorous chemistry). 2) Biomedical tie
+      for THIS room. 3) Real open tool (AutoDock/Su-style accessibility). 4) autoai one vivid line — honest: "a fun
+      idea, still nascent." 5) The ask: "Try the live demo — every reload simulates a new molecule." Leave the link
+      up during Q&A. 6) CLOSE on the bet: restate the one-sentence thesis.
+    </aside>
+  </section>
+
+</div>
+</div>
+
+<script src="vendor/reveal/dist/reveal.js"></script>
+<script src="vendor/reveal/plugin/notes/notes.js"></script>
+<script src="vendor/qrcode/qrcode.min.js"></script>
+<script>
+/* =====================================================================
+   Field-sweep engine — adapted from docs/assets/sweep.js.
+   Same Lorentzian broadening + canvas drawing, but driven by an
+   explicit progress value (autoplay / replay / slider) instead of scroll,
+   and shared across the hero (animated) and proof (static 90/600) slides.
+   ===================================================================== */
+const Sweep = (() => {
+  "use strict";
+  const root = document.documentElement;
+  const cssVar = (n) => getComputedStyle(root).getPropertyValue(n).trim();
+  const readColors = () => ({
+    trace: cssVar("--trace"), fan: cssVar("--fan"), grid: cssVar("--grid"),
+    faint: cssVar("--ink-faint"), accent: cssVar("--accent"),
+    dark: root.getAttribute("data-theme") === "dark",
+  });
+  let colors = readColors();
+
+  const GRID = 4096, BASE = 0.74, AMP = 0.6;
+  const b64f32 = (s) => { const b = atob(s), u = new Uint8Array(b.length);
+    for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return new Float32Array(u.buffer); };
+  const b64u16 = (s) => { const b = atob(s), n = b.length / 2, out = new Float32Array(n);
+    for (let i = 0; i < n; i++) out[i] = (b.charCodeAt(2*i) | (b.charCodeAt(2*i+1) << 8)) / 65535; return out; };
+
+  let data = null, meta = null, mol = null, curves = [], winLo = 0, winHi = 1;
+
+  function broaden(centers, amps, hwhm) {
+    const y = new Float32Array(GRID), dppm = (winHi - winLo) / (GRID - 1);
+    const cutoff = Math.max(30 * hwhm, dppm * 3);
+    for (let i = 0; i < centers.length; i++) {
+      const c = centers[i], a = amps[i];
+      let k0 = Math.floor((c - cutoff - winLo) / dppm), k1 = Math.ceil((c + cutoff - winLo) / dppm);
+      if (k0 < 0) k0 = 0; if (k1 > GRID - 1) k1 = GRID - 1;
+      for (let k = k0; k <= k1; k++) { const d = (winLo + k * dppm - c) / hwhm; y[k] += a / (1 + d * d); }
+    }
+    let m = 0; for (let k = 0; k < GRID; k++) if (y[k] > m) m = y[k];
+    if (m > 0) for (let k = 0; k < GRID; k++) y[k] /= m;
+    return y;
+  }
+
+  function pick(idx) {
+    mol = (idx == null) ? data.molecules[Math.floor(Math.random() * data.molecules.length)]
+                        : data.molecules[idx % data.molecules.length];
+    [winLo, winHi] = mol.win;
+    curves = mol.frames.map((fr, i) => {
+      const hwhm = (meta.linewidth_hz / 2) / meta.fields_mhz[i];
+      return broaden(b64f32(fr.c), b64u16(fr.a), hwhm);
+    });
+    const tag = document.getElementById("molTag");
+    if (tag) tag.innerHTML = `<b>${mol.chembl_id || mol.id || "molecule"}</b> &nbsp;` +
+      `<span class="mono smi">${mol.smiles || ""}</span>`;
+  }
+
+  function interp(p) {
+    const fpos = p * (curves.length - 1), lo = Math.floor(fpos),
+          hi = Math.min(curves.length - 1, lo + 1), t = fpos - lo;
+    const a = curves[lo], b = curves[hi], cur = new Float32Array(GRID);
+    for (let k = 0; k < GRID; k++) cur[k] = a[k] * (1 - t) + b[k] * t;
+    const field = meta.fields_mhz[lo] * (1 - t) + meta.fields_mhz[hi] * t;
+    return { cur, field };
+  }
+
+  function curvePath(c, g, W, amp, baseY) {
+    g.beginPath();
+    for (let k = 0; k < GRID; k++) {
+      const x = (1 - k / (GRID - 1)) * W, y = baseY - c[k] * amp;
+      k === 0 ? g.moveTo(x, y) : g.lineTo(x, y);
+    }
+    g.stroke();
+  }
+  function drawAxis(g, W, baseY) {
+    g.fillStyle = colors.faint; g.font = "13px ui-monospace,Menlo,monospace"; g.textAlign = "center";
+    g.strokeStyle = colors.grid; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(0, baseY); g.lineTo(W, baseY); g.stroke();
+    const sp = (winHi - winLo) > 4 ? 1 : (winHi - winLo) > 2 ? 0.5 : 0.25;
+    for (let p = Math.ceil(winLo / sp) * sp; p <= winHi + 1e-6; p += sp) {
+      const x = ((winHi - p) / (winHi - winLo)) * W;
+      g.beginPath(); g.moveTo(x, baseY); g.lineTo(x, baseY + 6); g.stroke();
+      g.fillText(p.toFixed(sp < 1 ? (sp < 0.5 ? 2 : 1) : 0), x, baseY + 20);
+    }
+    g.textAlign = "left"; g.fillText("δ (ppm)", 10, baseY + 20);
+  }
+
+  /* size a canvas backing store honoring Reveal's CSS transform scale + dpr */
+  function fit(cv) {
+    const r = cv.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    cv.width = Math.max(2, Math.round(r.width * dpr));
+    cv.height = Math.max(2, Math.round(r.height * dpr));
+    const g = cv.getContext("2d");
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { g, W: r.width, H: r.height };
+  }
+
+  /* draw a single trace (+ optional faint fan of all frames) onto a canvas */
+  function render(cv, curve, { fan = false } = {}) {
+    if (!cv || !meta) return;
+    const { g, W, H } = fit(cv);
+    const baseY = H * BASE, amp = H * AMP;
+    g.clearRect(0, 0, W, H);
+    drawAxis(g, W, baseY);
+    if (fan) {
+      g.strokeStyle = colors.fan; g.lineWidth = 1.1; g.lineJoin = "round";
+      for (const c of curves) curvePath(c, g, W, amp, baseY);
+    }
+    g.strokeStyle = colors.trace; g.lineWidth = 2.6; g.lineJoin = "round"; g.lineCap = "round";
+    g.shadowColor = colors.accent; g.shadowBlur = colors.dark ? 18 : 5;
+    curvePath(curve, g, W, amp, baseY);
+    g.shadowBlur = 0;
+  }
+
+  /* ---- hero animation ---- */
+  let heroP = 0, raf = 0, animating = false, animStart = 0;
+  const DUR = 4200; // ms for a 90->600 sweep
+  const ease = (x) => x < .5 ? 4*x*x*x : 1 - Math.pow(-2*x+2,3)/2;
+
+  function paintHero() {
+    const cv = document.getElementById("heroCanvas");
+    if (!cv || !meta) return;
+    const { cur, field } = interp(heroP);
+    render(cv, cur, { fan: true });
+    const fv = document.getElementById("fieldVal"), bf = document.getElementById("barFill");
+    if (fv) fv.textContent = Math.round(field);
+    if (bf) bf.style.width = (heroP * 100).toFixed(1) + "%";
+  }
+  function tick(ts) {
+    if (!animStart) animStart = ts;
+    const e = Math.min(1, (ts - animStart) / DUR);
+    heroP = ease(e); paintHero();
+    if (e < 1) raf = requestAnimationFrame(tick);
+    else animating = false;
+  }
+  function playHero() {
+    cancelAnimationFrame(raf); animStart = 0; heroP = 0; animating = true;
+    raf = requestAnimationFrame(tick);
+  }
+
+  function paintProof() {
+    render(document.getElementById("proofLo"), curves[0], { fan: false });
+    render(document.getElementById("proofHi"), curves[curves.length - 1], { fan: false });
+    const tIn = document.getElementById("tagIn"), tHi = document.getElementById("tagHi");
+    if (tIn) tIn.textContent = Math.round(meta.fields_mhz[0]) + " MHz";
+    if (tHi) tHi.textContent = Math.round(meta.fields_mhz[meta.fields_mhz.length - 1]) + " MHz";
+  }
+
+  function refreshColors() { colors = readColors(); }
+
+  return {
+    load(cb) {
+      fetch("data/field_sweep.json").then(r => r.json()).then(d => {
+        data = d; meta = d.meta; pick(); cb && cb();
+      }).catch(e => { console.error("field_sweep.json failed", e);
+        const t = document.getElementById("molTag"); if (t) t.textContent = "spectra failed to load"; });
+    },
+    shuffle() { pick(); heroP = 0; paintHero(); paintProof(); },
+    playHero, paintHero, paintProof, refreshColors,
+    get ready() { return !!meta; },
+  };
+})();
+
+/* ===================== Reveal init + wiring ===================== */
+Reveal.initialize({
+  hash: true, slideNumber: "c/t", controls: true, progress: true,
+  transition: "slide", backgroundTransition: "fade",
+  width: 1280, height: 720, margin: 0.045, minScale: 0.2, maxScale: 2.0,
+  plugins: [ RevealNotes ],
+});
+
+function sizeFor(slide) {
+  if (!Sweep.ready) return;
+  if (slide && slide.id === "s-hero") Sweep.playHero();
+  else if (slide && slide.id === "s-proof") Sweep.paintProof();
+}
+
+Reveal.on("ready", (ev) => {
+  // QR for the closing slide
+  try {
+    new QRCode(document.getElementById("qr"), {
+      text: "https://labounad.github.io/spinhance/", width: 168, height: 168,
+      colorDark: "#0b0d12", colorLight: "#ffffff",
+      correctLevel: QRCode.CorrectLevel.M,
+    });
+  } catch (e) {}
+  Sweep.load(() => sizeFor(ev.currentSlide));
+});
+Reveal.on("slidechanged", (ev) => sizeFor(ev.currentSlide));
+
+window.addEventListener("resize", () => {
+  const s = Reveal.getCurrentSlide && Reveal.getCurrentSlide();
+  if (s && s.id === "s-hero") Sweep.paintHero();
+  else if (s && s.id === "s-proof") Sweep.paintProof();
+});
+
+document.addEventListener("click", (e) => {
+  if (e.target.closest("#replayBtn")) Sweep.playHero();
+  if (e.target.closest("#shuffleBtn")) { Sweep.shuffle(); }
+});
+
+/* theme toggle on 't' (light/dark, same tokens as the site) */
+document.addEventListener("keydown", (e) => {
+  if (e.key === "t" || e.key === "T") {
+    const root = document.documentElement;
+    root.setAttribute("data-theme", root.getAttribute("data-theme") === "dark" ? "light" : "dark");
+    Sweep.refreshColors();
+    const s = Reveal.getCurrentSlide();
+    if (s && s.id === "s-hero") Sweep.paintHero();
+    else if (s && s.id === "s-proof") Sweep.paintProof();
+  }
+  if (e.key === "m" || e.key === "M") Sweep.shuffle();
+});
+</script>
+</body>
+</html>
