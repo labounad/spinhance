@@ -44,7 +44,7 @@ loss:
       consistency_weight: 1.0
 
 training:
-  epochs: 25
+  epochs: 60
   batch_size: 256
   lr: 0.0004
   weight_decay: 0.01
@@ -53,7 +53,7 @@ training:
   lr_stable_frac: 0.50
   lr_min_factor: 0.30
   grad_clip: 1.0
-  patience: 6
+  patience: 8
   # see train_3M_spingraph_xl_025.yaml — low workers to avoid the per-worker
   # 500k-record copy thrashing a 16GB g6.xlarge. Full 3.2M needs a big-RAM box.
   num_workers: 2
