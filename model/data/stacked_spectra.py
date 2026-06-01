@@ -11,11 +11,18 @@ records ``[offset_k : offset_k + n_k]`` in the *same record order* as the
 Parts are memory-mapped lazily (only the headers are read up front to size the
 index), so the 196 GB of 90 MHz spectra never load into RAM at once — each
 ``__getitem__`` copies a single (P,) row out of the relevant mmap.
+
+**Performance note (GPFS):** random single-row mmap faults across 3200 shards on a
+network filesystem are *slow* (~20 s/step, GPU-starved). For runs whose needed
+rows fit in RAM, call :meth:`preload` — it reads each shard **sequentially**
+(fast on GPFS) once and serves rows from a RAM array thereafter. The array is
+built in the main process before the DataLoader forks, so workers share it
+copy-on-write (read-only) without duplicating it.
 """
 from __future__ import annotations
 
 import re
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 from pathlib import Path
 
 import numpy as np
@@ -41,9 +48,39 @@ class StackedSpectra:
         # closing the rest — caps fds at max_open per DataLoader worker.
         self.max_open = max_open
         self._mmaps: "OrderedDict[int, np.ndarray]" = OrderedDict()
+        self._ram = None                                  # (n_needed, P) preloaded array
+        self._ram_index: dict[int, int] = {}              # global row -> local index in _ram
 
     def __len__(self):
         return self.total
+
+    def preload(self, rows) -> None:
+        """Load the given global rows into a RAM array via sequential whole-shard
+        reads (fast on GPFS), so ``__getitem__`` serves them from memory instead of
+        random mmap faults. Call once in the main process before DataLoader fork.
+        Memory ≈ len(set(rows)) * P * 4 bytes (e.g. 500k * 16384 * 4 ≈ 33 GB)."""
+        needed = sorted(set(int(r) for r in rows))
+        if not needed:
+            return
+        P = int(np.load(self.files[0], mmap_mode="r").shape[1])
+        self._ram_index = {r: i for i, r in enumerate(needed)}
+        self._ram = np.empty((len(needed), P), dtype=np.float32)
+        by_shard: "defaultdict[int, list]" = defaultdict(list)
+        for r in needed:
+            k = int(np.searchsorted(self.offsets, r, side="right") - 1)
+            by_shard[k].append(r)
+        gb = self._ram.nbytes / 1e9
+        print(f"[stacked] preloading {len(needed)} rows from {len(by_shard)} shards "
+              f"into RAM (~{gb:.1f} GB) — sequential reads", flush=True)
+        for n, (k, rs) in enumerate(sorted(by_shard.items())):
+            part = np.load(self.files[k])                 # full sequential read (no mmap)
+            base = int(self.offsets[k])
+            for r in rs:
+                self._ram[self._ram_index[r]] = part[r - base]
+            del part
+            if (n + 1) % 500 == 0:
+                print(f"[stacked]   {n + 1}/{len(by_shard)} shards", flush=True)
+        print("[stacked] preload done", flush=True)
 
     def _part(self, k: int) -> np.ndarray:
         m = self._mmaps.get(k)
@@ -63,6 +100,10 @@ class StackedSpectra:
     def __getitem__(self, i: int) -> np.ndarray:
         if not 0 <= i < self.total:
             raise IndexError(i)
+        if self._ram is not None:                          # preloaded -> serve from RAM
+            li = self._ram_index.get(i)
+            if li is not None:
+                return np.array(self._ram[li], dtype=np.float32)
         k = int(np.searchsorted(self.offsets, i, side="right") - 1)
         row = i - int(self.offsets[k])
         return np.array(self._part(k)[row], dtype=np.float32)     # writable copy out of mmap

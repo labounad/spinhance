@@ -13,6 +13,7 @@ data:
   split: none
   sample_n: 500000
   sample_seed: 0            # same seed as light_025 -> identical molecule subset (clean A/B)
+  preload: true            # RAM-resident spectra (fast on GPFS); ~33GB for 500k
 
 model:
   name: spingraph_decoder

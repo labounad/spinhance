@@ -15,6 +15,7 @@ data:
   split: none
   sample_n: 500000          # uniform random subset (reservoir); NOT first-500k
   sample_seed: 0
+  preload: true            # RAM-resident spectra (fast on GPFS); ~33GB for 500k
 
 model:
   name: spingraph_decoder
