@@ -77,16 +77,16 @@
   /* clean vertical zones: header (top) / spectrum band (middle, flex:1) /
      gauge+controls (bottom) — nothing overlaps */
   .hero-stage{position:relative;width:1184px;height:628px;overflow:hidden;border-radius:16px;
-    display:flex;flex-direction:column;padding:40px 56px 34px;gap:10px;}
+    display:flex;flex-direction:column;padding:24px 56px 18px;gap:6px;}
   #heroCanvas{position:relative;flex:1 1 auto;min-height:0;width:100%;display:block;z-index:0;}
   .hero-head{flex:none;z-index:2;}
-  .hero-head h1{font-size:clamp(30px,3.4vw,46px);font-weight:800;max-width:26ch;}
-  .hero-head .eyebrow{margin-bottom:5px;}
-  .hero-head p{color:var(--ink-soft);font-size:18px;max-width:62ch;margin-top:9px;}
+  .hero-head h1{font-size:clamp(26px,2.9vw,38px);font-weight:800;max-width:30ch;}
+  .hero-head .eyebrow{margin-bottom:4px;}
+  .hero-head p{color:var(--ink-soft);font-size:16px;max-width:74ch;margin-top:6px;}
   .mol-tag{font-size:16px;color:var(--ink-soft);}
   .mol-tag b{color:var(--ink);} .mol-tag .smi{color:var(--accent);}
-  .gauge{flex:none;z-index:2;display:flex;flex-direction:column;align-items:flex-start;gap:7px;}
-  .field-read{font-weight:800;letter-spacing:-.03em;font-size:clamp(30px,3.6vw,44px);
+  .gauge{flex:none;z-index:2;display:flex;flex-direction:column;align-items:flex-start;gap:4px;}
+  .field-read{font-weight:800;letter-spacing:-.03em;font-size:clamp(24px,2.8vw,34px);
     font-variant-numeric:tabular-nums;color:var(--ink);}
   .field-read .u{font-size:.42em;color:var(--ink-faint);font-weight:600;margin-left:6px;}
   /* draggable field slider: a real range input overlaid on the gradient bar */
@@ -153,14 +153,15 @@
   .impact li b{color:var(--ink);}
   .sitecard{background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);
     padding:24px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center;}
-  #qr{width:188px;height:188px;background:#fff;border-radius:12px;padding:10px;display:grid;place-items:center;}
-  #qr img,#qr canvas{width:100%;height:100%;}
+  #qr{width:176px;height:176px;background:#fff;border-radius:12px;padding:8px;display:grid;place-items:center;overflow:hidden;}
+  #qr img,#qr canvas{width:100%!important;height:100%!important;display:block;object-fit:contain;}
+  #qr table{display:none;}   /* qrcode.js emits both a table and an img; keep only the img */
   .sitelink{font-weight:800;font-size:19px;color:var(--ink);}
   .team{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:18px;}
   .member{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow);}
-  .member .av{width:42px;height:42px;border-radius:11px;display:grid;place-items:center;font-weight:800;color:#fff;
+  .member .av{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;font-weight:800;font-size:13px;color:#fff;
     background:linear-gradient(135deg,var(--accent),var(--accent-3));}
-  .member h3{font-size:16px;margin:11px 0 2px;}
+  .member h3{font-size:16px;margin:10px 0 2px;}
   .member span{font-size:13px;color:var(--ink-soft);}
   .thesis{margin-top:14px;font-size:17px;color:var(--ink-soft);border-left:3px solid var(--accent);
     padding-left:16px;font-style:italic;max-width:62ch;}
@@ -240,14 +241,92 @@
   .cost .c .amt{font-size:30px;font-weight:800;letter-spacing:-.02em;}
   .cost .c.benchtop .amt{color:var(--accent-2);} .cost .c.cryo .amt{color:var(--ink-faint);}
   .cost .c .lab{font-size:14px;color:var(--ink-soft);margin-top:2px;}
+
+  /* ============ rework v2: page-chrome, cover bg, figures ============ */
+  /* the prev/next controls sit bottom-right and collided with the page number;
+     move the page number to the TOP-right, well clear of the controls. */
+  .reveal .slide-number{top:14px;right:16px;left:auto;bottom:auto;
+    padding:2px 9px;border-radius:99px;background:color-mix(in srgb,var(--panel) 70%,transparent);
+    border:1px solid var(--line);}
+
+  /* cover: a quiet living background (precessing spins + a ghost spectrum) */
+  .coverbg{position:absolute;inset:0;z-index:0;overflow:hidden;pointer-events:none;}
+  .coverbg svg{position:absolute;inset:0;width:100%;height:100%;}
+  .coverbg .ghost{stroke:var(--trace);fill:none;opacity:.10;}
+  .coverbg .ghost.g2{opacity:.05;}
+  .coverbg .axis{stroke:var(--grid);}
+  .coverbg .prec{animation:precess 11s linear infinite;transform-box:view-box;}
+  .coverbg .prec.d{animation-duration:15s;animation-direction:reverse;}
+  .coverbg .prec.s{animation-duration:8s;}
+  .coverbg .vec{stroke:var(--accent);stroke-width:2.4;stroke-linecap:round;opacity:.5;}
+  .coverbg .ball{fill:var(--accent-2);opacity:.55;}
+  @keyframes precess{to{transform:rotate(360deg);}}
+  #s-cover .slidepad{z-index:1;}
+
+  /* generic figure caption + frame */
+  .figcap{font-size:13px;color:var(--ink-faint);text-align:center;margin-top:6px;letter-spacing:.02em;}
+  .fig-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;
+    box-shadow:var(--shadow);padding:16px 18px;display:flex;flex-direction:column;min-height:0;}
+
+  /* node-embedded mini glyphs (Goal/Scope flow) */
+  .flow .node .glyph{flex:1;min-height:0;display:grid;place-items:center;margin:8px 0;}
+  .flow .node .glyph svg{width:100%;height:100%;max-height:160px;overflow:visible;}
+
+  /* spin-graph + molecule shared svg ink */
+  .gw{stroke:var(--line-strong);}
+  .ge{stroke:var(--accent);opacity:.55;}
+  .node-c{fill:var(--panel-2);stroke:var(--accent);stroke-width:2;}
+  .node-c.b{stroke:var(--accent-2);} .node-c.c{stroke:var(--accent-3);}
+  .glabel{fill:var(--ink);font:600 12px/1 ui-sans-serif,system-ui;text-anchor:middle;}
+  .mol-bond{stroke:var(--ink);stroke-width:2;fill:none;stroke-linecap:round;}
+  .mol-atom{fill:var(--ink);font:700 14px/1 ui-sans-serif,system-ui;text-anchor:middle;}
+  .grp-dot{stroke:#fff;stroke-width:1.5;}
+  .pulse{animation:pulse 2.4s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{opacity:.35;}50%{opacity:1;}}
+  .dash{stroke-dasharray:5 5;animation:flow 1.1s linear infinite;}
+  @keyframes flow{to{stroke-dashoffset:-20;}}
+
+  /* architecture cartoons */
+  .archfig{flex:1;min-height:0;display:grid;place-items:center;margin-top:10px;}
+  .archfig svg{width:100%;height:100%;max-height:300px;overflow:visible;}
+  .af-box{fill:var(--panel-2);stroke:var(--line-strong);}
+  .af-l{font:700 12px/1 ui-sans-serif,system-ui;fill:var(--ink-soft);text-anchor:middle;}
+  .af-s{font:500 10.5px/1 ui-sans-serif,system-ui;fill:var(--ink-faint);text-anchor:middle;}
+  .af-arrow{stroke:var(--ink-faint);stroke-width:1.6;marker-end:url(#ah);fill:none;}
+  .af-attn{stroke:var(--accent);stroke-width:1;opacity:.4;fill:none;}
+
+  /* MathJax sizing */
+  mjx-container[jax="SVG"]{color:var(--ink);}
+  .mjx-wrap{display:flex;justify-content:center;align-items:center;gap:18px;flex-wrap:wrap;margin:8px 0 2px;}
 </style>
 </head>
 <body>
+<!-- shared SVG arrowhead for the architecture cartoons -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M0 0 L10 5 L0 10 z" fill="var(--ink-faint)"/></marker>
+</defs></svg>
 <div class="reveal">
 <div class="slides">
 
   <!-- ============================ SLIDE 0 — thesis cover ============================ -->
   <section id="s-cover" data-background-color="var(--bg)">
+    <div class="coverbg" aria-hidden="true">
+      <svg viewBox="0 0 1184 628" preserveAspectRatio="xMidYMid slice">
+        <!-- ghost spectra: a low-field (broad) and high-field (resolved) trace -->
+        <line class="axis" x1="0" y1="548" x2="1184" y2="548"/>
+        <path class="ghost g2" stroke-width="2.4" d="M0 548 L150 548 Q175 548 188 500 Q200 452 214 500 Q228 548 250 548
+          L470 548 Q486 548 496 470 Q506 392 518 470 Q528 548 548 548 L740 548 Q752 548 760 430 Q768 312 778 430 Q786 548 806 548
+          L980 548 Q994 548 1004 486 Q1014 424 1026 486 Q1036 548 1184 548"/>
+        <path class="ghost" stroke-width="2.6" d="M0 548 L470 548 Q500 548 512 360 Q524 172 540 360 Q552 548 600 548
+          L735 548 Q748 548 756 300 Q765 120 776 300 Q784 548 980 548 Q996 548 1006 470 Q1018 392 1030 470 Q1040 548 1184 548"/>
+        <!-- precessing nuclear spins -->
+        <g class="prec"   style="transform-origin:150px 150px"><line class="vec" x1="150" y1="150" x2="150" y2="112"/><circle class="ball" cx="150" cy="150" r="7"/></g>
+        <g class="prec d" style="transform-origin:1040px 120px"><line class="vec" x1="1040" y1="120" x2="1040" y2="86"/><circle class="ball" cx="1040" cy="120" r="6"/></g>
+        <g class="prec s" style="transform-origin:980px 250px"><line class="vec" x1="980" y1="250" x2="980" y2="216"/><circle class="ball" cx="980" cy="250" r="5"/></g>
+        <g class="prec"   style="transform-origin:300px 300px"><line class="vec" x1="300" y1="300" x2="300" y2="268"/><circle class="ball" cx="300" cy="300" r="5"/></g>
+      </svg>
+    </div>
     <div class="slidepad quote-wrap">
       <div class="brand">
         <svg class="spin-dot" viewBox="0 0 32 32" aria-hidden="true">
@@ -275,35 +354,62 @@
   <!-- ============================ MOTIVATION ============================ -->
   <section id="s-motiv" data-background-color="var(--bg)">
     <div class="slidepad">
-      <div class="kicker">Motivation · chemical biology</div>
-      <h2>Drug discovery runs on synthesis — and synthesis runs on mechanistic insight.</h2>
-      <div class="twocol wide-left">
+      <div class="kicker">Motivation</div>
+      <h2>Small molecule drug discovery runs on synthesis, and synthesis runs on mechanistic insight.</h2>
+      <div class="twocol wide-left" style="margin-top:22px">
         <div>
           <ul class="clean">
             <li>A drug campaign's success hinges on <b>efficiently synthesizing</b> its targets.</li>
             <li>Synthesis is optimized best with a <b>mechanistic understanding</b> of the reaction — gained by <b>monitoring it live</b>.</li>
-            <li>A <b>benchtop NMR (90&nbsp;MHz)</b> couples directly to a reactor: <b>in situ, non-destructive, real-time</b> tracking as the reaction progresses.</li>
+            <li>A <b>benchtop NMR (90&nbsp;MHz)</b> couples directly to a reactor: <b>in&nbsp;situ, non-destructive, real-time</b> tracking as the reaction runs.</li>
           </ul>
-          <p class="plain">Plain version: watch a reaction happen — accurately — on an instrument that fits on a bench.</p>
+          <div class="cost" style="margin-top:20px">
+            <div class="c benchtop"><div class="amt">~$50k</div><div class="lab">benchtop · 90&nbsp;MHz · bench-side, in&nbsp;situ</div></div>
+            <div class="c cryo"><div class="amt">$2M+</div><div class="lab">cryomagnet · 600&nbsp;MHz · shared facility</div></div>
+          </div>
         </div>
-        <div class="cost">
-          <div class="c benchtop"><div class="amt">~$50k</div><div class="lab">benchtop · 90&nbsp;MHz · bench-side, in&nbsp;situ</div></div>
-          <div class="c cryo"><div class="amt">$2M+</div><div class="lab">cryomagnet · 600&nbsp;MHz · shared facility</div></div>
+        <div class="fig-card" style="align-self:center;width:100%;max-width:440px;margin:0 auto">
+          <svg viewBox="0 0 366 116" style="width:100%;height:auto;overflow:visible" aria-hidden="true">
+            <!-- reactor flask -->
+            <rect x="40" y="12" width="18" height="9" rx="2" class="af-box"/>
+            <path class="mol-bond" d="M44 21 L44 42 A26 26 0 1 0 54 42 L54 21"/>
+            <path d="M24 60 A26 26 0 0 0 74 60 Z" fill="var(--accent)" opacity=".18"/>
+            <circle cx="44" cy="70" r="2.6" fill="var(--accent-2)" opacity=".7" class="pulse"/>
+            <circle cx="55" cy="62" r="2" fill="var(--accent-2)" opacity=".7" class="pulse" style="animation-delay:.6s"/>
+            <text x="49" y="100" class="af-s">reactor</text>
+            <!-- probe into the benchtop magnet (clear gaps, no overlap) -->
+            <path class="af-arrow dash" d="M86 52 L116 52"/>
+            <rect x="122" y="22" width="86" height="62" rx="10" class="af-box"/>
+            <circle cx="165" cy="53" r="19" fill="none" stroke="var(--accent)" stroke-width="3"/>
+            <circle cx="165" cy="53" r="8" fill="var(--accent)" opacity=".25"/>
+            <text x="165" y="100" class="af-l">90 MHz benchtop</text>
+            <!-- to the live stream of spectra -->
+            <path class="af-arrow" d="M214 52 L244 52"/>
+            <g transform="translate(252,16)" fill="none" stroke="var(--trace)" stroke-width="1.8">
+              <path opacity=".35" d="M0 30 L18 30 Q24 30 28 14 Q32 30 38 30 L54 30 Q60 30 64 18 Q68 30 74 30 L92 30"/>
+              <path opacity=".6"  transform="translate(0,24)" d="M0 30 L18 30 Q24 30 28 10 Q32 30 38 30 L54 30 Q60 30 64 16 Q68 30 74 30 L92 30"/>
+              <path opacity="1"   transform="translate(0,48)" stroke="var(--accent-2)" d="M0 30 L18 30 Q24 30 28 12 Q32 30 38 30 L54 30 Q60 30 64 14 Q68 30 74 30 L92 30"/>
+            </g>
+            <text x="298" y="100" class="af-s">spectra · time →</text>
+          </svg>
+          <div class="figcap">live, in&nbsp;situ reaction monitoring on a bench-side instrument</div>
         </div>
       </div>
-      <div class="note-strip"><b>But the catch:</b> at 90&nbsp;MHz the lower field makes spectra second-order and hard to read by eye — so they get dismissed as "low-information."</div>
     </div>
-    <aside class="notes">Lucas. Chem-bio framing: drugs need synthesis → optimizing synthesis needs mechanism → live reaction monitoring gives mechanism → a cheap benchtop NMR enables it in situ. Tee up the catch (next slide).</aside>
+    <aside class="notes">Lucas. The logic chain: small-molecule drugs must be synthesized → optimizing a synthesis needs mechanistic
+      understanding → you get mechanism by watching the reaction live → a ~$50k benchtop NMR (vs a $2M+ cryomagnet in a
+      shared facility) couples straight to the reactor and tracks it in situ, non-destructively, in real time. This is why a
+      cheap, low-field instrument matters. Tee up the catch on the next slide: those low-field spectra look unreadable.</aside>
   </section>
 
   <!-- ============================ THE REFRAME (LIVE SWEEP) ============================ -->
   <section id="s-hero" data-background-color="var(--bg)">
     <div class="hero-stage">
     <div class="hero-head">
-      <div class="eyebrow">The catch &amp; the reframe</div>
-      <h1>The blur is <i>scrambled</i> information — not lost information.</h1>
-      <p>As field drops, peak separation Δν shrinks toward the coupling <i>J</i>; multiplets overlap and go
-        <b>second-order</b>. But physics says the same δ and <i>J</i> are still encoded — drag 90→600&nbsp;MHz and watch the <b>same molecule</b> resolve.</p>
+      <div class="eyebrow">Why low-field spectra look unreadable</div>
+      <h1>Low field scrambles the signal — it doesn't erase it.</h1>
+      <p>As the field drops, peak separation Δν shrinks toward the coupling <i>J</i>; multiplets overlap and the spectrum
+        goes <b>second-order</b>. The same δ and <i>J</i> are still encoded — drag 90→600&nbsp;MHz and watch the <b>same molecule</b> resolve.</p>
     </div>
     <canvas id="heroCanvas"></canvas>
     <div class="gauge">
@@ -336,66 +442,168 @@
   <!-- ============================ THE OUTPUT / GOAL ============================ -->
   <section id="s-output" data-background-color="var(--bg)">
     <div class="slidepad">
-      <div class="kicker">The goal · what we recover</div>
+      <div class="kicker">The goal</div>
       <h2>Recover the spin system → reconstruct the spectrum at <i>any</i> field.</h2>
-      <div class="flow">
-        <div class="node"><div class="n">INPUT</div><h3>90 MHz spectrum</h3><p>one cheap, second-order benchtop trace</p></div>
+      <div class="flow" style="margin-top:14px">
+        <div class="node"><div class="n">INPUT</div><h3>90 MHz spectrum</h3>
+          <div class="glyph"><svg viewBox="0 0 120 70"><line x1="4" y1="58" x2="116" y2="58" class="gw"/>
+            <path d="M8 58 Q26 58 32 30 Q38 8 46 30 Q52 50 58 36 Q64 22 72 40 Q78 56 86 40 Q92 26 100 44 Q106 58 116 58"
+              fill="none" stroke="var(--ink-soft)" stroke-width="2.4"/></svg></div>
+          <p>one cheap, second-order benchtop trace</p></div>
         <div class="arrow">▶</div>
-        <div class="node"><div class="n">MODEL</div><h3>learned inversion</h3><p>spectrum → field-independent parameters</p></div>
+        <div class="node"><div class="n">MODEL</div><h3>learned inversion</h3>
+          <div class="glyph"><svg viewBox="0 0 120 70">
+            <g stroke="var(--accent)" stroke-width="1" opacity=".4">
+              <line x1="24" y1="14" x2="60" y2="12"/><line x1="24" y1="14" x2="60" y2="35"/><line x1="24" y1="14" x2="60" y2="58"/>
+              <line x1="24" y1="35" x2="60" y2="12"/><line x1="24" y1="35" x2="60" y2="35"/><line x1="24" y1="35" x2="60" y2="58"/>
+              <line x1="24" y1="56" x2="60" y2="12"/><line x1="24" y1="56" x2="60" y2="35"/><line x1="24" y1="56" x2="60" y2="58"/>
+              <line x1="60" y1="12" x2="96" y2="24"/><line x1="60" y1="35" x2="96" y2="24"/><line x1="60" y1="58" x2="96" y2="24"/>
+              <line x1="60" y1="12" x2="96" y2="46"/><line x1="60" y1="35" x2="96" y2="46"/><line x1="60" y1="58" x2="96" y2="46"/></g>
+            <g fill="var(--accent-2)"><circle cx="24" cy="14" r="4"/><circle cx="24" cy="35" r="4"/><circle cx="24" cy="56" r="4"/>
+              <circle cx="60" cy="12" r="4"/><circle cx="60" cy="35" r="4"/><circle cx="60" cy="58" r="4"/>
+              <circle cx="96" cy="24" r="4"/><circle cx="96" cy="46" r="4"/></g></svg></div>
+          <p>spectrum → field-independent parameters</p></div>
         <div class="arrow">▶</div>
-        <div class="node"><div class="n">SPIN SYSTEM</div><h3>8 δ · 28 J · 8 n</h3><p>shifts, couplings, degeneracies — a full ¹H description</p></div>
+        <div class="node"><div class="n">SPIN SYSTEM</div><h3>8 δ · 28 J · 8 n</h3>
+          <div class="glyph"><svg viewBox="0 0 120 70">
+            <!-- 8×8 matrix: accent diagonal (δ/n), purple off-diagonal (J) -->
+            <g transform="translate(28,7)">
+              <g fill="var(--accent)"><rect x="0" y="0" width="6.5" height="6.5" rx="1.2"/><rect x="7" y="7" width="6.5" height="6.5" rx="1.2"/><rect x="14" y="14" width="6.5" height="6.5" rx="1.2"/><rect x="21" y="21" width="6.5" height="6.5" rx="1.2"/><rect x="28" y="28" width="6.5" height="6.5" rx="1.2"/><rect x="35" y="35" width="6.5" height="6.5" rx="1.2"/><rect x="42" y="42" width="6.5" height="6.5" rx="1.2"/><rect x="49" y="49" width="6.5" height="6.5" rx="1.2"/></g>
+              <g fill="var(--accent-3)" opacity=".45"><rect x="7" y="0" width="6.5" height="6.5" rx="1.2"/><rect x="0" y="7" width="6.5" height="6.5" rx="1.2"/><rect x="21" y="0" width="6.5" height="6.5" rx="1.2"/><rect x="0" y="21" width="6.5" height="6.5" rx="1.2"/><rect x="28" y="14" width="6.5" height="6.5" rx="1.2"/><rect x="14" y="28" width="6.5" height="6.5" rx="1.2"/><rect x="42" y="35" width="6.5" height="6.5" rx="1.2"/><rect x="35" y="42" width="6.5" height="6.5" rx="1.2"/><rect x="49" y="42" width="6.5" height="6.5" rx="1.2"/><rect x="42" y="49" width="6.5" height="6.5" rx="1.2"/></g>
+              <g fill="var(--line)"><rect x="14" y="0" width="6.5" height="6.5" rx="1.2"/><rect x="35" y="0" width="6.5" height="6.5" rx="1.2"/><rect x="49" y="0" width="6.5" height="6.5" rx="1.2"/></g>
+            </g></svg></div>
+          <p>shifts, couplings, degeneracies — the full ¹H description</p></div>
         <div class="arrow">▶</div>
-        <div class="node"><div class="n">SIMULATE</div><h3>any field</h3><p>re-render at 600 MHz — clean &amp; readable</p></div>
+        <div class="node"><div class="n">SIMULATE</div><h3>any field</h3>
+          <div class="glyph"><svg viewBox="0 0 120 70"><line x1="4" y1="58" x2="116" y2="58" class="gw"/>
+            <path d="M8 58 L34 58 L36 18 L38 58 L52 58 L54 30 L56 58 L74 58 L76 10 L78 58 L92 58 L94 34 L96 58 L116 58"
+              fill="none" stroke="var(--accent-2)" stroke-width="2.4"/></svg></div>
+          <p>re-render at 600 MHz — clean &amp; readable</p></div>
       </div>
-      <ul class="clean" style="margin-top:20px">
-        <li><b>8 chemical shifts δ</b> (the matrix diagonal) · <b>28 scalar couplings J</b> (symmetric off-diagonal) · <b>8 degeneracies</b> (protons per group).</li>
-        <li>These numbers are <b>field-independent</b> — recover them once and the molecule's spectrum is fully determined at every field strength.</li>
-      </ul>
-      <div class="note-strip"><b>Why it matters:</b> we extract high-field-quality structure from a low-field instrument — turning a "blurry" benchtop spectrum into a complete answer.</div>
+      <div class="note-strip" style="margin-top:18px"><b>Field-independent by design:</b> the 8 shifts, 28 couplings and 8 degeneracies
+        fully determine the molecule's ¹H spectrum at <i>every</i> field.</div>
     </div>
-    <aside class="notes">The deliverable: the 8×9 spin-system table fully characterizes the molecule's ¹H NMR at any field. The live site has the interactive spin-graph + matrix + 90→600 viewer.</aside>
+    <aside class="notes">The deliverable is the spin system: 8 chemical shifts δ (matrix diagonal), 28 scalar couplings J
+      (symmetric off-diagonal), and 8 degeneracies n (protons per group). These are field-independent parameters — once you
+      have them the molecule's ¹H NMR is fully determined at any field, so we can re-render a clean high-field spectrum from a
+      single blurry low-field one. The live site has the interactive spin-graph + matrix + 90→600 viewer.</aside>
   </section>
 
   <!-- ============================ SCOPE + PIPELINE OVERVIEW ============================ -->
   <section id="s-scope" data-background-color="var(--bg)">
     <div class="slidepad">
-      <div class="kicker">Scope &amp; data · making it tractable</div>
+      <div class="kicker">Scope &amp; data</div>
       <h2>Fix the problem size, then build a large, plausible dataset.</h2>
-      <p class="lead">We scoped to molecules with <b>exactly 8 spin groups</b> — fixing the node count removes graph-size
-        variability, so the model always predicts the same-shape output. To train it, we built a <b>three-stage pipeline</b>:</p>
-      <div class="flow">
-        <div class="node"><div class="n">STAGE 1</div><h3>Screen molecules</h3><p>databases → molecules with exactly 8 spin groups</p><div class="big">64k → 3.1M</div></div>
-        <div class="arrow">▶</div>
-        <div class="node"><div class="n">STAGE 2</div><h3>Estimate δ &amp; J</h3><p>heuristics → plausible shift + coupling values</p><div class="big">physically realistic</div></div>
-        <div class="arrow">▶</div>
-        <div class="node"><div class="n">STAGE 3</div><h3>Simulate spectra</h3><p>pyspin → exact ¹H spectra (the training input)</p><div class="big">1500 / sec</div></div>
+      <div class="twocol wide-left" style="margin-top:10px;align-items:center">
+        <div>
+          <p class="lead" style="font-size:20px">We scoped to molecules with <b>exactly 8 spin groups</b> — fixing the node
+            count gives the model a <b>fixed-shape output</b> every time. Then a <b>three-stage pipeline</b> generates training data:</p>
+          <div class="flow" style="margin-top:14px;flex-direction:column;gap:10px">
+            <div class="node" style="flex:none"><div class="n">STAGE 1 · SCREEN</div><h3 style="margin:3px 0">Databases → 8-group molecules</h3><div class="big">64k ChEMBL → 3.1M PubChem</div></div>
+            <div class="node" style="flex:none"><div class="n">STAGE 2 · ESTIMATE</div><h3 style="margin:3px 0">Heuristic δ &amp; J → plausible spin systems</h3><div class="big">physically realistic, not measured</div></div>
+            <div class="node" style="flex:none"><div class="n">STAGE 3 · SIMULATE</div><h3 style="margin:3px 0">pyspin → exact ¹H spectra</h3><div class="big">1500 / sec</div></div>
+          </div>
+        </div>
+        <div class="fig-card" style="align-self:stretch;justify-content:center">
+          <svg viewBox="0 0 240 240" style="width:100%;height:auto;max-height:300px;overflow:visible" aria-hidden="true">
+            <!-- couplings (edges) -->
+            <g class="ge" stroke-width="2" fill="none">
+              <line x1="120" y1="28" x2="185" y2="55"/><line x1="185" y1="55" x2="212" y2="120"/>
+              <line x1="212" y1="120" x2="185" y2="185"/><line x1="185" y1="185" x2="120" y2="212"/>
+              <line x1="120" y1="212" x2="55" y2="185"/><line x1="55" y1="185" x2="28" y2="120"/>
+              <line x1="28" y1="120" x2="55" y2="55"/><line x1="55" y1="55" x2="120" y2="28"/>
+              <line x1="120" y1="28" x2="185" y2="185" opacity=".3"/><line x1="55" y1="55" x2="212" y2="120" opacity=".3"/>
+              <line x1="55" y1="185" x2="185" y2="55" opacity=".3"/></g>
+            <!-- 8 spin-group nodes -->
+            <g>
+              <circle class="node-c"   cx="120" cy="28"  r="15"/><text class="glabel" x="120" y="32">A</text>
+              <circle class="node-c b" cx="185" cy="55"  r="15"/><text class="glabel" x="185" y="59">B</text>
+              <circle class="node-c c" cx="212" cy="120" r="15"/><text class="glabel" x="212" y="124">C</text>
+              <circle class="node-c"   cx="185" cy="185" r="15"/><text class="glabel" x="185" y="189">D</text>
+              <circle class="node-c b" cx="120" cy="212" r="15"/><text class="glabel" x="120" y="216">E</text>
+              <circle class="node-c c" cx="55"  cy="185" r="15"/><text class="glabel" x="55"  y="189">F</text>
+              <circle class="node-c"   cx="28"  cy="120" r="15"/><text class="glabel" x="28"  y="124">G</text>
+              <circle class="node-c b" cx="55"  cy="55"  r="15"/><text class="glabel" x="55"  y="59">H</text></g>
+          </svg>
+          <div class="figcap"><b style="color:var(--accent)">nodes</b> = 8 spin groups (δ, n) · <b style="color:var(--accent-3)">edges</b> = couplings J</div>
+        </div>
       </div>
-      <div class="note-strip"><b>Interdisciplinary by design:</b> cheminformatics · reference NMR chemistry · quantum spin physics · deep learning.</div>
     </div>
-    <aside class="notes">Why 8 groups: fixed output shape, no variable node count. Then: screen → estimate → simulate. Long-term we lift the fixed-N restriction with a classifier (final slide).</aside>
+    <aside class="notes">Why fix at 8 groups: a spin system is a graph (nodes = groups, edges = couplings); fixing the node count
+      at 8 means the model always emits the same-shape output — no variable graph size to handle. Then the three-stage pipeline
+      builds data: (1) screen databases for 8-group molecules, (2) estimate plausible δ and J by heuristics, (3) simulate exact
+      spectra with pyspin. Long-term we lift the fixed-N restriction with a classifier (final slide).</aside>
   </section>
 
   <!-- ============================ PIPELINE 1 — SCREEN ============================ -->
   <section id="s-screen" data-background-color="var(--bg)">
     <div class="slidepad">
       <div class="kicker">Stage 1 · screen molecules</div>
-      <h2>From molecular databases to 8-spin-group systems.</h2>
-      <div class="twocol wide-left">
+      <h2>Group a molecule's protons → read off its spin graph.</h2>
+      <div class="twocol wide-left" style="margin-top:8px;align-items:center">
+        <div class="fig-card" style="align-self:stretch;justify-content:center">
+          <svg viewBox="0 0 470 180" style="width:100%;height:auto;overflow:visible" aria-hidden="true">
+            <!-- ===== representative molecule: benzocaine (ethyl 4-aminobenzoate) ===== -->
+            <g>
+              <!-- benzene ring -->
+              <polygon points="126,92 111,118 81,118 66,92 81,66 111,66" class="mol-bond"/>
+              <line x1="120" y1="96" x2="108" y2="114" class="mol-bond"/>
+              <line x1="84" y1="114" x2="72" y2="96" class="mol-bond"/>
+              <line x1="84" y1="70" x2="108" y2="70" class="mol-bond"/>
+              <!-- amino -->
+              <line x1="66" y1="92" x2="40" y2="92" class="mol-bond"/><text x="30" y="96" class="mol-atom" text-anchor="end">H₂N</text>
+              <!-- ester chain -->
+              <line x1="126" y1="92" x2="150" y2="79" class="mol-bond"/>
+              <line x1="147" y1="79" x2="147" y2="56" class="mol-bond"/><line x1="153" y1="79" x2="153" y2="56" class="mol-bond"/>
+              <text x="150" y="50" class="mol-atom">O</text>
+              <line x1="150" y1="79" x2="174" y2="92" class="mol-bond"/><text x="178" y="104" class="mol-atom">O</text>
+              <line x1="186" y1="92" x2="198" y2="79" class="mol-bond"/>
+              <line x1="198" y1="79" x2="222" y2="92" class="mol-bond"/>
+              <!-- proton-group markers -->
+              <circle cx="78" cy="58" r="5" class="grp-dot" fill="var(--accent)"/>
+              <circle cx="78" cy="126" r="5" class="grp-dot" fill="var(--accent)"/>
+              <circle cx="114" cy="58" r="5" class="grp-dot" fill="var(--accent-2)"/>
+              <circle cx="114" cy="126" r="5" class="grp-dot" fill="var(--accent-2)"/>
+              <circle cx="40" cy="76" r="5" class="grp-dot" fill="var(--accent-3)"/>
+              <circle cx="198" cy="64" r="5" class="grp-dot" fill="#f5a623"/>
+              <circle cx="230" cy="105" r="5" class="grp-dot" fill="#e0567a"/>
+            </g>
+            <text x="118" y="160" class="af-s">benzocaine · grouped by equivalence</text>
+            <path class="af-arrow" d="M250 92 L292 92"/><text x="271" y="84" class="af-s">→ graph</text>
+            <!-- ===== spin graph (nodes = groups, edges = couplings) ===== -->
+            <g transform="translate(308,0)">
+              <g class="ge" stroke-width="2" fill="none">
+                <line x1="80" y1="40" x2="132" y2="74"/><line x1="132" y1="74" x2="112" y2="130"/>
+                <line x1="112" y1="130" x2="48" y2="130"/><line x1="48" y1="130" x2="28" y2="74"/>
+                <line x1="28" y1="74" x2="80" y2="40"/><line x1="80" y1="40" x2="112" y2="130" opacity=".35"/>
+                <line x1="132" y1="74" x2="48" y2="130" opacity=".35"/></g>
+              <circle cx="80"  cy="40"  r="15" class="grp-dot" fill="var(--accent)"   stroke="var(--panel)" stroke-width="2.5"/>
+              <circle cx="132" cy="74"  r="15" class="grp-dot" fill="var(--accent-2)" stroke="var(--panel)" stroke-width="2.5"/>
+              <circle cx="112" cy="130" r="15" class="grp-dot" fill="#e0567a"        stroke="var(--panel)" stroke-width="2.5"/>
+              <circle cx="48"  cy="130" r="15" class="grp-dot" fill="#f5a623"        stroke="var(--panel)" stroke-width="2.5"/>
+              <circle cx="28"  cy="74"  r="15" class="grp-dot" fill="var(--accent-3)" stroke="var(--panel)" stroke-width="2.5"/>
+              <text x="80" y="160" class="af-s">5 groups → 5 nodes</text>
+            </g>
+          </svg>
+          <div class="figcap">3D embed → protons classed by <b>chemical &amp; magnetic equivalence</b> → one node per group, edges = couplings</div>
+        </div>
         <div>
           <ul class="clean">
-            <li>3D <b>force-field embedding</b> (RDKit) of each molecule, then classify protons by <b>chemical &amp; magnetic equivalence</b> into spin groups.</li>
-            <li>Keep only molecules with <b>exactly 8</b> distinct groups.</li>
-            <li>Started with <b>ChEMBL</b> — 2.9M curated, drug-like, bioactive molecules → <b>64k</b> 8-group systems.</li>
-            <li>Then scaled to <b>PubChem</b> — 123M molecules → <b>3.1M</b> 8-group systems.</li>
+            <li>RDKit <b>force-field 3D embedding</b>, then classify protons by equivalence into <b>spin groups</b>.</li>
+            <li>Keep only molecules with <b>exactly 8</b> groups (the example shows the grouping idea).</li>
           </ul>
-        </div>
-        <div class="metric-grid" style="grid-template-columns:1fr;gap:14px">
-          <div class="metric"><div class="v">64k</div><div class="l">8-group molecules from ChEMBL (bioactive, drug-like)</div></div>
-          <div class="metric"><div class="v">3.1M</div><div class="l">8-group molecules from PubChem (123M screened)</div></div>
+          <div class="metric-grid" style="grid-template-columns:1fr;gap:12px;margin-top:14px">
+            <div class="metric"><div class="v">64k</div><div class="l">8-group systems from <b>ChEMBL</b> (2.9M curated, bioactive, drug-like)</div></div>
+            <div class="metric"><div class="v">3.1M</div><div class="l">8-group systems from <b>PubChem</b> (123M screened)</div></div>
+          </div>
         </div>
       </div>
     </div>
-    <aside class="notes">Yiming. Spin-group structure from 3D geometry + equivalence; fix at 8 groups. ChEMBL first (drug-like), then PubChem for scale.</aside>
+    <aside class="notes">Yiming. Take a molecule, embed it in 3D with an RDKit force field, then classify its protons by chemical and
+      magnetic equivalence into spin groups — each group becomes a node in a graph whose edges are the couplings. We keep only
+      molecules that reduce to exactly 8 groups. The worked example is benzocaine (a real drug-like molecule): two aromatic
+      environments, the NH₂, the OCH₂ and the CH₃ → five groups → five nodes. We started on ChEMBL (drug-like, 2.9M → 64k
+      8-group systems) and scaled to PubChem (123M → 3.1M).</aside>
   </section>
 
   <!-- ============================ PIPELINE 2 — ESTIMATE ============================ -->
@@ -403,24 +611,52 @@
     <div class="slidepad">
       <div class="kicker">Stage 2 · estimate shifts &amp; couplings</div>
       <h2>The model needs <i>plausible</i> spin systems — not measured ones.</h2>
-      <div class="twocol">
-        <div>
-          <p class="lead">Key hypothesis: to learn the inverse map, the model only needs spin systems that <b>look like they
-            came from a real molecule</b> — physically and chemically plausible — not literature-accurate NMR.</p>
-          <p class="plain">So we estimate δ and J with fast heuristics instead of measuring or computing them.</p>
+      <div class="twocol" style="margin-top:8px;align-items:center">
+        <div class="fig-card" style="align-self:stretch;justify-content:center">
+          <svg viewBox="0 0 300 230" style="width:100%;height:auto;max-height:300px;overflow:visible" aria-hidden="true">
+            <!-- edges, with J labels on the two ³J couplings -->
+            <g class="ge" fill="none" stroke-width="2">
+              <line x1="90" y1="50" x2="210" y2="50"/>
+              <line x1="236" y1="150" x2="150" y2="198"/>
+              <line x1="210" y1="50" x2="236" y2="150" opacity=".3"/>
+              <line x1="64" y1="150" x2="90" y2="50" opacity=".3"/>
+              <line x1="64" y1="150" x2="150" y2="198" opacity=".3"/>
+              <line x1="90" y1="50" x2="64" y2="150" opacity=".3"/></g>
+            <g class="af-s" fill="var(--accent-3)">
+              <text x="150" y="40">³J ≈ 8.5 Hz</text><text x="207" y="182">³J ≈ 7.1 Hz</text></g>
+            <!-- nodes with δ -->
+            <g class="grp-dot" stroke="var(--panel)" stroke-width="2.5">
+              <circle cx="90"  cy="50"  r="24" fill="var(--accent)"/>
+              <circle cx="210" cy="50"  r="24" fill="var(--accent-2)"/>
+              <circle cx="236" cy="150" r="24" fill="#f5a623"/>
+              <circle cx="150" cy="198" r="24" fill="#e0567a"/>
+              <circle cx="64"  cy="150" r="24" fill="var(--accent-3)"/></g>
+            <g fill="#fff" style="font:700 13px ui-sans-serif,system-ui" text-anchor="middle">
+              <text x="90"  y="48">δ 6.6</text><text x="90"  y="62" font-size="9" opacity=".85">Ar</text>
+              <text x="210" y="48">δ 7.8</text><text x="210" y="62" font-size="9" opacity=".85">Ar</text>
+              <text x="236" y="148">δ 4.3</text><text x="236" y="162" font-size="9" opacity=".85">OCH₂</text>
+              <text x="150" y="196">δ 1.4</text><text x="150" y="210" font-size="9" opacity=".85">CH₃</text>
+              <text x="64"  y="148">δ 4.0</text><text x="64"  y="162" font-size="9" opacity=".85">NH₂</text></g>
+          </svg>
+          <div class="figcap">heuristics fill in each node's <b>δ</b> and each edge's <b>J</b> — a complete, plausible spin system</div>
         </div>
         <div>
-          <ul class="clean">
-            <li>δ and <i>J</i> (²J, ³J, ⁴J) by <b>substructure matching</b> against reference tables.</li>
-            <li>Sourced from <b>nmrdb2</b> and <b>Pretsch et&nbsp;al.</b> (<i>Tables of Spectral Data</i>).</li>
-            <li><b>Karplus equation</b> for ³J (dihedral-angle dependence).</li>
-            <li>Small <b>Gaussian noise</b> regularizes the values — variety, not memorized constants.</li>
+          <p class="lead" style="font-size:20px">The hypothesis: to learn the inverse map, the model only needs spin systems
+            that <b>look like they came from a real molecule</b> — not literature-accurate NMR.</p>
+          <ul class="clean" style="margin-top:10px">
+            <li>δ and <i>J</i> (²J, ³J, ⁴J) by <b>substructure matching</b> against reference tables (<b>nmrdb2</b>, <b>Pretsch et&nbsp;al.</b>).</li>
+            <li><b>Karplus equation</b> for ³J — dihedral-angle dependence from the 3D geometry.</li>
+            <li>Small <b>Gaussian jitter</b> for variety — not memorized constants.</li>
           </ul>
         </div>
       </div>
-      <div class="note-strip"><b>Payoff:</b> a near-free generator — millions of realistic spin systems, no quantum chemistry per molecule.</div>
+      <div class="note-strip" style="margin-top:14px"><b>Payoff:</b> a near-free generator — millions of realistic spin systems, no quantum chemistry per molecule.</div>
     </div>
-    <aside class="notes">Yiming. The bet: plausible > accurate for training the inverse map. Heuristics from nmrdb2 + Pretsch tables; Karplus for 3J; Gaussian jitter for diversity.</aside>
+    <aside class="notes">Yiming. The bet is that plausible beats accurate-but-scarce for training the inverse map — the model just needs
+      to see realistic spin systems. We fill the graph in by substructure-matching δ and J (²J/³J/⁴J) against reference tables
+      (nmrdb2 and the Pretsch Tables of Spectral Data), use the Karplus equation for ³J from the 3D dihedral angles, and add
+      small Gaussian jitter for diversity. The benzocaine graph from Stage 1 now carries δ on every node and J on every edge —
+      done with no per-molecule quantum chemistry, so it scales to millions.</aside>
   </section>
 
   <!-- ============================ PIPELINE 3 — PYSPIN ============================ -->
@@ -428,28 +664,45 @@
     <div class="slidepad">
       <div class="kicker">Stage 3 · pyspin — the physics engine</div>
       <h2>Spin systems → exact spectra, from first principles.</h2>
-      <div class="ham" style="margin-top:14px">
-        <b>H</b> &nbsp;=&nbsp; <span class="term zee">&Sigma;<sub>i</sub> σ<sub>i</sub> I<sub>z,i</sub></span>
-        &nbsp;+&nbsp; <span class="term cpl">&Sigma;<sub>i&lt;j</sub> J<sub>ij</sub> <b>I</b><sub>i</sub>·<b>I</b><sub>j</sub></span>
+      <div class="mjx-wrap" style="margin-top:10px">
+        $$\hat H \;=\; \underbrace{-\,\gamma \sum_i (1-\sigma_i)\,\mathbf B\cdot\hat{\mathbf I}_i}_{\text{Zeeman (shifts)}} \;-\; \underbrace{\sum_{i&lt;j} J_{ij}\,\hat{\mathbf I}_i\!\cdot\!\hat{\mathbf I}_j}_{\text{coupling}}$$
       </div>
-      <div class="eqcap"><span><b style="color:var(--accent)">Zeeman</b> — field &amp; shifts σ<sub>i</sub></span><span><b style="color:var(--accent-3)">coupling</b> — spin–spin J<sub>ij</sub></span></div>
-      <div class="twocol" style="margin-top:14px">
+      <div class="twocol" style="margin-top:8px;align-items:center">
         <div>
           <ul class="clean">
-            <li>NMR records <b>energy transitions</b> between nuclear spin states; the energies are the <b>eigenvalues</b> of this spin Hamiltonian.</li>
-            <li>Selection rules pick the allowed gaps → a <b>stick spectrum</b>, convolved with a fixed-width <b>Lorentzian</b> to mimic the spectrometer.</li>
+            <li>NMR records <b>energy transitions</b> between spin states — the energies are the <b>eigenvalues</b> of this Hamiltonian.</li>
+            <li>Selection rules pick the allowed gaps → a <b>stick spectrum</b>, convolved with a <b>Lorentzian</b> to mimic the spectrometer.</li>
+            <li>N spin-½ nuclei → a <b>2<sup>N</sup></b> space — exact diagonalization is intractable. pyspin uses <b>spin-cluster decomposition + local bases</b> → <b>linear scaling</b>, near-exact accuracy.</li>
           </ul>
+          <div class="metric" style="margin-top:12px;max-width:320px"><div class="v">1500 / sec</div><div class="l">spin systems → spectra (open-source engine)</div></div>
         </div>
-        <div>
-          <ul class="clean">
-            <li>N spin-½ nuclei → a <b>2<sup>N</sup>-dimensional</b> space — exact diagonalization is intractable.</li>
-            <li>pyspin uses <b>spin-cluster decomposition + local approximate bases</b> → <b>linear scaling</b>, near-exact accuracy.</li>
-          </ul>
-          <div class="metric" style="margin-top:6px"><div class="v">1500 / sec</div><div class="l">spin systems → spectra (license-free, open source)</div></div>
+        <div class="fig-card" style="align-self:center;width:100%">
+          <svg viewBox="0 0 280 150" style="width:100%;height:auto;max-height:240px;overflow:visible" aria-hidden="true">
+            <line x1="10" y1="120" x2="270" y2="120" class="gw"/>
+            <!-- one transition stick per peak -->
+            <g stroke="var(--ink-faint)" stroke-width="2">
+              <line x1="60" y1="120" x2="60" y2="70"/>
+              <line x1="112" y1="120" x2="112" y2="52"/>
+              <line x1="170" y1="120" x2="170" y2="78"/>
+              <line x1="222" y1="120" x2="222" y2="64"/></g>
+            <!-- Lorentzian-broadened envelope: one symmetric peak per stick -->
+            <path fill="none" stroke="var(--accent-2)" stroke-width="2.6" d="M10 120 L40 120
+              C50 120 55 70 60 70 C65 70 70 120 80 120 L94 120
+              C103 120 108 52 112 52 C116 52 121 120 130 120 L150 120
+              C160 120 165 78 170 78 C175 78 180 120 190 120 L204 120
+              C213 120 217 64 222 64 C227 64 231 120 240 120 L270 120"/>
+            <text x="60" y="142" class="af-s">transitions (sticks)</text>
+            <text x="210" y="142" class="af-s" fill="var(--accent-2)">broadened spectrum</text>
+          </svg>
+          <div class="figcap">eigenvalues → allowed transitions → stick spectrum → broadened ¹H trace</div>
         </div>
       </div>
     </div>
-    <aside class="notes">Lucas. The Hamiltonian has a field-dependent Zeeman term (shifts) + a coupling term (J). Eigenvalues = state energies; transitions → sticks → Lorentzian broadening = the spectrum. 2^N is intractable; clustering + local bases give linear scaling at ~1500 spectra/s.</aside>
+    <aside class="notes">Lucas. The spin Hamiltonian has two terms: a field-dependent Zeeman term carrying the chemical shifts, and a
+      coupling term in J. Its eigenvalues are the spin-state energies; allowed transitions (selection rules) give a stick
+      spectrum, which we convolve with a fixed-width Lorentzian to mimic the spectrometer lineshape. The catch: N spin-½ nuclei
+      live in a 2^N-dimensional Hilbert space, so exact diagonalization blows up. pyspin decomposes the system into coupled
+      spin clusters with local approximate bases — linear scaling, near-exact accuracy, ~1500 spectra/second, open source.</aside>
   </section>
 
   <!-- ============================ MODEL 1 — CNN BASELINE ============================ -->
@@ -457,16 +710,53 @@
     <div class="slidepad">
       <div class="kicker">Model · the baseline</div>
       <h2>Start simple: a CNN reads the raw spectrum.</h2>
-      <div class="twocol">
+      <div class="archfig" style="max-height:230px">
+        <svg viewBox="0 0 880 200" aria-hidden="true">
+          <!-- input spectrum -->
+          <rect x="6" y="60" width="120" height="80" rx="8" class="af-box"/>
+          <path d="M16 124 Q34 124 40 96 Q46 72 54 96 Q60 118 68 100 Q76 84 86 106 Q94 124 116 124"
+            fill="none" stroke="var(--ink-soft)" stroke-width="2"/>
+          <text x="66" y="158" class="af-l">spectrum</text><text x="66" y="174" class="af-s">16,384 pts</text>
+          <path class="af-arrow" d="M130 100 L156 100"/>
+          <!-- conv stack: layered feature maps -->
+          <g>
+            <rect x="186" y="56" width="20" height="88" rx="3" class="af-box"/>
+            <rect x="176" y="50" width="20" height="88" rx="3" class="af-box"/>
+            <rect x="166" y="44" width="20" height="88" rx="3" class="af-box" fill="color-mix(in srgb,var(--accent) 14%,var(--panel-2))"/>
+            <text x="186" y="166" class="af-l">1D conv stack</text><text x="186" y="182" class="af-s">ResNet, ↓ length</text>
+          </g>
+          <path class="af-arrow" d="M212 94 L240 94"/>
+          <!-- global pool -->
+          <rect x="244" y="74" width="92" height="44" rx="8" class="af-box"/>
+          <text x="290" y="100" class="af-l">global pool</text><text x="290" y="138" class="af-s">→ one vector</text>
+          <path class="af-arrow" d="M340 96 L372 96"/>
+          <!-- three heads -->
+          <g>
+            <rect x="376" y="40" width="120" height="34" rx="8" class="af-box"/><text x="436" y="61" class="af-l">δ head · 8 shifts</text>
+            <rect x="376" y="84" width="120" height="34" rx="8" class="af-box"/><text x="436" y="105" class="af-l">J head · 28 couplings</text>
+            <rect x="376" y="128" width="120" height="34" rx="8" class="af-box"/><text x="436" y="149" class="af-l">n head · 8 degens</text>
+          </g>
+          <path class="af-arrow" d="M500 96 L536 96"/>
+          <!-- assembled 8x9 matrix -->
+          <g transform="translate(556,52)">
+            <g class="grp-dot" stroke="var(--panel)" stroke-width="1.2">
+              <g fill="var(--accent)"><rect x="0" y="0" width="11" height="11" rx="2"/><rect x="12" y="12" width="11" height="11" rx="2"/><rect x="24" y="24" width="11" height="11" rx="2"/><rect x="36" y="36" width="11" height="11" rx="2"/><rect x="48" y="48" width="11" height="11" rx="2"/><rect x="60" y="60" width="11" height="11" rx="2"/><rect x="72" y="72" width="11" height="11" rx="2"/><rect x="84" y="84" width="11" height="11" rx="2"/></g>
+              <g fill="var(--accent-3)" opacity=".5"><rect x="12" y="0" width="11" height="11" rx="2"/><rect x="0" y="12" width="11" height="11" rx="2"/><rect x="36" y="0" width="11" height="11" rx="2"/><rect x="0" y="36" width="11" height="11" rx="2"/><rect x="48" y="24" width="11" height="11" rx="2"/><rect x="24" y="48" width="11" height="11" rx="2"/><rect x="72" y="60" width="11" height="11" rx="2"/><rect x="60" y="72" width="11" height="11" rx="2"/><rect x="84" y="48" width="11" height="11" rx="2"/><rect x="48" y="84" width="11" height="11" rx="2"/></g>
+              <g fill="var(--line)"><rect x="24" y="0" width="11" height="11" rx="2"/><rect x="60" y="0" width="11" height="11" rx="2"/><rect x="84" y="0" width="11" height="11" rx="2"/><rect x="72" y="12" width="11" height="11" rx="2"/></g>
+              <g fill="var(--accent-2)"><rect x="106" y="0" width="11" height="11" rx="2"/><rect x="106" y="12" width="11" height="11" rx="2"/><rect x="106" y="24" width="11" height="11" rx="2"/><rect x="106" y="36" width="11" height="11" rx="2"/><rect x="106" y="48" width="11" height="11" rx="2"/><rect x="106" y="60" width="11" height="11" rx="2"/><rect x="106" y="72" width="11" height="11" rx="2"/><rect x="106" y="84" width="11" height="11" rx="2"/></g>
+            </g>
+            <text x="58" y="118" class="af-l">8 × 9 spin matrix</text>
+          </g>
+        </svg>
+      </div>
+      <div class="twocol" style="margin-top:6px;align-items:center">
         <div>
           <ul class="clean">
-            <li>An out-of-the-box <b>convolutional neural net</b> on the raw 16,384-point spectrum.</li>
-            <li>Three heads → <b>8 shifts · 28 couplings · 8 degeneracies</b>, assembled into one symmetric 8×9 matrix.</li>
-            <li>Errors <b>plateaued high</b> — but manual inspection showed it had <b>captured the matrix structure</b>.</li>
+            <li>An <b>off-the-shelf CNN</b> on the raw spectrum; three heads → one symmetric <b>8×9 matrix</b>.</li>
+            <li>Errors <b>plateaued high</b> — but inspection showed it had genuinely <b>captured the matrix structure</b>: the signal is learnable.</li>
           </ul>
-          <p class="plain">A flat regressor only got us so far — but it proved the signal is genuinely learnable.</p>
         </div>
-        <div class="metric-grid" style="grid-template-columns:1fr 1fr">
+        <div class="metric-grid" style="grid-template-columns:1fr 1fr;margin-top:0">
           <div class="metric"><div class="v">0.279</div><div class="l">shift MAE (ppm)</div></div>
           <div class="metric"><div class="v">1.80</div><div class="l">J MAE (Hz)</div></div>
           <div class="metric"><div class="v">0.81</div><div class="l">coupling presence F1</div></div>
@@ -474,27 +764,49 @@
         </div>
       </div>
     </div>
-    <aside class="notes">Sam. Baseline: vanilla CNN, 3 heads → matrix. Plateaued at 0.279/1.80 but visibly captured structure — the signal is there, the architecture isn't tailored yet.</aside>
+    <aside class="notes">Sam. Baseline: a vanilla 1D-CNN reads the raw 16,384-point spectrum, a global pool collapses it to one
+      vector, and three heads emit the 8 shifts, 28 couplings and 8 degeneracies, assembled into a symmetric 8×9 matrix. Errors
+      plateaued at 0.279 ppm / 1.80 Hz, but eyeballing predictions showed it had captured the matrix structure — proof the
+      signal is there; the architecture just wasn't tailored to it yet.</aside>
   </section>
 
   <!-- ============================ MODEL 2 — STRUCTURED DECODER ============================ -->
   <section id="s-decoder" data-background-color="var(--bg)">
     <div class="slidepad">
-      <div class="kicker">Model · the structured decoder — the leap</div>
+      <div class="kicker">Model · the structured decoder</div>
       <h2>The spin system is a graph — so predict a graph.</h2>
       <div class="flow" style="margin-top:14px">
-        <div class="node"><div class="n">SPECTRUM</div><h3>16,384 pts</h3><p>conv stem → ppm-tagged feature tokens</p></div>
+        <div class="node"><div class="n">SPECTRUM</div><h3>→ tokens</h3>
+          <div class="glyph"><svg viewBox="0 0 120 70">
+            <path d="M6 30 Q20 30 26 14 Q32 2 40 16 Q46 28 54 18 Q62 8 70 22 Q78 32 114 30" fill="none" stroke="var(--ink-soft)" stroke-width="2"/>
+            <g fill="var(--accent)" opacity=".8"><rect x="8" y="46" width="12" height="16" rx="2"/><rect x="25" y="46" width="12" height="16" rx="2"/><rect x="42" y="46" width="12" height="16" rx="2"/><rect x="59" y="46" width="12" height="16" rx="2"/><rect x="76" y="46" width="12" height="16" rx="2"/><rect x="93" y="46" width="12" height="16" rx="2"/></g></svg></div>
+          <p>conv stem → ppm-tagged feature tokens</p></div>
         <div class="arrow">▶</div>
-        <div class="node"><div class="n">ENCODER</div><h3>self-attention</h3><p>tokens attend across the whole spectrum — links coupled multiplets</p></div>
+        <div class="node"><div class="n">ENCODER</div><h3>self-attention</h3>
+          <div class="glyph"><svg viewBox="0 0 120 70">
+            <g fill="none" stroke="var(--accent)" stroke-width="1.4" opacity=".55">
+              <path d="M14 50 Q40 8 66 50"/><path d="M40 50 Q66 10 92 50"/><path d="M14 50 Q53 2 92 50"/><path d="M66 50 Q83 18 100 50"/></g>
+            <g fill="var(--accent-2)"><circle cx="14" cy="52" r="5"/><circle cx="40" cy="52" r="5"/><circle cx="66" cy="52" r="5"/><circle cx="92" cy="52" r="5"/><circle cx="100" cy="52" r="5"/></g></svg></div>
+          <p>tokens attend across the whole spectrum — links coupled multiplets</p></div>
         <div class="arrow">▶</div>
-        <div class="node"><div class="n">8 QUERIES → DECODER</div><h3>cross-attention</h3><p>one query per spin group gathers its evidence (set prediction)</p></div>
+        <div class="node"><div class="n">8 QUERIES → DECODER</div><h3>cross-attention</h3>
+          <div class="glyph"><svg viewBox="0 0 120 70">
+            <g stroke="var(--accent)" stroke-width="1" opacity=".4">
+              <line x1="22" y1="16" x2="92" y2="14"/><line x1="22" y1="35" x2="92" y2="34"/><line x1="22" y1="35" x2="92" y2="54"/><line x1="22" y1="54" x2="92" y2="34"/></g>
+            <g fill="var(--accent-3)"><circle cx="18" cy="10" r="3.5"/><circle cx="18" cy="22" r="3.5"/><circle cx="18" cy="34" r="3.5"/><circle cx="18" cy="46" r="3.5"/><circle cx="18" cy="58" r="3.5"/></g>
+            <g fill="var(--accent)" opacity=".85"><rect x="92" y="8" width="10" height="13" rx="2"/><rect x="92" y="28" width="10" height="13" rx="2"/><rect x="92" y="48" width="10" height="13" rx="2"/></g>
+            <text x="18" y="69" class="af-s">queries</text></svg></div>
+          <p>one query per spin group gathers its own evidence (set prediction)</p></div>
         <div class="arrow">▶</div>
-        <div class="node"><div class="n">HEADS</div><h3>nodes + edges</h3><p>δ &amp; degeneracy per group; symmetric J &amp; presence per pair</p></div>
+        <div class="node"><div class="n">HEADS</div><h3>nodes + edges</h3>
+          <div class="glyph"><svg viewBox="0 0 120 70">
+            <g class="ge" stroke-width="2" fill="none"><line x1="38" y1="18" x2="82" y2="18"/><line x1="38" y1="18" x2="60" y2="52"/><line x1="82" y1="18" x2="60" y2="52"/></g>
+            <g class="grp-dot" stroke="var(--panel)" stroke-width="2"><circle cx="38" cy="18" r="11" fill="var(--accent)"/><circle cx="82" cy="18" r="11" fill="var(--accent-2)"/><circle cx="60" cy="52" r="11" fill="var(--accent-3)"/></g></svg></div>
+          <p>δ &amp; degeneracy per node; symmetric J &amp; presence per edge</p></div>
       </div>
-      <p class="lead" style="margin-top:14px">Each <b>spin-group query</b> learns to look at the regions of the spectrum that belong to its group; a
-        <b>symmetric edge head</b> predicts all 28 couplings — so the unordered, graph-structured answer is built in.
-        <span class="faint">(We also tested support-region tokenization — feeding detected peak regions as tokens — but global attention already captured it, so we dropped it.)</span></p>
-      <div class="metric-grid" style="margin-top:14px">
+      <p class="lead" style="margin-top:12px;font-size:18px">Each <b>query</b> learns which part of the spectrum is its group; a <b>symmetric edge head</b> emits all 28 couplings —
+        the unordered graph is built into the architecture. <span class="faint">(Support-region tokens were tested, but global attention already captured them.)</span></p>
+      <div class="metric-grid" style="margin-top:12px">
         <div class="metric"><div class="v">0.037</div><div class="l">shift MAE (ppm)</div><div class="d">7.5× the CNN</div></div>
         <div class="metric"><div class="v">0.59</div><div class="l">J MAE (Hz)</div><div class="d">3× the CNN</div></div>
         <div class="metric"><div class="v">0.94</div><div class="l">coupling presence F1</div></div>
@@ -510,7 +822,7 @@
   <!-- ============================ MODEL 3 — REFINEMENTS + TEST ============================ -->
   <section id="s-refine" data-background-color="var(--bg)">
     <div class="slidepad">
-      <div class="kicker">Model · two refinements &amp; the honest test</div>
+      <div class="kicker">Model · two refinements</div>
       <h2>Polishing the last failure modes — and checking we didn't memorize.</h2>
       <div class="twocol wide-left">
         <div>
@@ -574,16 +886,16 @@
   <section id="s-close" data-background-color="var(--bg)">
     <div class="slidepad">
       <div class="kicker">Conclusion</div>
-      <h2>A "low-information" benchtop spectrum → a complete structural answer.</h2>
+      <h2>A blurred low-field spectrum → a complete spin system.</h2>
       <div class="close">
         <div>
           <ul class="impact">
-            <li><b>What we built:</b> a license-free, linear-scaling spin simulator (pyspin, 1500/s), a 3M-molecule
-              data pipeline, and a graph-structured decoder that recovers shifts to <b>0.037 ppm</b> and couplings to <b>0.59 Hz</b>.</li>
+            <li><b>What we built:</b> a linear-scaling spin simulator (pyspin, 1500/s), a 3M-molecule data pipeline,
+              and a graph-structured decoder that recovers shifts to <b>0.037 ppm</b> and couplings to <b>0.59 Hz</b>.</li>
             <li><b>What we learned:</b> low field genuinely <i>encodes</i> the full spin system; predicting it as a
-              <b>graph</b> (not 44 flat numbers) was the leap; and <b>plausible</b> training data beats expensive measured data.</li>
-            <li><b>Why it matters:</b> high-field-quality structure from a <b>~$50k benchtop</b> — enabling cheaper,
-              in-situ reaction monitoring that accelerates synthesis and small-molecule drug discovery.</li>
+              <b>graph</b> (not 44 flat numbers) was the key step; and <b>plausible</b> training data is <b>sufficient</b> — no measured NMR required.</li>
+            <li><b>Why it matters:</b> high-field-quality structure from a <b>~$50k benchtop</b> — a step toward cheaper,
+              in-situ reaction monitoring for synthesis and small-molecule drug discovery.</li>
           </ul>
           <div class="team">
             <div class="member"><div class="av">LA</div><h3>Lucas Abounader</h3><span>Shenvi Lab · simulation &amp; model</span></div>
@@ -592,20 +904,21 @@
           </div>
         </div>
         <div class="sitecard">
-          <div id="qr" title="labounad.github.io/spinhance">scan →</div>
+          <div id="qr" title="labounad.github.io/spinhance"></div>
           <div>
             <div class="sitelink">labounad.github.io/spinhance</div>
-            <div class="faint" style="font-size:14px;margin-top:6px">Every reload simulates a new molecule, live in your browser.</div>
           </div>
         </div>
       </div>
-      <p class="thesis">Low-field NMR isn't low-information — the structure is all there, just scrambled. Spinhance unscrambles it.</p>
     </div>
     <aside class="notes">
-      Lucas closes, ~1:00. 1) Why it matters (accessibility → who gets to do rigorous chemistry). 2) Biomedical tie
-      for THIS room. 3) Real open tool (AutoDock/Su-style accessibility). 4) autoai one vivid line — honest: "a fun
-      idea, still nascent." 5) The ask: "Try the live demo — every reload simulates a new molecule." Leave the link
-      up during Q&A. 6) CLOSE on the bet: restate the one-sentence thesis.
+      Lucas closes, ~1:00. Recap the three points plainly: (1) What we built — an open-source linear-scaling simulator,
+      a 3M-molecule plausible-data pipeline, and a graph-structured decoder that recovers δ to 0.037 ppm and J to 0.59 Hz
+      from a single low-field spectrum. (2) What we learned — low field encodes the full spin system; treating the output as
+      a graph rather than 44 flat numbers was the decisive change; and plausible (heuristic) training data was sufficient,
+      so we never needed measured spectra. (3) Why it matters — this pulls high-field-quality structure off a ~$50k benchtop,
+      a step toward cheaper in-situ reaction monitoring for synthesis and drug discovery. End with the live demo: every reload
+      simulates a new molecule; leave the link up for Q&A.
     </aside>
   </section>
 
@@ -615,6 +928,15 @@
 <script src="vendor/reveal/dist/reveal.js"></script>
 <script src="vendor/reveal/plugin/notes/notes.js"></script>
 <script src="vendor/qrcode/qrcode.min.js"></script>
+<!-- LaTeX typesetting (vendored, offline): true LaTeX rendered to self-contained SVG -->
+<script>
+  window.MathJax = {
+    tex: { inlineMath: [["\\(","\\)"]], displayMath: [["$$","$$"]] },
+    svg: { fontCache: "global", scale: 1.0 },
+    startup: { typeset: false },   // Reveal rearranges the DOM on init; we typeset explicitly in Reveal 'ready'
+  };
+</script>
+<script src="vendor/mathjax/tex-svg.js" id="MathJax-script"></script>
 <script>
 /* =====================================================================
    Field-sweep engine — adapted from docs/assets/sweep.js.
@@ -802,7 +1124,15 @@ function sizeFor(slide) {
   else if (slide && slide.id === "s-proof") Sweep.paintProof();
 }
 
+// typeset LaTeX once MathJax has loaded (the 2MB engine may arrive after Reveal is ready)
+function typesetMath(tries) {
+  tries = tries || 0;
+  if (window.MathJax && MathJax.typesetPromise) { MathJax.typesetPromise(); }
+  else if (tries < 60) { setTimeout(() => typesetMath(tries + 1), 150); }
+}
+
 Reveal.on("ready", (ev) => {
+  typesetMath();
   // QR for the closing slide
   try {
     new QRCode(document.getElementById("qr"), {

@@ -66,10 +66,17 @@ class SpinGraphDecoderModel(SpinArchitecture):
                  node_hidden: int = 256, edge_hidden: int = 256,
                  region_feat_dim: int = 80, use_peak_channel: bool = False,
                  peak_min_frac: float = 0.01, peak_sigma: float = 2.0,
+                 use_soft_equiv: bool = False,
                  **encoder_overrides):
         super().__init__()
         self.n_groups = n_groups
         self.use_peak_channel = use_peak_channel
+        # The edge head always computes a soft-equivalence logit (cheap), but we only
+        # EXPOSE it in auxiliary when this model was configured to use it — i.e. when a
+        # SoftEquivLoss trains the flag. Decode-time shift averaging keys off the key's
+        # presence, so exposing an UNtrained flag (e.g. the 025 recipe) would average
+        # random groups and wreck the decoded shifts. Gate it here.
+        self.use_soft_equiv = use_soft_equiv
         self.peak_min_frac = peak_min_frac
         in_channels = 2 if use_peak_channel else 1
         if use_peak_channel:
@@ -154,5 +161,6 @@ class SpinGraphDecoderModel(SpinArchitecture):
             degeneracy_logits=deg_logits,                          # (B,G,C)
             node_embeddings=node,
             edge_embeddings=edge_emb,
-            auxiliary={"soft_equiv_logits": se_logits},            # (B,E) triu order
+            # only expose the flag when trained to use it (see __init__)
+            auxiliary=({"soft_equiv_logits": se_logits} if self.use_soft_equiv else {}),
         )
