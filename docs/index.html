@@ -1056,5 +1056,105 @@
   if (window.__heroMol) draw(window.__heroMol);
 })();
 </script>
+<canvas id="smokeCanvas" style="position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:9999;display:none"></canvas>
+<div id="smokeWarning" style="display:none;position:fixed;inset:0;z-index:10000;pointer-events:none;
+  display:none;align-items:center;justify-content:center;">
+  <span id="smokeWarnText" style="
+    font-family:'Arial Black',Impact,'Stencil',sans-serif;
+    font-size:clamp(48px,9vw,120px);font-weight:900;letter-spacing:.12em;
+    color:#ff1a1a;text-shadow:0 0 40px #ff000099,0 0 80px #ff000044;
+    text-transform:uppercase;user-select:none;text-align:center;line-height:1.1;">
+    SMOKE<br>TEST
+  </span>
+</div>
+<script>
+(function(){
+  var buf = "", target = "smoke";
+  document.addEventListener("keydown", function(e){
+    if(e.metaKey || e.ctrlKey || e.altKey) return;
+    buf = (buf + e.key).slice(-target.length);
+    if(buf.toLowerCase() === target) triggerSmoke();
+  });
+
+  function triggerSmoke(){
+    var cv  = document.getElementById("smokeCanvas");
+    var warn = document.getElementById("smokeWarning");
+    var W = cv.width  = window.innerWidth;
+    var H = cv.height = window.innerHeight;
+    cv.style.display  = "block";
+    warn.style.display = "flex";
+    var ctx = cv.getContext("2d");
+    var particles = [];
+    var N = 320;
+
+    for(var i = 0; i < N; i++) particles.push(spawn(W, H, i / N));
+
+    function spawn(W, H, delayFrac){
+      var size = 140 + Math.random() * 220;
+      return {
+        x:   -size,
+        y:   H * 0.05 + Math.random() * H * 0.9,
+        vx:  9 + Math.random() * 10,
+        vy:  (Math.random() - 0.5) * 2,
+        r:   size,
+        alpha: 0,
+        fadeIn: 0.025 + Math.random() * 0.015,
+        dying: false,
+        delay: Math.floor(delayFrac * 45),
+        drift: (Math.random() - 0.5) * 0.06,
+        spin:  (Math.random() - 0.5) * 0.012,
+        angle: Math.random() * Math.PI * 2,
+      };
+    }
+
+    var blinkInterval = setInterval(function(){
+      var txt = document.getElementById("smokeWarnText");
+      txt.style.opacity = txt.style.opacity === "0" ? "1" : "0";
+    }, 220);
+
+    function draw(){
+      ctx.clearRect(0, 0, W, H);
+      var allGone = true;
+      for(var i = 0; i < particles.length; i++){
+        var p = particles[i];
+        if(p.delay > 0){ p.delay--; allGone = false; continue; }
+        p.x     += p.vx;
+        p.vy    += p.drift;
+        p.y     += p.vy;
+        p.angle += p.spin;
+        p.vx    *= 0.993;
+        if(!p.dying && p.x > W * 0.25 && Math.random() < 0.012) p.dying = true;
+        p.alpha += p.dying ? -0.012 : p.fadeIn;
+        p.alpha  = Math.max(0, Math.min(1, p.alpha));
+        if(p.alpha <= 0) continue;
+        allGone = false;
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.angle);
+        var g = ctx.createRadialGradient(0, 0, 0, 0, 0, p.r);
+        var grey = "175,180,192";
+        g.addColorStop(0,   "rgba("+grey+","+(p.alpha * 0.7)+")");
+        g.addColorStop(0.45,"rgba("+grey+","+(p.alpha * 0.35)+")");
+        g.addColorStop(1,   "rgba("+grey+",0)");
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, p.r, p.r * 0.72, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+      if(!allGone){ requestAnimationFrame(draw); }
+      else {
+        cv.style.display   = "none";
+        warn.style.display = "none";
+        document.getElementById("smokeWarnText").style.opacity = "1";
+        clearInterval(blinkInterval);
+        ctx.clearRect(0, 0, W, H);
+      }
+    }
+
+    requestAnimationFrame(draw);
+  }
+})();
+</script>
 </body>
 </html>
