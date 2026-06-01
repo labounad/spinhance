@@ -132,7 +132,25 @@
     fetch("data/test_explorer.json").then(r => r.json()).then(data => {
       const ppm = data.ppm, mols = data.molecules; let idx = 0;
       const spec = $("#txSpec", host), sel = $("#txSel", host), meta = $("#txMeta", host), mat = $("#txMatrix", host);
+      const el3d = $("#tx3d", host), load3d = $("#tx3dLoad", host); let v3d = null;
       sel.innerHTML = mols.map((m, i) => `<option value="${i}">${m.id} · ${m.n_spins}H</option>`).join("");
+      function ensure3d(cb) {
+        if (window.$3Dmol) return cb(window.$3Dmol);
+        let n = 0; (function chk() { if (window.$3Dmol) cb(window.$3Dmol); else if (++n < 120) setTimeout(chk, 50); })();
+      }
+      function render3d(m) {
+        if (!m || !m.xyz) { if (load3d) { load3d.textContent = "no 3D structure"; load3d.style.opacity = "1"; } if (v3d) { v3d.removeAllModels(); v3d.render(); } return; }
+        ensure3d(($3) => {
+          try {
+            if (!v3d) v3d = $3.createViewer(el3d, { backgroundAlpha: 0 });
+            v3d.removeAllModels();
+            v3d.addModel(m.xyz, "xyz");                      // 3Dmol infers bonds by distance
+            v3d.setStyle({}, { stick: { radius: 0.13 }, sphere: { scale: 0.24 } });
+            v3d.zoomTo(); v3d.resize(); v3d.render(); v3d.spin("y", 0.6);
+            if (load3d) load3d.style.opacity = "0";
+          } catch (e) { if (load3d) { load3d.textContent = "3D unavailable"; load3d.style.opacity = "1"; } console.error(e); }
+        });
+      }
       function drawSpec() {
         const m = mols[idx], c = C();
         linePlot(spec, [
@@ -165,7 +183,7 @@
         const m = mols[idx]; sel.value = idx;
         meta.innerHTML = `<span class="mono">${m.smiles || m.id}</span> · ${m.n_spins} protons ·
           shift MAE <b>${m.shift_mae.toFixed(3)}</b> ppm · J MAE <b>${m.j_mae.toFixed(2)}</b> Hz`;
-        drawSpec(); drawMatrix();
+        drawSpec(); drawMatrix(); render3d(m);
       }
       sel.onchange = () => { idx = +sel.value; show(); };
       $("#txPrev", host).onclick = () => { idx = (idx - 1 + mols.length) % mols.length; show(); };

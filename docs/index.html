@@ -241,6 +241,10 @@
   .tx-meta .mono{font-family:ui-monospace,monospace;font-size:12px;color:var(--ink)}
   .tx-grid{display:grid;grid-template-columns:1.25fr 1fr;gap:22px;align-items:start}
   @media(max-width:760px){.tx-grid{grid-template-columns:1fr}}
+  .tx-lower{display:grid;grid-template-columns:1fr 0.72fr;gap:22px;align-items:start;margin-top:18px}
+  @media(max-width:760px){.tx-lower{grid-template-columns:1fr}}
+  .tx-3d-wrap{position:relative;border:1px solid var(--line);border-radius:12px;background:var(--panel-2,var(--bg-soft));padding:10px}
+  .tx-3d{position:relative;width:100%;height:260px}
   .tx-legend{display:flex;gap:16px;font-size:12px;color:var(--ink-soft);margin-bottom:4px;flex-wrap:wrap}
   .tx-legend .sw{display:inline-block;width:13px;height:3px;vertical-align:middle;margin-right:5px}
   table.nodes{width:100%;border-collapse:collapse;font-size:12.5px;font-variant-numeric:tabular-nums}
@@ -694,15 +698,18 @@
           <button class="car-btn" id="txNext" aria-label="Next molecule">&#8250;</button>
         </div></div>
       <div class="tx-meta" id="txMeta"></div>
-      <div class="tx-grid">
-        <div>
-          <div class="tx-legend">
-            <span><i class="sw" style="background:var(--ink-faint)"></i>target spectrum (90&nbsp;MHz)</span>
-            <span><i class="sw" style="background:var(--accent)"></i>rendered from prediction</span>
-          </div>
-          <canvas id="txSpec" class="vb-canvas"></canvas>
-        </div>
+      <div class="tx-legend">
+        <span><i class="sw" style="background:var(--ink-faint)"></i>target spectrum (90&nbsp;MHz)</span>
+        <span><i class="sw" style="background:var(--accent)"></i>rendered from prediction</span>
+      </div>
+      <canvas id="txSpec" class="vb-canvas"></canvas>
+      <div class="tx-lower">
         <div id="txMatrix" class="tx-matrix"></div>
+        <div class="tx-3d-wrap">
+          <div class="jlbl">3D structure</div>
+          <div id="tx3d" class="tx-3d"></div>
+          <div class="viewer-load" id="tx3dLoad">building 3D…</div>
+        </div>
       </div>
       <p class="muted" style="margin-top:12px;font-size:12.5px">Predictions from <b>session&nbsp;026</b> (medium,
         10M params) on molecules held out of training. The rendered trace re-simulates the model&rsquo;s predicted

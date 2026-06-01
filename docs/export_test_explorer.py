@@ -1,4 +1,4 @@
-"""Export held-out test molecules + session025 predictions for the web explorer."""
+"""Export held-out test molecules + session026 predictions for the web explorer."""
 import json, numpy as np, torch
 from pathlib import Path
 from simulation.pyspin.composite import simulate_spectrum_composite
@@ -10,7 +10,28 @@ from model.evaluation.metrics import decode, _np_pred
 from model.schemas.constants import N_POINTS
 
 CKPT="model_artifacts/session026_best.pt"; RECORDS="mol_to_spin_system/data/spin_systems_chembl.json"
-N_MOL=14; DS=16; G=8
+N_MOL=100; DS=16; G=8
+
+def smiles_to_xyz(smi):
+    """3D coords from SMILES (ETKDG embed + MMFF) as an XYZ block for 3Dmol.js; None on failure."""
+    if not smi: return None
+    try:
+        from rdkit import Chem
+        from rdkit.Chem import AllChem
+        mol = Chem.MolFromSmiles(smi)
+        if mol is None: return None
+        mol = Chem.AddHs(mol)
+        if AllChem.EmbedMolecule(mol, AllChem.ETKDGv3()) != 0: return None
+        try: AllChem.MMFFOptimizeMolecule(mol, maxIters=400)
+        except Exception: pass
+        conf = mol.GetConformer()
+        lines = [str(mol.GetNumAtoms()), smi]
+        for a in mol.GetAtoms():
+            p = conf.GetAtomPosition(a.GetIdx())
+            lines.append(f"{a.GetSymbol()} {p.x:.4f} {p.y:.4f} {p.z:.4f}")
+        return "\n".join(lines)
+    except Exception:
+        return None
 
 ckpt=torch.load(CKPT,map_location="cpu",weights_only=False)
 vocab=DegeneracyVocab(); std=Standardizer().load_state_dict(ckpt["standardizer"])
@@ -51,7 +72,7 @@ for r in pick:
         "true_deg":[int(x) for x in tdg],"pred_deg":[int(x) for x in pdg2],
         "true_J":[[round(float(tJ[i,j]),2) for j in range(G)] for i in range(G)],
         "pred_J":[[round(float(pJ[i,j]),2) for j in range(G)] for i in range(G)],
-        "shift_mae":round(shift_mae,4),"j_mae":round(jmae,3)})
-    print(r["mol_id"],"shiftMAE",round(shift_mae,3),"jMAE",round(jmae,2))
+        "shift_mae":round(shift_mae,4),"j_mae":round(jmae,3),
+        "xyz":smiles_to_xyz(r.get("smiles"))})
 json.dump(out,open("docs/data/test_explorer.json","w"))
 print("wrote docs/data/test_explorer.json",round(Path("docs/data/test_explorer.json").stat().st_size/1024,1),"KB")
