@@ -223,24 +223,29 @@ def _load_model(session: str, run_prefix: str, which: str, version: str):
 
 @st.cache_data(show_spinner="Loading molecules (filtering by 90 MHz spectra)…")
 def _load_all_records(json_path: str, spectra_root: str, field: int) -> list[dict]:
+    # Return RAW records (no canonical reorder). CRITICAL: make_splits must see the
+    # SAME records the trainer split on — canonically reordering the spin groups here
+    # shifts make_splits' fold assignment, which made the GUI's "test" set differ from
+    # the real training test set (leaking trained-on molecules into the GUI view).
+    # The reorder, needed only for matrix-display alignment with predictions, is applied
+    # per-molecule in _test_records AFTER the split.
     from model.data.records import load_records
-    from model.data.splits import canonical_order, reorder
-    raw = load_records(json_path, spectra_root, fields=(field,), require_spectra=True)
-    records = []
-    for r in raw:
-        order = canonical_order(r["shifts"], r["couplings"], r["degeneracy"])
-        s, c, d = reorder(r["shifts"], r["couplings"], r["degeneracy"], order)
-        records.append({**r, "shifts": s, "couplings": c, "degeneracy": d})
-    return records
+    return load_records(json_path, spectra_root, fields=(field,), require_spectra=True)
 
 
 @st.cache_data(show_spinner="Computing test split…")
 def _test_records(json_path: str, spectra_root: str, field: int,
                   seed: int, compute_scaffold: bool) -> list[dict]:
-    from model.data.splits import make_splits
-    records = _load_all_records(json_path, spectra_root, field)
+    from model.data.splits import canonical_order, make_splits, reorder
+    records = _load_all_records(json_path, spectra_root, field)          # raw, as the trainer
     assignment, _ = make_splits(records, seed=seed, compute_scaffold=compute_scaffold)
-    return [r for r in records if assignment.get(r["mol_id"]) == "test"]
+    test = [r for r in records if assignment.get(r["mol_id"]) == "test"]
+    out = []                                                             # reorder for DISPLAY only
+    for r in test:
+        o = canonical_order(r["shifts"], r["couplings"], r["degeneracy"])
+        s, c, d = reorder(r["shifts"], r["couplings"], r["degeneracy"], o)
+        out.append({**r, "shifts": s, "couplings": c, "degeneracy": d})
+    return out
 
 
 @st.cache_data(show_spinner="Simulating spectrum…")
