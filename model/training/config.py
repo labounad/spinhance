@@ -32,6 +32,7 @@ class DataCfg:
     max_mol: int = 0             # first-N subset (stacked path); 0 = all
     sample_n: int = 0            # uniform RANDOM subset of N (reservoir); precedence over max_mol
     sample_seed: int = 0
+    preload: bool = False        # stacked path: load needed rows into RAM (fast on GPFS); RAM ≈ n*P*4
     region_tokens: bool = False  # extract support-region tokens (Family D/E/H); off = unchanged
     region_max: int = 48         # max regions per spectrum (padded/truncated)
     # NOTE: the attribute `field` (NMR field) above shadows dataclasses.field in

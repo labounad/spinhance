@@ -15,6 +15,7 @@ data:
   field: 90
   split: none
   max_mol: 0                                     # override with --set data.max_mol=<N>
+  preload: true            # RAM-resident (fast on GPFS); ~196GB for full 3.2M (needs big-RAM node)
 
 model:
   name: spingraph_decoder
