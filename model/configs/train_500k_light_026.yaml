@@ -24,6 +24,7 @@ model:
   n_heads: 8
   dropout: 0.1
   use_peak_channel: true    # Idea 1
+  use_soft_equiv: true      # Idea 2 — expose soft_equiv_logits for the loss + decode
 
 loss:
   name: composite
