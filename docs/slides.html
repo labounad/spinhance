@@ -269,8 +269,8 @@
     box-shadow:var(--shadow);padding:16px 18px;display:flex;flex-direction:column;min-height:0;}
 
   /* node-embedded mini glyphs (Goal/Scope flow) */
-  .flow .node .glyph{flex:1;min-height:0;display:grid;place-items:center;margin:6px 0;}
-  .flow .node .glyph svg{width:100%;height:100%;max-height:96px;overflow:visible;}
+  .flow .node .glyph{flex:1;min-height:0;display:grid;place-items:center;margin:8px 0;}
+  .flow .node .glyph svg{width:100%;height:100%;max-height:160px;overflow:visible;}
 
   /* spin-graph + molecule shared svg ink */
   .gw{stroke:var(--line-strong);}
@@ -368,32 +368,29 @@
             <div class="c cryo"><div class="amt">$2M+</div><div class="lab">cryomagnet · 600&nbsp;MHz · shared facility</div></div>
           </div>
         </div>
-        <div class="fig-card" style="align-self:stretch;justify-content:center">
-          <svg viewBox="0 0 380 300" style="width:100%;height:auto;overflow:visible" aria-hidden="true">
+        <div class="fig-card" style="align-self:center;width:100%;max-width:440px;margin:0 auto">
+          <svg viewBox="0 0 366 116" style="width:100%;height:auto;overflow:visible" aria-hidden="true">
             <!-- reactor flask -->
-            <path class="mol-bond" d="M70 40 L70 70 A46 46 0 1 0 116 70 L116 40 Z"/>
-            <rect x="64" y="30" width="58" height="12" rx="3" class="af-box"/>
-            <path d="M70 92 A46 46 0 0 0 116 92 Z" fill="var(--accent)" opacity=".18"/>
-            <circle cx="84" cy="118" r="3" fill="var(--accent-2)" opacity=".7" class="pulse"/>
-            <circle cx="100" cy="108" r="2.4" fill="var(--accent-2)" opacity=".7" class="pulse" style="animation-delay:.5s"/>
-            <circle cx="96" cy="124" r="2" fill="var(--accent-2)" opacity=".7" class="pulse" style="animation-delay:1s"/>
-            <text x="93" y="160" class="af-s">reactor</text>
-            <!-- flow probe into the benchtop magnet -->
-            <path class="af-arrow dash" d="M126 95 L176 95"/>
-            <rect x="180" y="58" width="92" height="74" rx="10" class="af-box"/>
-            <circle cx="226" cy="95" r="22" fill="none" stroke="var(--accent)" stroke-width="3"/>
-            <circle cx="226" cy="95" r="9" fill="var(--accent)" opacity=".25"/>
-            <text x="226" y="148" class="af-l">90 MHz benchtop</text>
-            <!-- live stream of spectra over time -->
-            <path class="af-arrow" d="M276 95 L300 95"/>
-            <g transform="translate(300,44)" stroke="var(--trace)" fill="none" stroke-width="1.8">
-              <path opacity=".35" d="M0 30 L20 30 Q26 30 30 14 Q34 30 40 30 Q46 30 50 20 Q54 30 80 30"/>
-              <path opacity=".6"  transform="translate(0,34)" d="M0 30 L18 30 Q24 30 28 10 Q33 30 40 30 Q47 30 52 22 Q56 30 80 30"/>
-              <path opacity="1"   transform="translate(0,68)" stroke="var(--accent-2)" d="M0 30 L16 30 Q22 30 27 6 Q33 30 40 30 Q48 30 53 24 Q57 30 80 30"/>
+            <rect x="40" y="12" width="18" height="9" rx="2" class="af-box"/>
+            <path class="mol-bond" d="M44 21 L44 42 A26 26 0 1 0 54 42 L54 21"/>
+            <path d="M24 60 A26 26 0 0 0 74 60 Z" fill="var(--accent)" opacity=".18"/>
+            <circle cx="44" cy="70" r="2.6" fill="var(--accent-2)" opacity=".7" class="pulse"/>
+            <circle cx="55" cy="62" r="2" fill="var(--accent-2)" opacity=".7" class="pulse" style="animation-delay:.6s"/>
+            <text x="49" y="100" class="af-s">reactor</text>
+            <!-- probe into the benchtop magnet (clear gaps, no overlap) -->
+            <path class="af-arrow dash" d="M86 52 L116 52"/>
+            <rect x="122" y="22" width="86" height="62" rx="10" class="af-box"/>
+            <circle cx="165" cy="53" r="19" fill="none" stroke="var(--accent)" stroke-width="3"/>
+            <circle cx="165" cy="53" r="8" fill="var(--accent)" opacity=".25"/>
+            <text x="165" y="100" class="af-l">90 MHz benchtop</text>
+            <!-- to the live stream of spectra -->
+            <path class="af-arrow" d="M214 52 L244 52"/>
+            <g transform="translate(252,16)" fill="none" stroke="var(--trace)" stroke-width="1.8">
+              <path opacity=".35" d="M0 30 L18 30 Q24 30 28 14 Q32 30 38 30 L54 30 Q60 30 64 18 Q68 30 74 30 L92 30"/>
+              <path opacity=".6"  transform="translate(0,24)" d="M0 30 L18 30 Q24 30 28 10 Q32 30 38 30 L54 30 Q60 30 64 16 Q68 30 74 30 L92 30"/>
+              <path opacity="1"   transform="translate(0,48)" stroke="var(--accent-2)" d="M0 30 L18 30 Q24 30 28 12 Q32 30 38 30 L54 30 Q60 30 64 14 Q68 30 74 30 L92 30"/>
             </g>
-            <line x1="300" y1="44" x2="300" y2="150" stroke="var(--grid)"/>
-            <path class="af-arrow" d="M300 150 L378 150"/>
-            <text x="340" y="168" class="af-s">time →</text>
+            <text x="298" y="100" class="af-s">spectra · time →</text>
           </svg>
           <div class="figcap">live, in&nbsp;situ reaction monitoring on a bench-side instrument</div>
         </div>
@@ -484,7 +481,7 @@
           <p>re-render at 600 MHz — clean &amp; readable</p></div>
       </div>
       <div class="note-strip" style="margin-top:18px"><b>Field-independent by design:</b> the 8 shifts, 28 couplings and 8 degeneracies
-        fully determine the molecule's ¹H spectrum at <i>every</i> field — recover them once from a cheap trace, render anywhere.</div>
+        fully determine the molecule's ¹H spectrum at <i>every</i> field.</div>
     </div>
     <aside class="notes">The deliverable is the spin system: 8 chemical shifts δ (matrix diagonal), 28 scalar couplings J
       (symmetric off-diagonal), and 8 degeneracies n (protons per group). These are field-independent parameters — once you
@@ -531,7 +528,6 @@
           <div class="figcap"><b style="color:var(--accent)">nodes</b> = 8 spin groups (δ, n) · <b style="color:var(--accent-3)">edges</b> = couplings J</div>
         </div>
       </div>
-      <div class="note-strip" style="margin-top:14px"><b>Interdisciplinary by design:</b> cheminformatics · reference NMR chemistry · quantum spin physics · deep learning.</div>
     </div>
     <aside class="notes">Why fix at 8 groups: a spin system is a graph (nodes = groups, edges = couplings); fixing the node count
       at 8 means the model always emits the same-shape output — no variable graph size to handle. Then the three-stage pipeline
@@ -669,7 +665,7 @@
       <div class="kicker">Stage 3 · pyspin — the physics engine</div>
       <h2>Spin systems → exact spectra, from first principles.</h2>
       <div class="mjx-wrap" style="margin-top:10px">
-        $$\hat H \;=\; \underbrace{\sum_i \sigma_i\,\hat I_{z,i}}_{\text{Zeeman — shifts}} \;+\; \underbrace{\sum_{i&lt;j} J_{ij}\,\hat{\mathbf I}_i\!\cdot\!\hat{\mathbf I}_j}_{\text{coupling}}$$
+        $$\hat H \;=\; \underbrace{-\,\gamma \sum_i (1-\sigma_i)\,\mathbf B\cdot\hat{\mathbf I}_i}_{\text{Zeeman (shifts)}} \;-\; \underbrace{\sum_{i&lt;j} J_{ij}\,\hat{\mathbf I}_i\!\cdot\!\hat{\mathbf I}_j}_{\text{coupling}}$$
       </div>
       <div class="twocol" style="margin-top:8px;align-items:center">
         <div>
@@ -680,21 +676,23 @@
           </ul>
           <div class="metric" style="margin-top:12px;max-width:320px"><div class="v">1500 / sec</div><div class="l">spin systems → spectra (open-source engine)</div></div>
         </div>
-        <div class="fig-card" style="align-self:stretch;justify-content:center">
-          <svg viewBox="0 0 280 180" style="width:100%;height:auto;overflow:visible" aria-hidden="true">
-            <line x1="10" y1="140" x2="270" y2="140" class="gw"/>
-            <!-- eigenvalue transitions → stick spectrum -->
+        <div class="fig-card" style="align-self:center;width:100%">
+          <svg viewBox="0 0 280 150" style="width:100%;height:auto;max-height:240px;overflow:visible" aria-hidden="true">
+            <line x1="10" y1="120" x2="270" y2="120" class="gw"/>
+            <!-- one transition stick per peak -->
             <g stroke="var(--ink-faint)" stroke-width="2">
-              <line x1="64" y1="140" x2="64" y2="74"/><line x1="74" y1="140" x2="74" y2="50"/><line x1="84" y1="140" x2="84" y2="74"/>
-              <line x1="150" y1="140" x2="150" y2="88"/><line x1="160" y1="140" x2="160" y2="62"/><line x1="170" y1="140" x2="170" y2="88"/>
-              <line x1="216" y1="140" x2="216" y2="70"/></g>
-            <!-- Lorentzian-broadened spectrum -->
-            <path fill="none" stroke="var(--accent-2)" stroke-width="2.6" d="M10 140 L52 140
-              Q60 140 64 96 Q70 38 74 38 Q78 38 84 96 Q90 140 120 140
-              L138 140 Q146 140 150 100 Q156 52 160 52 Q164 52 170 100 Q176 140 200 140
-              Q210 140 216 84 Q221 60 226 84 Q231 140 270 140"/>
-            <text x="74" y="172" class="af-s">transitions (sticks)</text>
-            <text x="220" y="172" class="af-s" fill="var(--accent-2)">+ Lorentzian = spectrum</text>
+              <line x1="60" y1="120" x2="60" y2="70"/>
+              <line x1="112" y1="120" x2="112" y2="52"/>
+              <line x1="170" y1="120" x2="170" y2="78"/>
+              <line x1="222" y1="120" x2="222" y2="64"/></g>
+            <!-- Lorentzian-broadened envelope: one symmetric peak per stick -->
+            <path fill="none" stroke="var(--accent-2)" stroke-width="2.6" d="M10 120 L40 120
+              C50 120 55 70 60 70 C65 70 70 120 80 120 L94 120
+              C103 120 108 52 112 52 C116 52 121 120 130 120 L150 120
+              C160 120 165 78 170 78 C175 78 180 120 190 120 L204 120
+              C213 120 217 64 222 64 C227 64 231 120 240 120 L270 120"/>
+            <text x="60" y="142" class="af-s">transitions (sticks)</text>
+            <text x="210" y="142" class="af-s" fill="var(--accent-2)">broadened spectrum</text>
           </svg>
           <div class="figcap">eigenvalues → allowed transitions → stick spectrum → broadened ¹H trace</div>
         </div>
@@ -909,7 +907,6 @@
           <div id="qr" title="labounad.github.io/spinhance"></div>
           <div>
             <div class="sitelink">labounad.github.io/spinhance</div>
-            <div class="faint" style="font-size:14px;margin-top:6px">Every reload simulates a new molecule, live in your browser.</div>
           </div>
         </div>
       </div>
