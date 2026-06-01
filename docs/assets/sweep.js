@@ -95,8 +95,12 @@
       `<span class="mono smi" id="smilesCopy" title="Click to copy SMILES">${mol.smiles || ""}</span>` +
       `<span class="copied" id="copiedMsg" style="opacity:0">✓ copied</span>`;
     buildMatrix();
-    // hand the molecule to the 3D viewer module
-    window.__heroMol = { smiles: mol.smiles, id: mol.chembl_id || mol.id, xyz: mol.xyz };
+    // hand the molecule to the 3D viewer and spin graph modules
+    window.__heroMol = {
+      smiles: mol.smiles, id: mol.chembl_id || mol.id, xyz: mol.xyz,
+      shifts: mol.shifts, couplings: mol.couplings,
+      degeneracy: mol.degeneracy, n_groups: mol.n_groups,
+    };
     window.dispatchEvent(new CustomEvent("spinhance:molecule"));
   }
 
