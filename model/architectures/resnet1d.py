@@ -61,13 +61,15 @@ class BasicBlock1D(nn.Module):
 
 
 class ResNet1DEncoder(nn.Module):
-    """(B, P) -> feature sequence (B, C, L)."""
+    """(B, P) or (B, in_channels, P) -> feature sequence (B, C, L)."""
 
     def __init__(self, stem_channels=32, stage_channels=(64, 128, 256, 512),
-                 blocks_per_stage=(2, 2, 2, 2), stem_kernel=15, stem_stride=4):
+                 blocks_per_stage=(2, 2, 2, 2), stem_kernel=15, stem_stride=4,
+                 in_channels=1):
         super().__init__()
+        self.in_channels = in_channels
         self.stem = nn.Sequential(
-            nn.Conv1d(1, stem_channels, stem_kernel, stride=stem_stride,
+            nn.Conv1d(in_channels, stem_channels, stem_kernel, stride=stem_stride,
                       padding=stem_kernel // 2, bias=False),
             _norm(stem_channels), nn.ReLU(inplace=True),
             nn.MaxPool1d(3, stride=2, padding=1))
@@ -81,8 +83,9 @@ class ResNet1DEncoder(nn.Module):
         self.stages = nn.Sequential(*stages)
         self.out_dim = in_c
 
-    def forward(self, x):              # x: (B, P)
-        x = x.unsqueeze(1)             # (B, 1, P)
+    def forward(self, x):              # x: (B, P) or (B, in_channels, P)
+        if x.dim() == 2:               # (B, P) -> (B, 1, P)
+            x = x.unsqueeze(1)
         x = self.stem(x)
         return self.stages(x)          # (B, C, L)
 
