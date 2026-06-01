@@ -51,7 +51,8 @@ def _pairs_to_matrix(vec, presence, G):
 class SpectrumMatrixDataset(Dataset):
     def __init__(self, records, vocab: DegeneracyVocab, standardizer: Standardizer,
                  spectrum_field="spec90", augment=False, ppm_from=0.0, ppm_to=12.0,
-                 aug_kwargs=None, seed=0):
+                 aug_kwargs=None, seed=0, region_tokens=False, region_max=48,
+                 region_kwargs=None):
         self.records = list(records)
         self.vocab = vocab
         self.std = standardizer
@@ -60,6 +61,9 @@ class SpectrumMatrixDataset(Dataset):
         self.ppm_from, self.ppm_to = ppm_from, ppm_to
         self.aug_kwargs = aug_kwargs or {}
         self.seed = seed
+        self.region_tokens = region_tokens
+        self.region_max = region_max
+        self.region_kwargs = region_kwargs or {}
         # Precompute canonical orders once (avoids an O(G log G) lexsort per epoch)
         self._orders = [canonical_order(r["shifts"], r["couplings"], r["degeneracy"])
                         for r in self.records]
@@ -85,7 +89,7 @@ class SpectrumMatrixDataset(Dataset):
         c_mat, c_mask = _pairs_to_matrix(t["j_mag"], t["j_presence"], G)
         deg_values = self.vocab.from_index(t["deg_class"]).astype(np.int64)
 
-        return {
+        item = {
             "spectrum":           torch.as_tensor(inp),                  # (P,)
             "spectrum_ref":       torch.as_tensor(clean),                # (P,)
             "shifts":             torch.from_numpy(t["shifts"]),         # (G,) standardized
@@ -97,3 +101,12 @@ class SpectrumMatrixDataset(Dataset):
             "smiles":             r.get("smiles"),
             "bucket_key":         self.bucket_keys[i],
         }
+        if self.region_tokens:
+            # extract from the (augmented) INPUT so regions match what the model sees
+            from model.data.regions import extract_support_regions
+            feats, mask = extract_support_regions(
+                inp, self.ppm_from, self.ppm_to,
+                max_regions=self.region_max, **self.region_kwargs)
+            item["region_features"] = torch.from_numpy(feats)            # (R_max, F)
+            item["region_mask"] = torch.from_numpy(mask)                 # (R_max,)
+        return item

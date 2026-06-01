@@ -171,27 +171,43 @@ def _list_checkpoints(run_prefix: str) -> list[str]:
     return head + epochs
 
 
-def _download_ckpt(session: str, run_prefix: str, which: str) -> Path:
+@st.cache_data(ttl=20)
+def _ckpt_version(run_prefix: str, which: str) -> str:
+    """S3 identity (date/time/size) of the checkpoint — a cache-buster so that a
+    checkpoint REWRITTEN during a still-running job invalidates both the locally
+    downloaded file and the cached model object (otherwise the prediction tool
+    serves stale weights that disagree with the live val metrics)."""
+    r = subprocess.run(["aws", "s3", "ls", f"{run_prefix}/checkpoints/{which}.pt",
+                        "--profile", AWS_PROFILE, "--region", AWS_REGION],
+                       capture_output=True, text=True, timeout=30)
+    return r.stdout.strip() or "missing"        # "<date> <time> <size> <name>"
+
+
+def _download_ckpt(session: str, run_prefix: str, which: str, version: str) -> Path:
     local = CACHE_DIR / session / f"{which}.pt"
+    ver_file = local.with_suffix(".ver")
     local.parent.mkdir(parents=True, exist_ok=True)
-    if not local.exists():
+    cached = ver_file.read_text() if ver_file.exists() else None
+    if (not local.exists()) or cached != version:        # re-download when S3 changed
         r = subprocess.run(["aws", "s3", "cp", f"{run_prefix}/checkpoints/{which}.pt",
                             str(local), "--profile", AWS_PROFILE, "--region", AWS_REGION],
                            capture_output=True, timeout=300)
         if r.returncode != 0:
             local.unlink(missing_ok=True)
             raise RuntimeError(r.stderr.decode()[:300])
+        ver_file.write_text(version)
     return local
 
 
 @st.cache_resource(show_spinner="Loading model weights…")
-def _load_model(session: str, run_prefix: str, which: str):
-    """Rebuild model + standardizer from a checkpoint via the architecture registry."""
+def _load_model(session: str, run_prefix: str, which: str, version: str):
+    """Rebuild model + standardizer from a checkpoint via the architecture registry.
+    ``version`` is part of the cache key so a new checkpoint invalidates the model."""
     import torch
     from model.architectures import build_architecture
     from model.data.standardization import DegeneracyVocab, Standardizer
 
-    local = _download_ckpt(session, run_prefix, which)
+    local = _download_ckpt(session, run_prefix, which, version)
     ckpt = torch.load(str(local), map_location="cpu", weights_only=False)
     vocab = DegeneracyVocab()
     std = Standardizer().load_state_dict(ckpt["standardizer"])
@@ -207,24 +223,29 @@ def _load_model(session: str, run_prefix: str, which: str):
 
 @st.cache_data(show_spinner="Loading molecules (filtering by 90 MHz spectra)…")
 def _load_all_records(json_path: str, spectra_root: str, field: int) -> list[dict]:
+    # Return RAW records (no canonical reorder). CRITICAL: make_splits must see the
+    # SAME records the trainer split on — canonically reordering the spin groups here
+    # shifts make_splits' fold assignment, which made the GUI's "test" set differ from
+    # the real training test set (leaking trained-on molecules into the GUI view).
+    # The reorder, needed only for matrix-display alignment with predictions, is applied
+    # per-molecule in _test_records AFTER the split.
     from model.data.records import load_records
-    from model.data.splits import canonical_order, reorder
-    raw = load_records(json_path, spectra_root, fields=(field,), require_spectra=True)
-    records = []
-    for r in raw:
-        order = canonical_order(r["shifts"], r["couplings"], r["degeneracy"])
-        s, c, d = reorder(r["shifts"], r["couplings"], r["degeneracy"], order)
-        records.append({**r, "shifts": s, "couplings": c, "degeneracy": d})
-    return records
+    return load_records(json_path, spectra_root, fields=(field,), require_spectra=True)
 
 
 @st.cache_data(show_spinner="Computing test split…")
 def _test_records(json_path: str, spectra_root: str, field: int,
                   seed: int, compute_scaffold: bool) -> list[dict]:
-    from model.data.splits import make_splits
-    records = _load_all_records(json_path, spectra_root, field)
+    from model.data.splits import canonical_order, make_splits, reorder
+    records = _load_all_records(json_path, spectra_root, field)          # raw, as the trainer
     assignment, _ = make_splits(records, seed=seed, compute_scaffold=compute_scaffold)
-    return [r for r in records if assignment.get(r["mol_id"]) == "test"]
+    test = [r for r in records if assignment.get(r["mol_id"]) == "test"]
+    out = []                                                             # reorder for DISPLAY only
+    for r in test:
+        o = canonical_order(r["shifts"], r["couplings"], r["degeneracy"])
+        s, c, d = reorder(r["shifts"], r["couplings"], r["degeneracy"], o)
+        out.append({**r, "shifts": s, "couplings": c, "degeneracy": d})
+    return out
 
 
 @st.cache_data(show_spinner="Simulating spectrum…")
@@ -236,10 +257,31 @@ def _simulate(shifts_t: tuple, couplings_t: tuple, degeneracy_t: tuple,
     return ppm_axis.astype(np.float64), intensity.astype(np.float64)
 
 
-def _run_inference(model, intensity: np.ndarray, std, vocab) -> dict:
+def _run_inference(model, intensity: np.ndarray, std, vocab, region_tokens: bool = False) -> dict:
+    """Run the model on one 90 MHz spectrum. If the model was trained WITH support
+    -region tokens, extract + pass them too (otherwise its region branch is starved
+    and predictions are garbage — a train/serve mismatch)."""
     import torch
     from model.evaluation.metrics import decode, _np_pred
-    x = torch.from_numpy(intensity.astype(np.float32)).unsqueeze(0)
+    inten = intensity.astype(np.float32)
+    spec = torch.from_numpy(inten).unsqueeze(0)
+    if region_tokens:
+        from model.data.regions import extract_support_regions
+        from model.schemas import SpinBatch
+        from model.schemas.batch import RegionTokenBatch
+        feats, mask = extract_support_regions(inten, 0.0, 12.0, max_regions=48)
+        G = 8
+        x = SpinBatch(
+            spectrum=spec, spectrum_ref=spec,
+            shifts=torch.zeros(1, G), couplings=torch.zeros(1, G, G),
+            coupling_mask=torch.zeros(1, G, G),
+            degeneracy_classes=torch.zeros(1, G, dtype=torch.long),
+            degeneracy_values=torch.ones(1, G, dtype=torch.long),
+            molecule_ids=["q"],
+            region_tokens=RegionTokenBatch(features=torch.from_numpy(feats)[None],
+                                           mask=torch.from_numpy(mask)[None]))
+    else:
+        x = spec
     with torch.no_grad():
         out = model(x)
     return decode(_np_pred(out), std, vocab)
@@ -448,11 +490,13 @@ def _page_analysis() -> None:
 
     # ── Load model (best/last) ────────────────────────────────────────────────
     st.divider()
+    version = _ckpt_version(run_prefix, which)       # cache-buster: re-loads if S3 changed
     try:
-        model, std, vocab, cfg = _load_model(session, run_prefix, which)
+        model, std, vocab, cfg = _load_model(session, run_prefix, which, version)
     except Exception as exc:
         st.error(f"Failed to load {which}.pt: {exc}")
         return
+    st.caption(f"Loaded `{which}.pt` · {version.rsplit(' ', 1)[0] if version != 'missing' else version}")
 
     if not Path(json_path).exists() or not (Path(spectra_root) / "90MHz").exists():
         st.info("Set a valid Molecules JSON + spectra root in the sidebar to browse the test set.")
@@ -460,6 +504,9 @@ def _page_analysis() -> None:
 
     seed = int(cfg.get("training", {}).get("seed", 0))
     compute_scaffold = (cfg.get("data", {}).get("split", "none") == "scaffold")
+    use_regions = bool(cfg.get("data", {}).get("region_tokens", False))   # model trained w/ region tokens?
+    if use_regions:
+        st.caption("ℹ️ This model uses **support-region tokens** — the inspector extracts + feeds them.")
     try:
         all_recs = _load_all_records(json_path, spectra_root, 90)
         test_recs = _test_records(json_path, spectra_root, 90, seed, compute_scaffold)
@@ -491,7 +538,7 @@ def _page_analysis() -> None:
                 _, in90 = _simulate(tuple(rec["shifts"].tolist()),
                                     tuple(map(tuple, rec["couplings"].tolist())),
                                     tuple(rec["degeneracy"].tolist()), 90)
-                dec = _run_inference(model, in90, std, vocab)
+                dec = _run_inference(model, in90, std, vocab, region_tokens=use_regions)
             st.session_state["mol_pred"] = {"dec": dec, "mol_id": rec["mol_id"]}
 
     with draw_col:
