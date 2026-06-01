@@ -97,10 +97,10 @@
     { m: "022", arch: "spingraph + surrogate-spectral", data: "64k ChEMBL", p: "10M", shift: "0.064", j: "0.91", f1: "0.916", deg: "0.928", st: "superseded" },
     { m: "025", arch: "spingraph, shift-2×, WSD LR", data: "64k ChEMBL", p: "10M", shift: "0.037", j: "0.59", f1: "0.940", deg: "0.945", st: "production" },
     { m: "026", arch: "025 + peak channel + soft-equiv", data: "64k ChEMBL", p: "10M", shift: "0.037", j: "0.65", f1: "0.940", deg: "0.960", st: "done" },
-    { m: "light·025", arch: "025 recipe", data: "500k PubChem", p: "10M", shift: "0.057", j: "0.76", f1: "0.943", deg: "0.958", st: "done · ep13" },
-    { m: "light·026", arch: "026 recipe", data: "500k PubChem", p: "10M", shift: "0.100", j: "1.48", f1: "0.848", deg: "0.882", st: "running · ep2" },
-    { m: "xl·025", arch: "025 recipe, xl", data: "3.2M PubChem", p: "57M", shift: "—", j: "—", f1: "—", deg: "—", st: "running" },
-    { m: "xl·026", arch: "026 recipe, xl", data: "3.2M PubChem", p: "57M", shift: "—", j: "—", f1: "—", deg: "—", st: "running" },
+    { m: "light·025", arch: "025 recipe", data: "500k PubChem", p: "10M", shift: "0.032", j: "0.53", f1: "0.970", deg: "0.979", st: "done · ep30" },
+    { m: "light·026", arch: "026 recipe", data: "500k PubChem", p: "10M", shift: "0.035", j: "0.54", f1: "0.967", deg: "0.979", st: "done · ep30" },
+    { m: "xl·025", arch: "025 recipe, xl", data: "1M PubChem", p: "57M", shift: "—", j: "—", f1: "—", deg: "—", st: "running" },
+    { m: "xl·026", arch: "026 recipe, xl", data: "1M PubChem", p: "57M", shift: "—", j: "—", f1: "—", deg: "—", st: "running" },
   ];
   function initTable() {
     const host = $("#cmpTable"); if (!host) return;
@@ -316,10 +316,12 @@
     }
 
     // ---- Select ----
-    function select(idx) {
+    function select(idx, scroll) {
       tileCont.querySelectorAll(".sv-tile").forEach(function(t, i) {
         t.classList.toggle("sv-active", i === idx);
-        if (i === idx) t.scrollIntoView({block:"nearest"});
+        // only scroll on a user click — never on the initial select(0), which
+        // would otherwise yank the whole page down to this viewer on load/refresh
+        if (i === idx && scroll) t.scrollIntoView({block:"nearest", inline:"nearest"});
       });
       current = mols[idx]; hoverLabel = null;
       headId.textContent  = current.id;
@@ -372,7 +374,7 @@
         var sub  = document.createElement("div"); sub.className = "sv-tile-sub";
         sub.textContent = mol.formula + " · " + mol.n_protons + "H";
         body.append(idEl, sub); tile.append(dot, body);
-        tile.addEventListener("click", function() { select(i); });
+        tile.addEventListener("click", function() { select(i, true); });
         tileCont.appendChild(tile);
       });
       if (mols.length) select(0);
