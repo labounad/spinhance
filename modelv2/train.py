@@ -156,7 +156,9 @@ def _s3_split(uri):
 def _s3_client():
     import boto3
     region = os.environ.get("AWS_REGION", "us-west-2")
-    return boto3.client("s3", region_name=region)
+    profile = os.environ.get("AWS_PROFILE", "hack-scripps")
+    session = boto3.Session(profile_name=profile, region_name=region)
+    return session.client("s3")
 
 
 def s3_put_bytes(uri, data, content_type="application/octet-stream"):
@@ -729,20 +731,23 @@ def head_grad_norms(model):
 # Probe set materialization + per-epoch probe artifacts
 # =============================================================================
 
-def materialize_diagnostic_set(records, assignment, cache, cfg, n=500, seed=0):
-    """Sample ``n`` held-out TEST molecules (seeded, fixed) and their spectra.
+def materialize_diagnostic_set(test_records, cache, cfg, n=500, seed=0):
+    """Sample up to ``n`` molecules from the held-out test fold, canonically ordered.
 
-    Returns (diag_records_for_json, spectra_fp16). Materializing server-side is
-    the guarantee the GUI never touches a trained-on molecule."""
-    test = [r for r in records if assignment.get(r["mol_id"]) == "test"]
+    Returns (diag_records_for_json, spectra_fp16).  The caller passes
+    ``test_records`` already filtered to the test fold — no assignment dict
+    needed here.  Materializing server-side is the guarantee the GUI never
+    touches a trained-on molecule."""
     rng = np.random.default_rng(seed)
-    if len(test) > n:
-        idx = rng.choice(len(test), n, replace=False)
-        test = [test[i] for i in sorted(idx)]
+    recs = test_records
+    if len(recs) > n:
+        idx = rng.choice(len(recs), n, replace=False)
+        recs = [recs[i] for i in sorted(idx)]
+
     out_records, specs = [], []
-    for r in test:
-        order = D.canonical_order(r["shifts"], r["couplings"], r["degeneracy"])
-        s, c, d = D.reorder(r["shifts"], r["couplings"], r["degeneracy"], order)
+    for r in recs:
+        s, c, d = D.reorder(r["shifts"], r["couplings"], r["degeneracy"],
+                             D.canonical_order(r["shifts"], r["couplings"], r["degeneracy"]))
         out_records.append({
             "mol_id": r["mol_id"], "index": r.get("index"),
             "smiles": r.get("smiles"), "chembl_id": r.get("chembl_id"),
@@ -751,11 +756,12 @@ def materialize_diagnostic_set(records, assignment, cache, cfg, n=500, seed=0):
             "degeneracy": [int(x) for x in d],
         })
         if cache is not None and r["mol_id"] in cache:
-            specs.append(cache.get(r["mol_id"]))
+            specs.append(cache[r["mol_id"]])
         elif r.get(cfg.spectrum_field) is not None:
             specs.append(np.asarray(r[cfg.spectrum_field], dtype=np.float32))
         else:
             specs.append(np.zeros(cfg.points, dtype=np.float32))
+
     spectra = np.stack(specs).astype(np.float16) if specs else np.zeros((0, cfg.points), np.float16)
     return out_records, spectra
 
@@ -1016,7 +1022,7 @@ def fit(records, assignment, cfg: TrainConfig, out_dir=None, cache=None,
 
     # held-out diagnostic probe set (server-side guarantee of "never trained on")
     diag_records, diag_spectra = materialize_diagnostic_set(
-        records, assignment, cache, cfg, n=500, seed=cfg.seed)
+        by_fold["test"], cache, cfg, n=500, seed=cfg.seed)
     store.write_json("diagnostic_set.json", diag_records)
     store.write_npy("diagnostic_spectra.npy", diag_spectra)
     baseline = constant_mean_baseline(train_recs, vocab, std)
@@ -1244,9 +1250,10 @@ def run_dry_run(args):
     else:
         print("[dry-run] spectra: skipped (no --spectra given or path missing)")
 
-    diag, _spec = materialize_diagnostic_set(usable, assignment, None,
+    test_recs = [r for r in usable if assignment.get(r["mol_id"]) == "test"]
+    diag, _spec = materialize_diagnostic_set(test_recs, None,
                                              TrainConfig(points=args.points, seed=args.seed),
-                                             n=min(500, len(usable)), seed=args.seed)
+                                             n=min(500, len(test_recs)), seed=args.seed)
     print(f"[dry-run] diagnostic set: {len(diag)} held-out test molecules")
     print("[dry-run] PASSED — data path is sound, no torch touched.")
 

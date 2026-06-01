@@ -150,8 +150,12 @@ def load_metrics(root, _bust=0):
         if "shift_mae_ppm" in rec and "j_mae_hz" in rec:
             rec["score"] = rec["shift_mae_ppm"] + rec["j_mae_hz"] / 10.0
         flat.append(rec)
-    df = pd.DataFrame(flat).drop_duplicates("epoch", keep="last").sort_values("epoch")
-    return df.reset_index(drop=True)
+    if not flat:
+        return pd.DataFrame(columns=["epoch"])
+    df = pd.DataFrame(flat)
+    if "epoch" not in df.columns:
+        return pd.DataFrame(columns=["epoch"])
+    return df.drop_duplicates("epoch", keep="last").sort_values("epoch").reset_index(drop=True)
 
 
 @st.cache_data(show_spinner=False)
@@ -163,9 +167,7 @@ def load_events(root, _bust=0):
 
 @st.cache_data(show_spinner=True)
 def load_diagnostic_set(root):
-    recs = read_json(root, "diagnostic_set.json", [])
-    spectra = read_npy(root, "diagnostic_spectra.npy")
-    return recs, (spectra if spectra is not None else np.zeros((0, 0), np.float16))
+    return read_json(root, "diagnostic_set.json", [])
 
 
 @st.cache_resource(show_spinner="Loading checkpoint…")
@@ -462,8 +464,21 @@ def page_analysis():
         _molecule_inspector(sroot, sel_epoch, best_epoch, cfg)
 
 
+def _simulate_spectrum(shifts, couplings, degeneracy, ppm_from=0.0, ppm_to=12.0):
+    """Return a 16384-point float32 spectrum array, or None on failure."""
+    try:
+        from simulation.pyspin.composite import simulate_spectrum_composite
+        _, spec = simulate_spectrum_composite(
+            shifts, couplings, [int(d) for d in degeneracy], 90.0,
+            ppm_from=ppm_from, ppm_to=ppm_to)
+        return spec.astype(np.float32)
+    except Exception as e:
+        st.warning(f"Spectrum simulation failed: {e}")
+        return None
+
+
 def _molecule_inspector(sroot, sel_epoch, best_epoch, cfg):
-    recs, spectra = load_diagnostic_set(sroot)
+    recs = load_diagnostic_set(sroot)
     if not recs:
         st.info("No diagnostic_set.json found for this session.")
         return
@@ -478,17 +493,24 @@ def _molecule_inspector(sroot, sel_epoch, best_epoch, cfg):
     shifts = np.asarray(rec["shifts"], float)
     coup = np.asarray(rec["couplings"], float)
     deg = np.asarray(rec["degeneracy"])
-    ppm_from = float(cfg.get("ppm_from", 0.0)); ppm_to = float(cfg.get("ppm_to", 12.0))
+    ppm_from = float(cfg.get("ppm_from", 0.0))
+    ppm_to = float(cfg.get("ppm_to", 12.0))
+
+    with st.spinner("Simulating ground-truth spectrum…"):
+        gt_spec = _simulate_spectrum(shifts, coup, deg, ppm_from, ppm_to)
 
     run = st.button("▶ Run inference", type="primary")
     col_gt, col_pred = st.columns(2)
+
     with col_gt:
         st.markdown("#### Ground truth")
-        st.plotly_chart(fig_matrix(shifts, coup, deg, "GT matrix (diag δ ppm · off-diag J Hz)"),
+        st.plotly_chart(fig_matrix(shifts, coup, deg,
+                                   "GT matrix (diag δ ppm · off-diag J Hz)"),
                         use_container_width=True)
-        if idx < len(spectra):
-            st.plotly_chart(fig_spectrum(np.asarray(spectra[idx], float), ppm_from, ppm_to,
-                                         "Input spectrum (90 MHz)"), use_container_width=True)
+        if gt_spec is not None:
+            st.plotly_chart(fig_spectrum(gt_spec.astype(float), ppm_from, ppm_to,
+                                         "GT spectrum (90 MHz, simulated)"),
+                            use_container_width=True)
 
     if run:
         try:
@@ -497,27 +519,38 @@ def _molecule_inspector(sroot, sel_epoch, best_epoch, cfg):
             st.error(f"Could not load checkpoint: {e}")
             return
         import torch
-        x = torch.from_numpy(np.asarray(spectra[idx], np.float32)).unsqueeze(0)
+        x_np = gt_spec if gt_spec is not None else np.zeros(cfg.get("points", 16384), np.float32)
+        x = torch.from_numpy(x_np.astype(np.float32)).unsqueeze(0)
         with torch.no_grad():
             pred = model(x)
         pred_np = {k: v.float().cpu().numpy() for k, v in pred.items()}
         dec = T.decode(pred_np, std, vocab)
-        # per-molecule metrics against the GT (standardized targets)
         tgt = std.transform(D.encode_target(
             {"shifts": shifts, "couplings": coup, "degeneracy": deg}, vocab))
         met = T.compute_metrics(pred_np, {k: tgt[k][None] for k in
                                           ("shifts", "j_mag", "j_presence", "deg_class")},
                                 std, vocab)
-        st.session_state["pred"] = {"mol": rec["mol_id"], "dec": dec, "met": met}
+        with st.spinner("Simulating predicted spectrum…"):
+            pred_spec = _simulate_spectrum(dec["shifts"][0], dec["couplings"][0],
+                                           dec["degeneracy"][0], ppm_from, ppm_to)
+        st.session_state["pred"] = {
+            "mol": rec["mol_id"], "dec": dec, "met": met, "pred_spec": pred_spec,
+        }
 
     pred_state = st.session_state.get("pred")
     with col_pred:
         st.markdown("#### Model prediction")
         if pred_state and pred_state["mol"] == rec["mol_id"]:
-            dec = pred_state["dec"]; met = pred_state["met"]
+            dec = pred_state["dec"]
+            met = pred_state["met"]
+            pred_spec = pred_state.get("pred_spec")
             st.plotly_chart(fig_matrix(dec["shifts"][0], dec["couplings"][0],
                                        dec["degeneracy"][0], "Predicted matrix"),
                             use_container_width=True)
+            if pred_spec is not None:
+                st.plotly_chart(fig_spectrum(pred_spec.astype(float), ppm_from, ppm_to,
+                                             "Predicted spectrum (90 MHz, simulated)"),
+                                use_container_width=True)
             m = st.columns(4)
             m[0].metric("shift MAE", f"{met['shift_mae_ppm']:.3f} ppm")
             m[1].metric("J MAE", f"{met['j_mae_hz']:.2f} Hz")
