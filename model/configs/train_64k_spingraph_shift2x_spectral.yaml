@@ -1,0 +1,67 @@
+# spingraph_decoder, shift-weighted 2x + early spectral schedule (WITH Stage 2).
+# Tweaks vs the production canonical recipe:
+#   - matrix sub-weights: shift 2.0 (2x), jmag 1.0, presence 0.5, deg 0.5
+#   - surrogate_spectral on FROM ep0 at weight 0.1, hold 10 ep, ramp over 15 ep
+#     (ep10->25) to 0.4, then hold 0.4
+# Pair with train_64k_spingraph_shift2x_matrixonly.yaml (identical except no Stage 2)
+# to isolate the spectral term's effect under the new shift weighting.
+run:
+  name: spingraph_shift2x_spectral
+  output_dir: model/runs
+
+data:
+  records: mol_to_spin_system/data/spin_systems_chembl.json
+  spectra: simulation/data/spectra
+  field: 90
+  split: none
+
+model:
+  name: spingraph_decoder
+  size: medium
+  dim: 256
+  enc_layers: 2
+  dec_layers: 4
+  n_heads: 8
+  dropout: 0.1
+
+loss:
+  name: composite
+  terms:
+    - name: matrix
+      weight: 1.0
+      weights:                  # shift weighted 2x
+        shift: 2.0
+        jmag: 1.0
+        presence: 0.5
+        deg: 0.5
+    - name: surrogate_spectral
+      weight: 0.4               # final (post-ramp) weight
+      init_weight: 0.1          # held from ep0
+      start_epoch: 10           # hold 0.1 for 10 epochs, then ramp
+      ramp_epochs: 15           # 0.1 -> 0.4 over ep10..25, then hold 0.4
+      checkpoint: model_artifacts/surrogate/session012_best.pt
+      field: 90
+      w1_weight: 1.0
+      cosine_weight: 0.5
+      use_clean_target: true
+
+training:
+  epochs: 100
+  batch_size: 256
+  lr: 0.0003
+  weight_decay: 0.01
+  amp: bf16
+  warmup_frac: 0.05
+  lr_stable_frac: 0.60
+  lr_min_factor: 0.40
+  grad_clip: 1.0
+  patience: 20
+  num_workers: 8
+  val_every: 1
+  seed: 0
+
+diagnostics:
+  enabled: true
+  log_every_steps: 50
+  probe_every_epochs: 5
+  probe_count: 16

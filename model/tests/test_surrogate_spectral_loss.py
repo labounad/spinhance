@@ -116,6 +116,22 @@ def test_composite_ramp_gates_by_epoch(tmp_path):
     assert comp(out, batch).metrics["weight/surrogate_spectral"] == 0.4   # fully ramped
 
 
+def test_composite_init_weight_hold_then_ramp(tmp_path):
+    """init_weight: hold a nonzero floor, then ramp from it to `weight` (not from 0)."""
+    terms = [{"name": "matrix", "weight": 1.0},
+             {"name": "surrogate_spectral", "weight": 0.4, "init_weight": 0.1,
+              "start_epoch": 10, "ramp_epochs": 15,
+              "checkpoint": _tiny_surrogate_ckpt(tmp_path), "field": 90}]
+    comp = build_composite(terms, shift_mean=5.0, shift_std=2.0, j_mean=7.0, j_std=4.0)
+    t = comp.terms[1]
+    sched = {}
+    for e in (0, 5, 9, 10, 24, 25, 50):
+        comp.set_epoch(e); sched[e] = round(comp._weight(t), 3)
+    assert sched[0] == 0.1 and sched[9] == 0.1          # held floor before ramp
+    assert 0.1 < sched[10] < 0.4                          # ramp begins from the floor
+    assert sched[24] == 0.4 and sched[50] == 0.4          # reaches and holds the peak
+
+
 def test_composite_trapezoid_ramps_up_then_down(tmp_path):
     """Trapezoid: ramp in, hold, ramp back out to end_weight."""
     terms = [{"name": "matrix", "weight": 1.0},
