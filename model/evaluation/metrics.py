@@ -38,11 +38,45 @@ def _pairs_to_matrix(jmag, G):
     return M
 
 
-def decode(pred, standardizer, vocab, presence_thresh=0.5):
+def _average_soft_equiv(shifts, se_prob, G, thresh):
+    """Collapse soft-equivalent groups to a shared (averaged) shift. ``se_prob``
+    is (B, E) sigmoid probabilities over triu edges; pairs above ``thresh`` link
+    groups into clusters whose member shifts are replaced by the cluster mean, so
+    a degenerate pair renders as one peak instead of a split doublet. Returns a
+    new (B, G) shift array (input unchanged)."""
+    iu = _triu(G)
+    out = np.array(shifts, dtype=float, copy=True)
+    for b in range(shifts.shape[0]):
+        parent = list(range(G))
+
+        def find(a):
+            while parent[a] != a:
+                parent[a] = parent[parent[a]]
+                a = parent[a]
+            return a
+
+        for e, (i, j) in enumerate(zip(iu[0], iu[1])):
+            if se_prob[b, e] > thresh:
+                parent[find(int(i))] = find(int(j))
+        clusters: dict[int, list[int]] = {}
+        for n in range(G):
+            clusters.setdefault(find(n), []).append(n)
+        for members in clusters.values():
+            if len(members) > 1:
+                out[b, members] = shifts[b, members].mean()
+    return out
+
+
+def decode(pred, standardizer, vocab, presence_thresh=0.5, soft_equiv_thresh=0.5):
     """pred: numpy dict (shifts (B,G), j_mag (B,E), j_presence logits (B,E),
-    deg_logits (B,G,C)). Returns physical dict (shifts ppm, couplings Hz, deg, presence)."""
+    deg_logits (B,G,C), optional soft_equiv (B,E) probs). Returns physical dict
+    (shifts ppm, couplings Hz, deg, presence). When ``soft_equiv`` is present,
+    soft-equivalent groups are averaged to a shared shift (one peak, not a split)."""
     G = pred["shifts"].shape[1]
     shifts = standardizer.inverse_shifts(pred["shifts"])
+    se = pred.get("soft_equiv")
+    if se is not None:
+        shifts = _average_soft_equiv(shifts, se, G, soft_equiv_thresh)
     present = _sigmoid(pred["j_presence"]) > presence_thresh
     jmag = standardizer.inverse_j(pred["j_mag"]) * present
     couplings = _pairs_to_matrix(jmag, G)
@@ -121,12 +155,16 @@ def _np_pred(output):
     iu = _triu(G)
     cm = output.coupling_matrix().detach().float().cpu().numpy()
     pm = output.presence_matrix().detach().float().cpu().numpy()
-    return {
+    pred = {
         "shifts": output.shifts.detach().float().cpu().numpy(),
         "j_mag": cm[:, iu[0], iu[1]],
         "j_presence": pm[:, iu[0], iu[1]],
         "deg_logits": output.degeneracy_logits.detach().float().cpu().numpy(),
     }
+    se = output.auxiliary.get("soft_equiv_logits")
+    if se is not None:                       # (B,E) triu order -> probabilities
+        pred["soft_equiv"] = _sigmoid(se.detach().float().cpu().numpy())
+    return pred
 
 
 def _np_target(batch):

@@ -52,11 +52,13 @@ class SpectrumMatrixDataset(Dataset):
     def __init__(self, records, vocab: DegeneracyVocab, standardizer: Standardizer,
                  spectrum_field="spec90", augment=False, ppm_from=0.0, ppm_to=12.0,
                  aug_kwargs=None, seed=0, region_tokens=False, region_max=48,
-                 region_kwargs=None):
+                 region_kwargs=None, spectra_source=None):
         self.records = list(records)
         self.vocab = vocab
         self.std = standardizer
         self.spectrum_field = spectrum_field
+        # optional stacked-shard source (PubChem 3M+): record["row"] -> spectrum
+        self.spectra_source = spectra_source
         self.augment = augment
         self.ppm_from, self.ppm_to = ppm_from, ppm_to
         self.aug_kwargs = aug_kwargs or {}
@@ -76,7 +78,10 @@ class SpectrumMatrixDataset(Dataset):
 
     def __getitem__(self, i):
         r = self.records[i]
-        clean = _load_spectrum(r, self.spectrum_field)
+        if self.spectra_source is not None:
+            clean = np.asarray(self.spectra_source[r["row"]], dtype=np.float32)
+        else:
+            clean = _load_spectrum(r, self.spectrum_field)
         inp = clean
         if self.augment:
             rng = np.random.default_rng((_WORKER_SEED, self.seed, i))

@@ -26,6 +26,7 @@ class RunCfg:
 class DataCfg:
     records: str = ""
     spectra: str = ""
+    parts: str = ""              # dir of stacked part_<k>.npy shards (PubChem 3M+); ""=per-file
     field: int = 90
     split: str = "scaffold"      # "scaffold" | "none"
     max_mol: int = 0

@@ -1,5 +1,35 @@
 # SpinHance Model Results
 
+## Current status (2026-06-01)
+
+Lineage of the `spingraph_decoder` production model:
+
+| run | model | data | recipe | result | status |
+|---|---|---|---|---|---|
+| 022 | medium 10M | 64k | canonical matrix + surrogate-spectral | 0.064 / 0.91 / 0.916 / 0.928 | superseded |
+| **025** | medium 10M | 64k | matrix, **shift wt 2×**, matrix-only, WSD LR | **0.037 / 0.59 / 0.94 / 0.945** | **production** |
+| 026 | medium 10M | 64k | 025 + **peak channel** + **soft-equiv** | in progress (ep35: 0.066/1.00, soft-equiv flag 99% acc) | running |
+| 027 | **xl 57M** | 500k PubChem | 025 recipe (scale-up baseline) | queued (capacity) | — |
+| 028 | **xl 57M** | 500k PubChem | 026 recipe | queued (capacity) | — |
+
+Metrics are `shift_mae_ppm / j_mae_hz / presence_f1 / deg_balanced_acc`.
+
+**Two architecture ideas added in 026** (`a64f608`):
+- **Peak-channel input** (`model.use_peak_channel`): a 2nd conv input channel — an in-model
+  peak-emphasis map (local maxima > per-sample threshold, Gaussian-smoothed) derived from the
+  spectrum — as a shift-localization prior. No data-pipeline change (no train/serve skew).
+- **Soft-equivalence flag** (`PairwiseEdgeHead` 3rd logit + `SoftEquivLoss` + decode averaging):
+  two groups with the same shift but different couplings (accidental degeneracy) are flagged
+  per-edge (BCE) and their predicted shifts pulled together (consistency penalty) + hard-averaged
+  at decode, so a degenerate pair renders as one peak, not a spurious split doublet. In 026 the
+  flag head hits ~99% acc/recall on the ~8.5% of edges that are soft-equivalent.
+
+**3M+ PubChem scaling** (`ff46b0a`): `SIZE_PRESETS['xl']` (~57M params at dim512/enc4/dec6);
+`StackedSpectra` reads the stacked `part_NNNNN.npy` shards (1000 mols each, 90 MHz only) keyed by
+record order to `spin_systems_pubchem.json.gz`; `data.parts` selects this path. **Lesson:** at
+≥500k records, per-worker DataLoader copies of the record list (COW broken by refcounting) OOM a
+16 GB box — use `num_workers≤2` (or a big-RAM node); the full 3.2M set needs ≥32 GB RAM regardless.
+
 ## ⭐⭐ PRODUCTION MODEL — `spingraph_decoder` (structured query decoder)
 
 The IDEAS north-star architecture (Families C+G+L) **dramatically beats the dense-CNN

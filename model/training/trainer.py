@@ -55,10 +55,11 @@ def _make_run_dir(cfg: Config) -> Path:
 
 
 class Trainer:
-    def __init__(self, config: Config, records, assignment):
+    def __init__(self, config: Config, records, assignment, spectra_source=None):
         self.cfg = config
         self.records = records
         self.assignment = assignment
+        self.spectra_source = spectra_source
         self.device = _resolve_device(config.training.device)
 
     # ── setup ──────────────────────────────────────────────────────────────────
@@ -78,7 +79,7 @@ class Trainer:
         mk = lambda recs, aug: SpectrumMatrixDataset(
             recs, vocab, std, spectrum_field=sf, augment=aug, seed=cfg.training.seed,
             region_tokens=cfg.data.region_tokens, region_max=cfg.data.region_max,
-            region_kwargs=cfg.data.region_kwargs)
+            region_kwargs=cfg.data.region_kwargs, spectra_source=self.spectra_source)
         ds = {"train": mk(by_fold["train"], True), "val": mk(by_fold["val"], False)}
 
         cb = class_balance(by_fold["train"], vocab)

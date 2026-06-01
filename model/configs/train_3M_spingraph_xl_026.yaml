@@ -1,0 +1,65 @@
+# PRELIMINARY 3M+ run — "xl 026": session027's xl scale-up PLUS the two session026
+# architecture ideas (peak-channel input + soft-equivalence flag/loss/averaging).
+# Queued in parallel with xl_025 (session027) BEFORE 026's 64k results are in — the
+# pair isolates whether the 026 features still help at xl scale on more data.
+#   model : spingraph_decoder size=xl + dim512 enc4 dec6 + use_peak_channel (Idea 1)
+#   loss  : matrix (shift-2x) + soft_equiv (Idea 2)
+#   data  : PubChem 90 MHz stacked shards (subset via --set data.max_mol / MAX_PARTS)
+run:
+  name: spingraph_xl_026_3M
+  output_dir: model/runs
+
+data:
+  records: data/pubchem/spin_systems_pubchem.json.gz
+  parts: data/pubchem/spectra_parts/90MHz
+  field: 90
+  split: none
+  max_mol: 0                                     # override with --set data.max_mol=<N>
+
+model:
+  name: spingraph_decoder
+  size: xl
+  dim: 512
+  enc_layers: 4
+  dec_layers: 6
+  n_heads: 8
+  dropout: 0.1
+  use_peak_channel: true        # Idea 1
+
+loss:
+  name: composite
+  terms:
+    - name: matrix
+      weight: 1.0
+      weights:
+        shift: 2.0
+        jmag: 1.0
+        presence: 0.5
+        deg: 0.5
+    - name: soft_equiv          # Idea 2
+      weight: 0.5
+      tol_ppm: 0.03
+      consistency_weight: 1.0
+
+training:
+  epochs: 25
+  batch_size: 256
+  lr: 0.0004
+  weight_decay: 0.01
+  amp: bf16
+  warmup_frac: 0.02
+  lr_stable_frac: 0.50
+  lr_min_factor: 0.30
+  grad_clip: 1.0
+  patience: 6
+  # see train_3M_spingraph_xl_025.yaml — low workers to avoid the per-worker
+  # 500k-record copy thrashing a 16GB g6.xlarge. Full 3.2M needs a big-RAM box.
+  num_workers: 2
+  val_every: 1
+  seed: 0
+
+diagnostics:
+  enabled: true
+  log_every_steps: 200
+  probe_every_epochs: 2
+  probe_count: 16

@@ -178,6 +178,45 @@ model to generalize beyond primitive/local patterns to genuinely novel regions
 of spin-system space. More involved to build and tune; introduce once the
 baseline works.
 
+### 9. Peak-channel input augmentation (session026) — **in-model, not a data feature**
+Feed an explicit peak-position prior alongside the raw spectrum. Decision: compute
+it **inside `forward`** (`SpinGraphDecoderModel._peak_channel`: torch local-maxima
+above a per-sample threshold → Gaussian-smoothed → stacked as a 2nd conv channel),
+not in the dataset. Rationale: (a) zero train/serve skew — the feature is a pure
+function of the model's own input, so it can never disagree between training and
+deployment; (b) no dataloader cost / no collate or schema change; (c) trivially
+toggled (`use_peak_channel`, `ResNet1DEncoder.in_channels`). The spectrum already
+contains the peaks, so the gain is a convergence/robustness prior rather than new
+information — kept default-off.
+
+### 10. Soft-equivalence — **learned edge flag + shift averaging, not free regression**
+Accidentally-degenerate groups (same shift δ, different couplings → distinct groups)
+were drifting to e.g. 3.59/3.61, rendering a spurious split doublet instead of one
+peak — a *qualitative* failure that mean shift-MAE hides. Decision: encode it as a
+**symmetric per-edge binary flag** (3rd `PairwiseEdgeHead` logit →
+`ModelOutput.auxiliary`), supervised by `SoftEquivLoss` = BCE vs the on-the-fly label
+`|δᵢ−δⱼ|≤tol` (tol in standardized space via injected `shift_std`) **plus** a
+differentiable consistency penalty pulling flagged pairs' predicted shifts together;
+at decode, flagged groups are clustered and **hard-averaged** to a shared shift.
+Rejected alternatives: (a) hard-average only (a false-positive flag would wrongly
+merge two genuinely-different shifts — so we also train the soft penalty and gate
+averaging on the predicted flag); (b) a separate "merge head" over nodes (edges
+compose naturally with the existing symmetric edge head and the triu matrix order).
+Label is derived in the loss from `batch.shifts` — no schema/dataset change.
+
+### 11. Large-corpus data path — **stacked shards + lazy mmap** (PubChem 3M+)
+ChEMBL 64k uses one `.npy` per molecule; PubChem 3.2M would be millions of tiny
+files. Decision: store spectra as **stacked `part_NNNNN.npy` shards** (1000 spectra
+each) and index by global record order. `StackedSpectra` maps `idx → (part, row)`
+via cumulative offsets and **mmaps shards lazily** (reads only headers up front), so
+196 GB never loads into RAM; `load_pubchem_records` streams the gz records (each
+carries its `row`). Selected by `data.parts`; the per-file path is unchanged.
+**Gotcha (learned the hard way):** persistent DataLoader workers each fork a copy of
+the Python record list and COW breaks under refcounting, so 8 workers × ≥500k records
+OOMs a 16 GB box (fine at 64k) — use `num_workers≤2` or a big-RAM node; the full
+3.2M needs ≥32 GB RAM. The 90 MHz-only input constraint still holds (600 MHz shards
+exist for comparison but are never a model input).
+
 ## Implementation status & file map
 
 Build order from DESIGN; ✅ = built, 🔬 = numeric core verified in numpy here,

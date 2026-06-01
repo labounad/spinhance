@@ -77,13 +77,13 @@ def test_edge_head_symmetric_and_equivariant():
     permutes the coupling matrix rows/cols accordingly, and the matrix is symmetric."""
     head = PairwiseEdgeHead(dim=16, n_groups=4).eval()
     h = torch.randn(1, 4, 16)
-    jmag, _, _ = head(h)
+    jmag, _, _, _ = head(h)
     M = ModelOutput(shifts=torch.zeros(1, 4), coupling_values=jmag,
                     coupling_presence_logits=jmag, degeneracy_logits=torch.zeros(1, 4, C)
                     ).coupling_matrix()
     assert torch.allclose(M, M.transpose(-1, -2), atol=1e-6)        # symmetric
     perm = [1, 0, 2, 3]
-    jp, _, _ = head(h[:, perm, :])
+    jp, _, _, _ = head(h[:, perm, :])
     Mp = ModelOutput(shifts=torch.zeros(1, 4), coupling_values=jp,
                      coupling_presence_logits=jp, degeneracy_logits=torch.zeros(1, 4, C)
                      ).coupling_matrix()

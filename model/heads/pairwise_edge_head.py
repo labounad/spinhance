@@ -11,6 +11,13 @@ Edge order is exactly ``torch.triu_indices(G, G, offset=1)`` so the returned
 (B, E) tensors map straight onto ``ModelOutput``'s edge-list -> (B, G, G) matrix
 conversion (which uses the same triu order). Magnitude is linear/unbounded
 (standardized Hz); presence is a binary logit.
+
+A third edge output is a **soft-equivalence** logit: two nodes are soft-equivalent
+when they share the same chemical shift (degenerate diagonal) yet are not
+chemically equivalent (different couplings to the rest of the system). Predicting
+it per-edge lets the decoder collapse such pairs to a single averaged shift so the
+rendered spectrum shows one peak instead of a spurious split doublet. Like
+magnitude/presence it is symmetric in (i, j) by construction.
 """
 from __future__ import annotations
 
@@ -29,6 +36,7 @@ class PairwiseEdgeHead(nn.Module):
             nn.Linear(2 * dim, hidden), nn.ReLU(inplace=True), nn.Dropout(dropout))
         self.jmag_out = nn.Linear(hidden, 1)
         self.jpres_out = nn.Linear(hidden, 1)
+        self.soft_equiv_out = nn.Linear(hidden, 1)
 
     def forward(self, h: torch.Tensor):                # h: (B, G, dim)
         hi = h[:, self.ei, :]                          # (B, E, dim)
@@ -37,4 +45,5 @@ class PairwiseEdgeHead(nn.Module):
         e = self.trunk(feat)                           # (B, E, hidden)
         jmag = self.jmag_out(e).squeeze(-1)            # (B, E)
         jpres = self.jpres_out(e).squeeze(-1)          # (B, E)
-        return jmag, jpres, e
+        soft_equiv = self.soft_equiv_out(e).squeeze(-1)  # (B, E)
+        return jmag, jpres, soft_equiv, e
