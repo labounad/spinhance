@@ -13,9 +13,38 @@ from typing import Any
 _REGION = "us-west-2"
 
 
+_FALLBACK_PROFILES = ("hack-scripps",)
+_client_cache: "Any | None" = None
+
+
 def _client():
+    global _client_cache
+    if _client_cache is not None:
+        return _client_cache
     import boto3
-    return boto3.client("s3", region_name=_REGION)
+    import os
+    profile = os.environ.get("AWS_PROFILE") or os.environ.get("SPINHANCE_AWS_PROFILE")
+    if profile:
+        _client_cache = boto3.Session(profile_name=profile).client("s3", region_name=_REGION)
+        return _client_cache
+    # No explicit profile — try default credentials first (works on EC2/Garibaldi).
+    # If they don't exist, fall back to known SSO profiles so the local dashboard
+    # works without requiring AWS_PROFILE to be set in the shell.
+    try:
+        client = boto3.client("s3", region_name=_REGION)
+        client.get_bucket_location(Bucket="spinhance-data")  # cheap auth probe
+        _client_cache = client
+        return _client_cache
+    except Exception:
+        pass
+    for fallback in _FALLBACK_PROFILES:
+        try:
+            _client_cache = boto3.Session(profile_name=fallback).client("s3", region_name=_REGION)
+            return _client_cache
+        except Exception:
+            pass
+    _client_cache = boto3.client("s3", region_name=_REGION)
+    return _client_cache
 
 
 def _parse(uri: str) -> tuple[str, str]:
