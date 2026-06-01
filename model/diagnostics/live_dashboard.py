@@ -99,13 +99,20 @@ with st.sidebar:
 # ── Plot helper ────────────────────────────────────────────────────────────────
 
 def _line(df: pd.DataFrame, x: str, y: str, title: str):
+    # Skip silently if the column isn't present — trainers log different metric
+    # sets (matrix vs surrogate), so a panel should never crash on a missing key.
+    if df.empty or y not in df.columns or x not in df.columns:
+        return
+    sub = df[[x, y]].dropna()
+    if sub.empty:
+        return
     try:
         import plotly.express as px
-        fig = px.line(df, x=x, y=y, title=title, markers=True)
+        fig = px.line(sub, x=x, y=y, title=title, markers=True)
         fig.update_layout(height=260, margin=dict(t=40, b=10, l=10, r=10))
         st.plotly_chart(fig, use_container_width=True)
     except ImportError:
-        st.line_chart(df.set_index(x)[[y]])
+        st.line_chart(sub.set_index(x)[[y]])
 
 
 # ── Main dashboard ────────────────────────────────────────────────────────────
@@ -142,11 +149,18 @@ def _dashboard():
     if not val_df.empty:
         st.subheader("Validation")
         key_metrics = [
+            # matrix model
             ("metrics.shift_mae_ppm", "Shift MAE (ppm)"),
             ("metrics.j_mae_hz", "J MAE (Hz)"),
             ("metrics.h_shift_mae_ppm", "Hungarian shift MAE (ppm)"),
             ("metrics.presence_f1", "Presence F1"),
             ("metrics.deg_acc_balanced", "Degeneracy acc (balanced)"),
+            # surrogate renderer (matrix -> spectrum)
+            ("metrics.w1", "Spectral W1 (mean field)"),
+            ("metrics.w1_90", "W1 @ 90 MHz"),
+            ("metrics.w1_600", "W1 @ 600 MHz"),
+            ("metrics.cosine_90", "Cosine @ 90 MHz"),
+            ("metrics.cosine_600", "Cosine @ 600 MHz"),
         ]
         available = [(col, lbl) for col, lbl in key_metrics if col in val_df.columns]
         cols = st.columns(min(3, max(1, len(available))))
@@ -171,7 +185,7 @@ def _dashboard():
         with col_b:
             _line(train_df, "step", "metrics.w_spec", "w_spec (spectral loss)")
 
-    if "metrics.cuda_allocated_gb" in train_df.columns:
+    if {"metrics.cuda_allocated_gb", "metrics.cuda_reserved_gb"} & set(train_df.columns):
         st.subheader("GPU memory")
         cols = st.columns(2)
         with cols[0]:
