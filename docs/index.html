@@ -139,12 +139,49 @@
   table.mx td.diag{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--ink);font-weight:700}
   table.mx td.deg{background:color-mix(in srgb,var(--accent-2) 16%,transparent);color:var(--ink);font-weight:700}
 
-  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:36px}
-  @media(max-width:760px){.stats{grid-template-columns:repeat(2,1fr)}}
-  .stat{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px;text-align:center;box-shadow:var(--shadow)}
-  .stat b{display:block;font-size:30px;font-weight:800;letter-spacing:-.02em;
-    background:linear-gradient(90deg,var(--accent),var(--accent-2));-webkit-background-clip:text;background-clip:text;color:transparent}
-  .stat span{font-size:13px;color:var(--ink-soft)}
+  /* ---- stage carousel ---- */
+  .carousel-wrap{margin-top:36px}
+  .carousel-nav{display:flex;align-items:center;gap:16px;margin-bottom:18px}
+  .carousel-nav .stage-label{font-size:13px;font-weight:700;color:var(--ink-faint);letter-spacing:.08em;text-transform:uppercase;flex:1;text-align:center}
+  .carousel-nav .stage-name{font-size:15px;font-weight:700;color:var(--ink);flex:1;text-align:center}
+  .car-btn{cursor:pointer;background:var(--panel);border:1px solid var(--line-strong);color:var(--ink);
+    width:38px;height:38px;border-radius:99px;display:grid;place-items:center;font-size:20px;
+    flex:none;transition:.18s;line-height:1}
+  .car-btn:hover{border-color:var(--accent);color:var(--accent)}
+  .car-btn:disabled{opacity:.28;cursor:default}
+  .carousel-dots{display:flex;gap:7px;justify-content:center;margin-bottom:16px}
+  .carousel-dots span{width:7px;height:7px;border-radius:50%;background:var(--line-strong);transition:.2s;cursor:pointer}
+  .carousel-dots span.active{background:var(--accent);width:22px;border-radius:99px}
+  .stage-slides{position:relative;overflow:hidden}
+  .stage-slide{display:none}
+  .stage-slide.active{display:block}
+  .stage-body{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:28px 30px;box-shadow:var(--shadow)}
+  .stage-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:28px;align-items:start}
+  @media(max-width:820px){.stage-grid{grid-template-columns:1fr}}
+  .stage-chip{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;
+    padding:3px 11px;border-radius:99px;margin-bottom:12px;border:1px solid}
+  .chip-cnn{color:#f5a623;border-color:color-mix(in srgb,#f5a623 40%,transparent);background:color-mix(in srgb,#f5a623 10%,transparent)}
+  .chip-spectral{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 40%,transparent);background:color-mix(in srgb,var(--accent) 10%,transparent)}
+  .chip-graph{color:var(--accent-2);border-color:color-mix(in srgb,var(--accent-2) 40%,transparent);background:color-mix(in srgb,var(--accent-2) 10%,transparent)}
+  .chip-026{color:var(--accent-3);border-color:color-mix(in srgb,var(--accent-3) 40%,transparent);background:color-mix(in srgb,var(--accent-3) 10%,transparent)}
+  .stage-h3{font-size:21px;font-weight:800;letter-spacing:-.02em;margin:0 0 10px}
+  .stage-desc{font-size:15px;color:var(--ink-soft);line-height:1.6;margin:0 0 14px}
+  .stage-detail{display:flex;flex-direction:column;gap:9px}
+  .detail-row{font-size:14px;line-height:1.5}
+  .detail-row .dl{font-weight:700;color:var(--ink);margin-right:5px}
+  .detail-row .dv{color:var(--ink-soft)}
+  .metrics-stack{display:flex;flex-direction:column;gap:10px}
+  .metric-row{background:var(--panel-2,var(--bg-soft,#f0f1f3));border:1px solid var(--line);border-radius:12px;
+    padding:13px 16px;display:flex;align-items:baseline;gap:10px}
+  [data-theme="dark"] .metric-row{background:var(--bg-soft,#0c0f15)}
+  .metric-val{font-size:22px;font-weight:800;letter-spacing:-.03em;
+    background:linear-gradient(90deg,var(--accent),var(--accent-2));-webkit-background-clip:text;background-clip:text;color:transparent;flex:none}
+  .metric-lbl{font-size:13px;color:var(--ink-soft);line-height:1.35}
+  .metric-delta{margin-left:auto;font-size:12px;font-weight:700;color:var(--accent-2);flex:none;white-space:nowrap}
+  .insight-box{margin-top:16px;padding:13px 16px;border-left:3px solid var(--accent-2);
+    font-size:14px;color:var(--ink-soft);line-height:1.55;border-radius:0 8px 8px 0;
+    background:color-mix(in srgb,var(--accent-2) 6%,transparent)}
+  .insight-box b{color:var(--ink)}
 
   .team{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:36px}
   @media(max-width:680px){.team{grid-template-columns:1fr}}
@@ -302,22 +339,216 @@
 <section class="block" id="results">
   <div class="wrap">
     <div class="kicker">Where we are</div>
-    <h2>Results &amp; evaluation.</h2>
-    <p class="lead">We evaluate with Hungarian matching — finding the best label permutation before
-      measuring error, so the model is never penalized for an arbitrary group ordering. Trained on
-      <b>69,243 augmented ChEMBL molecules</b> plus <b>2M+ PubChem spectra</b> on AWS (L40S).
-      Evaluated on 12,895 scaffold-split held-out molecules the model never saw.</p>
-    <div class="stats">
-      <div class="stat"><b>0.33</b><span>ppm shift MAE — Hungarian matched (baseline 1.31 ppm, −74%)</span></div>
-      <div class="stat"><b>2.62</b><span>Hz coupling J MAE — Hungarian matched (baseline 4.07 Hz, −36%)</span></div>
-      <div class="stat"><b>0.79</b><span>coupling presence F1 — which proton pairs are coupled</span></div>
-      <div class="stat"><b>97.6%</b><span>degeneracy accuracy — protons per spin group</span></div>
-    </div>
-    <p class="lead" style="margin-top:34px">The model continues to improve — best checkpoint at epoch 85
-      of 120 planned, with Pearson r = 0.94 on shifts and 0.82 on couplings. The full evaluation harness,
-      live training dashboard, and failure-analysis tooling are already in place.</p>
+    <h2>From baseline to production — four stages.</h2>
+    <p class="lead">Each stage introduced a different architectural or loss innovation. All metrics are
+      Hungarian-matched on 12,895 scaffold-split held-out molecules the model never saw.</p>
+
+    <div class="carousel-wrap">
+      <div class="carousel-nav">
+        <button class="car-btn" id="carPrev" aria-label="Previous stage">&#8249;</button>
+        <div style="flex:1;text-align:center">
+          <div class="stage-label" id="carLabel">Stage 1 of 4</div>
+          <div class="stage-name" id="carName">CNN Baseline</div>
+        </div>
+        <button class="car-btn" id="carNext" aria-label="Next stage">&#8250;</button>
+      </div>
+      <div class="carousel-dots" id="carDots">
+        <span class="active" data-i="0"></span>
+        <span data-i="1"></span>
+        <span data-i="2"></span>
+        <span data-i="3"></span>
+      </div>
+
+      <div class="stage-slides">
+
+        <!-- Stage 1: CNN Baseline -->
+        <div class="stage-slide active" data-i="0">
+          <div class="stage-body">
+            <div class="stage-grid">
+              <div>
+                <span class="stage-chip chip-cnn">Baseline &middot; sessions 015&ndash;020</span>
+                <h3 class="stage-h3">Dense CNN + typed heads</h3>
+                <p class="stage-desc">The first trainable model. A ResNet-1D encoder reads the 16,384-point
+                  spectrum and global-average-pools to an embedding. Four independent heads decode it:
+                  regression to shifts (ppm), regression to coupling magnitudes (Hz), binary logits for
+                  coupling presence, and classification over the degeneracy vocabulary.</p>
+                <div class="stage-detail">
+                  <div class="detail-row"><span class="dl">Architecture:</span><span class="dv">ResNet-1D &rarr; global avg pool &rarr; 4 typed heads</span></div>
+                  <div class="detail-row"><span class="dl">Permutation:</span><span class="dv">Canonical sort by shift&darr;, degeneracy&darr;, |J| row-sum&darr; &mdash; deterministic S&#8328; resolution</span></div>
+                  <div class="detail-row"><span class="dl">Loss:</span><span class="dv">Stage 1: matrix only (Huber shift + presence BCE + deg CE). Stage 2: adds frozen surrogate spectral consistency (W&#8321; + cosine, weight ramped 0&rarr;0.6 over epochs 20&ndash;30)</span></div>
+                  <div class="detail-row"><span class="dl">LR schedule:</span><span class="dv">WSD &mdash; hold peak 3e&minus;4 through ~epoch 63, then cosine decay to a raised floor (1.2e&minus;4), not zero</span></div>
+                </div>
+                <div class="insight-box">
+                  <b>Key finding:</b> spectral loss alone diverges &mdash; the 90&nbsp;MHz inverse problem is
+                  under-determined. The matrix anchor is essential; spectral consistency is a <i>refinement</i>
+                  signal, not an <i>identification</i> signal. Keeping the LR high through the spectral-learning
+                  phase (WSD schedule) improved rare-class degeneracy accuracy most.
+                </div>
+              </div>
+              <div class="metrics-stack">
+                <div class="metric-row"><div class="metric-val">0.279</div><div class="metric-lbl">ppm shift MAE<br><span style="font-size:11px;color:var(--ink-faint)">Hungarian-matched</span></div></div>
+                <div class="metric-row"><div class="metric-val">1.80</div><div class="metric-lbl">Hz coupling J MAE</div></div>
+                <div class="metric-row"><div class="metric-val">0.807</div><div class="metric-lbl">coupling presence F1</div></div>
+                <div class="metric-row"><div class="metric-val">0.732</div><div class="metric-lbl">degeneracy balanced accuracy<br><span style="font-size:11px;color:var(--ink-faint)">rare-class problem unsolved</span></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Stage 2: Differentiable Renderer -->
+        <div class="stage-slide" data-i="1">
+          <div class="stage-body">
+            <div class="stage-grid">
+              <div>
+                <span class="stage-chip chip-spectral">Infrastructure &middot; Branches 4&ndash;5</span>
+                <h3 class="stage-h3">Differentiable surrogate renderer</h3>
+                <p class="stage-desc">To add a spectral-consistency loss the matrix&rarr;spectrum simulator
+                  must be inside the autograd graph. We ported the pyspin composite engine to PyTorch: total-spin
+                  manifold reduction + Mz block-diagonalization + Lorentzian-broadened FFT, all differentiable.</p>
+                <div class="stage-detail">
+                  <div class="detail-row"><span class="dl">Core challenge:</span><span class="dv">Exact CH&#8323;/t-Bu degeneracies create eigenvalue gaps of ~1e&minus;13 Hz &mdash; the 1/(&#955;&#7522;&minus;&#955;&#7524;) VJP term diverges &rarr; NaN</span></div>
+                  <div class="detail-row"><span class="dl">Fix:</span><span class="dv">Lorentzian-regularized VJP: F<sub>ij</sub> = &Delta;E/(&Delta;E&sup2;+&epsilon;&sup2;), &epsilon; tied to linewidth (~1&nbsp;Hz). Verified vs finite differences to ~1e&minus;6</span></div>
+                  <div class="detail-row"><span class="dl">Composite reduction:</span><span class="dv">Avoids the 2^N explicit expansion; largest Mz block &le; 256 for 91% of molecules, &le; 1024 for 99%</span></div>
+                  <div class="detail-row"><span class="dl">Role:</span><span class="dv">Frozen teacher for Stage 2 spectral-consistency loss; also used as eval metric and post-hoc probe</span></div>
+                </div>
+                <div class="insight-box">
+                  <b>Key finding:</b> the composite reduction structurally avoids most exact
+                  degeneracies (never builds permutation-degenerate states). The regularized backward
+                  is cheap insurance. At 90&nbsp;MHz, essentially the whole 64k dataset is
+                  Stage-2 renderable &mdash; vs 89% with explicit 2^N expansion.
+                </div>
+              </div>
+              <div class="metrics-stack">
+                <div class="metric-row" style="border-color:color-mix(in srgb,var(--accent) 30%,transparent)">
+                  <div class="metric-val" style="background:linear-gradient(90deg,var(--accent),var(--accent-3))">0.9999</div>
+                  <div class="metric-lbl">forward corr vs pyspin oracle<br><span style="font-size:11px;color:var(--ink-faint)">incl. 14-spin t-Bu system</span></div>
+                </div>
+                <div class="metric-row" style="border-color:color-mix(in srgb,var(--accent) 30%,transparent)">
+                  <div class="metric-val" style="background:linear-gradient(90deg,var(--accent),var(--accent-3))">~1e&minus;6</div>
+                  <div class="metric-lbl">gradient error vs finite differences<br><span style="font-size:11px;color:var(--ink-faint)">on degenerate systems</span></div>
+                </div>
+                <div class="metric-row" style="border-color:color-mix(in srgb,var(--accent) 30%,transparent)">
+                  <div class="metric-val" style="background:linear-gradient(90deg,var(--accent),var(--accent-3))">0.986</div>
+                  <div class="metric-lbl">cosine similarity @ 90&nbsp;MHz<br><span style="font-size:11px;color:var(--ink-faint)">surrogate vs pyspin on test set</span></div>
+                </div>
+                <div class="metric-row" style="border-color:color-mix(in srgb,var(--accent) 30%,transparent)">
+                  <div class="metric-val" style="background:linear-gradient(90deg,var(--accent),var(--accent-3))">0.990</div>
+                  <div class="metric-lbl">cosine similarity @ 600&nbsp;MHz</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Stage 3: SpinGraph Decoder -->
+        <div class="stage-slide" data-i="2">
+          <div class="stage-body">
+            <div class="stage-grid">
+              <div>
+                <span class="stage-chip chip-graph">Architecture &middot; sessions 021&ndash;025</span>
+                <h3 class="stage-h3">Spin graph decoder</h3>
+                <p class="stage-desc">The spin system is an unordered graph of 8 groups &mdash; so the model
+                  should output a graph. We replaced the dense CNN heads with a Transformer encoder&ndash;decoder:
+                  8 learned spin-group queries attend over the spectrum encoding, then a symmetric pairwise
+                  edge head outputs couplings for every pair.</p>
+                <div class="stage-detail">
+                  <div class="detail-row"><span class="dl">Architecture:</span><span class="dv">ResNet-1D stem &rarr; ppm-positioned tokens &rarr; pre-LN Transformer encoder &rarr; 8 learned queries &rarr; Transformer decoder &rarr; node heads (&delta;, n) + symmetric edge head (J, presence)</span></div>
+                  <div class="detail-row"><span class="dl">Edge head:</span><span class="dv">edge<sub>ij</sub> = MLP([h<sub>i</sub>+h<sub>j</sub>, |h<sub>i</sub>&minus;h<sub>j</sub>|]) &mdash; naturally symmetric, handles all 28 upper-triangle pairs</span></div>
+                  <div class="detail-row"><span class="dl">Loss:</span><span class="dv">Canonical matrix anchor (shift wt 2&times;) + early-ramp surrogate spectral to 0.6. Hungarian matching tried and rejected &mdash; scrambled J coupling assignments (J 1.35&rarr;2.1&nbsp;Hz, never recovered)</span></div>
+                  <div class="detail-row"><span class="dl">What didn&rsquo;t work:</span><span class="dv">Support-region tokenization (no gain, 2.5&times; slower); Hungarian loss; integration-aware aux loss (architecture solved degeneracy imbalance on its own)</span></div>
+                </div>
+                <div class="insight-box">
+                  <b>Key finding:</b> the structured decoder is the dominant win &mdash; 7.5&times; shift improvement
+                  over the CNN baseline. Canonical ordering is <i>unambiguous</i> for NMR data (distinct
+                  chemical shifts make the sort stable), so Hungarian&rsquo;s extra freedom only hurts by
+                  scrambling the relational coupling structure across assignments.
+                </div>
+              </div>
+              <div class="metrics-stack">
+                <div class="metric-row"><div class="metric-val">0.037</div><div class="metric-lbl">ppm shift MAE<br><span style="font-size:11px;color:var(--ink-faint)">session025 production recipe</span></div><div class="metric-delta">7.5&times; CNN</div></div>
+                <div class="metric-row"><div class="metric-val">0.59</div><div class="metric-lbl">Hz coupling J MAE</div><div class="metric-delta">3.1&times; CNN</div></div>
+                <div class="metric-row"><div class="metric-val">0.94</div><div class="metric-lbl">coupling presence F1</div><div class="metric-delta">+0.13</div></div>
+                <div class="metric-row"><div class="metric-val">0.945</div><div class="metric-lbl">degeneracy balanced accuracy<br><span style="font-size:11px;color:var(--ink-faint)">rare-class problem solved by architecture</span></div><div class="metric-delta">+0.21</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Stage 4: 026 Peak Channel + Soft Equiv -->
+        <div class="stage-slide" data-i="3">
+          <div class="stage-body">
+            <div class="stage-grid">
+              <div>
+                <span class="stage-chip chip-026">In progress &middot; session 026</span>
+                <h3 class="stage-h3">Peak channel &amp; soft equivalence</h3>
+                <p class="stage-desc">Two targeted innovations addressing the remaining qualitative failure
+                  modes: imprecise shift localization and accidentally degenerate groups rendering as spurious
+                  doublets instead of single peaks.</p>
+                <div class="stage-detail">
+                  <div class="detail-row"><span class="dl">Peak channel:</span><span class="dv">A 2nd conv input channel computed inside <code>forward()</code> &mdash; local maxima above a per-sample threshold, Gaussian-smoothed &mdash; as a shift-localization prior. Zero train/serve skew</span></div>
+                  <div class="detail-row"><span class="dl">Soft equivalence:</span><span class="dv">A 3rd <code>PairwiseEdgeHead</code> logit flags accidentally-degenerate pairs (same &delta;, different J). BCE vs |&delta;<sub>i</sub>&minus;&delta;<sub>j</sub>|&le;tol + consistency penalty pulling flagged shifts together; hard-averaged at decode</span></div>
+                  <div class="detail-row"><span class="dl">Why it matters:</span><span class="dv">Without the flag, degenerate pairs drift to e.g. 3.59/3.61&nbsp;ppm and render a spurious split doublet &mdash; a qualitative failure that mean shift-MAE hides</span></div>
+                  <div class="detail-row"><span class="dl">Next:</span><span class="dv">Scale the 026 recipe to an XL model (~57M params, 5.6&times; medium) on 3M+ PubChem spectra (sessions 027&ndash;028)</span></div>
+                </div>
+                <div class="insight-box">
+                  <b>Soft-equiv flag at epoch 35:</b> 99% accuracy and recall on the ~8.5% of edges
+                  that are soft-equivalent. The peak channel and soft-equivalence flag are default-off
+                  in inference &mdash; they compose on top of the session025 production checkpoint without
+                  changing the output schema.
+                </div>
+              </div>
+              <div class="metrics-stack">
+                <div class="metric-row" style="border-color:color-mix(in srgb,var(--accent-3) 35%,transparent)">
+                  <div class="metric-val" style="background:linear-gradient(90deg,var(--accent-3),var(--accent))">0.066</div>
+                  <div class="metric-lbl">ppm shift MAE &mdash; epoch 35<br><span style="font-size:11px;color:var(--ink-faint)">in progress, still converging</span></div>
+                </div>
+                <div class="metric-row" style="border-color:color-mix(in srgb,var(--accent-3) 35%,transparent)">
+                  <div class="metric-val" style="background:linear-gradient(90deg,var(--accent-3),var(--accent))">1.00</div>
+                  <div class="metric-lbl">Hz coupling J MAE &mdash; epoch 35</div>
+                </div>
+                <div class="metric-row" style="border-color:color-mix(in srgb,var(--accent-3) 35%,transparent)">
+                  <div class="metric-val" style="background:linear-gradient(90deg,var(--accent-3),var(--accent))">99%</div>
+                  <div class="metric-lbl">soft-equiv flag accuracy<br><span style="font-size:11px;color:var(--ink-faint)">on ~8.5% of edges that are degenerate</span></div>
+                </div>
+                <div class="metric-row" style="border-color:color-mix(in srgb,var(--accent-3) 35%,transparent)">
+                  <div class="metric-val" style="background:linear-gradient(90deg,var(--accent-3),var(--accent))">57M</div>
+                  <div class="metric-lbl">params in XL model<br><span style="font-size:11px;color:var(--ink-faint)">queued for 3M+ PubChem training</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /stage-slides -->
+    </div><!-- /carousel-wrap -->
   </div>
 </section>
+
+<script>
+(function(){
+  const slides = Array.from(document.querySelectorAll('.stage-slide'));
+  const dots   = Array.from(document.querySelectorAll('#carDots span'));
+  const label  = document.getElementById('carLabel');
+  const name   = document.getElementById('carName');
+  const prev   = document.getElementById('carPrev');
+  const next   = document.getElementById('carNext');
+  const names  = ['CNN Baseline','Differentiable Renderer','Spin Graph Decoder','Peak Channel + Soft Equiv'];
+  let cur = 0;
+  function go(i) {
+    slides[cur].classList.remove('active'); dots[cur].classList.remove('active');
+    cur = i;
+    slides[cur].classList.add('active'); dots[cur].classList.add('active');
+    label.textContent = 'Stage '+(cur+1)+' of '+slides.length;
+    name.textContent  = names[cur];
+    prev.disabled = cur === 0;
+    next.disabled = cur === slides.length - 1;
+  }
+  prev.addEventListener('click', function(){ if(cur > 0) go(cur-1); });
+  next.addEventListener('click', function(){ if(cur < slides.length-1) go(cur+1); });
+  dots.forEach(function(d){ d.addEventListener('click', function(){ go(+d.dataset.i); }); });
+  go(0);
+})();
+</script>
 
 <!-- ============ TEAM ============ -->
 <section class="block" id="team">
