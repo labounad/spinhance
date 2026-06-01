@@ -1,0 +1,55 @@
+# Full 64k ChEMBL run with Stage-2 spectral consistency (Branch 6).
+# Stage-1 matrix anchor for the first 40 epochs; the frozen surrogate renderer
+# (Branch 5, session012 best.pt) is then ramped in over 10 epochs as a
+# differentiable spectral-consistency term, pulling the predicted matrix toward
+# one that reproduces the observed 90 MHz spectrum.
+#
+# Set the checkpoint path before running, e.g.:
+#   --set loss.terms.1.checkpoint=/path/to/session012_best.pt
+run:
+  name: rebuild64k_surrogate_spectral
+  output_dir: model/runs
+
+data:
+  records: mol_to_spin_system/data/spin_systems_chembl.json   # 64,476 molecules
+  spectra: simulation/data/spectra
+  field: 90
+  split: none
+
+model:
+  name: resnet1d_attention_pool
+  size: medium
+  dropout: 0.1
+
+loss:
+  name: composite
+  terms:
+    - name: matrix
+      weight: 1.0
+    - name: surrogate_spectral
+      weight: 0.3                 # peak weight after ramp
+      start_epoch: 40             # let the matrix anchor stabilize first
+      ramp_epochs: 10             # linear ramp 0 -> 0.3 over epochs 40..50
+      checkpoint: model_artifacts/surrogate/session012_best.pt
+      field: 90
+      w1_weight: 1.0
+      cosine_weight: 0.5
+      use_clean_target: true
+
+training:
+  epochs: 80
+  batch_size: 256
+  lr: 0.0003
+  weight_decay: 0.01
+  amp: bf16
+  warmup_frac: 0.03
+  patience: 15
+  num_workers: 8
+  val_every: 1
+  seed: 0
+
+diagnostics:
+  enabled: true
+  log_every_steps: 50
+  probe_every_epochs: 5
+  probe_count: 16

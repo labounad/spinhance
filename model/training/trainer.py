@@ -87,7 +87,11 @@ class Trainer:
 
         loss_fn = build_composite(cfg.loss["terms"],
                                   deg_class_weight=cb["deg_weights"],
-                                  presence_pos_weight=cb["presence_pos_weight"])
+                                  presence_pos_weight=cb["presence_pos_weight"],
+                                  # de-standardization + field for surrogate_spectral
+                                  # (ignored by losses that don't accept them)
+                                  field=field, deg_vocab=vocab.vocab,
+                                  **std.state_dict())
         return ds, std, vocab, model, loss_fn, cb, by_fold["val"]
 
     # ── fit ────────────────────────────────────────────────────────────────────
@@ -108,7 +112,8 @@ class Trainer:
 
         opt, sched = build_optimizer_and_scheduler(
             model, cfg.training.lr, cfg.training.weight_decay, cfg.training.warmup_frac,
-            max(1, len(train_dl)), cfg.training.epochs)
+            max(1, len(train_dl)), cfg.training.epochs,
+            min_factor=cfg.training.lr_min_factor, stable_frac=cfg.training.lr_stable_frac)
         amp_ctx, scaler = amp_context(cfg.training.amp, self.device)
 
         run_dir = _make_run_dir(cfg)

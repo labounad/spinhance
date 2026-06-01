@@ -1,0 +1,55 @@
+# Run C — 64k ChEMBL, STAGE-2 ONLY (ablation). The differentiable surrogate
+# spectral-consistency loss is the SOLE training objective — no matrix anchor —
+# active from epoch 0. This tests whether the model can invert the 90 MHz
+# spectrum to the spin matrix purely through the frozen surrogate renderer, with
+# NO supervised matrix labels in the loss. Compare against:
+#   train_64k.yaml ................ baseline, Stage-1 (matrix) only
+#   train_64k_surrogate_spectral*.yaml ... Stage-1 + ramped Stage-2 (A / B)
+# Matrix accuracy (shift/J/F1/deg) is still evaluated each epoch, so the runs are
+# directly comparable.  Identical data/seed/model/epochs to the others.
+run:
+  name: rebuild64k_surrogate_spectral_only
+  output_dir: model/runs
+
+data:
+  records: mol_to_spin_system/data/spin_systems_chembl.json   # 64,476 molecules
+  spectra: simulation/data/spectra
+  field: 90
+  split: none
+
+model:
+  name: resnet1d_attention_pool
+  size: medium
+  dropout: 0.1
+
+loss:
+  name: composite
+  terms:
+    - name: surrogate_spectral
+      weight: 1.0                 # sole objective, constant (no ramp, no matrix term)
+      start_epoch: 0
+      ramp_epochs: 0
+      checkpoint: model_artifacts/surrogate/session012_best.pt
+      field: 90
+      w1_weight: 1.0
+      cosine_weight: 0.5
+      use_clean_target: true
+
+training:
+  epochs: 80
+  batch_size: 256
+  lr: 0.0003
+  weight_decay: 0.01
+  amp: bf16
+  warmup_frac: 0.03
+  grad_clip: 1.0
+  patience: 15
+  num_workers: 8
+  val_every: 1
+  seed: 0
+
+diagnostics:
+  enabled: true
+  log_every_steps: 50
+  probe_every_epochs: 5
+  probe_count: 16

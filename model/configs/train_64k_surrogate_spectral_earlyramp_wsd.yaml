@@ -1,0 +1,61 @@
+# Run C3 — early-ramp 0.6 spectral mix + WSD/raised-floor LR schedule (Branch 6).
+# Identical to train_64k_surrogate_spectral_earlyramp.yaml (session019) EXCEPT the
+# LR schedule, to isolate the effect of keeping the learning rate high longer.
+# session019 looked best-yet but still learning when the cosine LR decayed to its
+# 0.05 floor (1.5e-5) too early. This run fixes that two ways at once:
+#   (1) raised floor:  lr_min_factor 0.05 -> 0.40  (LR never below 40% of peak)
+#   (2) WSD schedule:  lr_stable_frac 0.60         (hold peak LR flat for ~60% of
+#       steps after warmup, THEN cosine-decay only over the final ~37%)
+# Net LR path (100 ep, peak 3e-4): warmup~ep3 -> hold 3e-4 through ~ep63 -> cosine
+# decay to floor 1.2e-4 by ep100. So the spectral-learning phase (ramp ep20-30,
+# hold to 100) runs at full LR, and late epochs keep a high LR instead of starving.
+run:
+  name: rebuild64k_surrogate_spectral_earlyramp_wsd
+  output_dir: model/runs
+
+data:
+  records: mol_to_spin_system/data/spin_systems_chembl.json
+  spectra: simulation/data/spectra
+  field: 90
+  split: none
+
+model:
+  name: resnet1d_attention_pool
+  size: medium
+  dropout: 0.1
+
+loss:
+  name: composite
+  terms:
+    - name: matrix
+      weight: 1.0
+    - name: surrogate_spectral
+      weight: 0.6
+      start_epoch: 20
+      ramp_epochs: 10
+      checkpoint: model_artifacts/surrogate/session012_best.pt
+      field: 90
+      w1_weight: 1.0
+      cosine_weight: 0.5
+      use_clean_target: true
+
+training:
+  epochs: 100
+  batch_size: 256
+  lr: 0.0003
+  weight_decay: 0.01
+  amp: bf16
+  warmup_frac: 0.03
+  lr_stable_frac: 0.60          # WSD: hold peak LR for 60% of steps before decaying
+  lr_min_factor: 0.40           # decay floor = 40% of peak (vs 0.05 default)
+  grad_clip: 1.0
+  patience: 20
+  num_workers: 8
+  val_every: 1
+  seed: 0
+
+diagnostics:
+  enabled: true
+  log_every_steps: 50
+  probe_every_epochs: 5
+  probe_count: 16

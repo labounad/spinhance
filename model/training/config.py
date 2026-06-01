@@ -39,6 +39,8 @@ class TrainingCfg:
     grad_clip: float = 1.0
     amp: str = "bf16"            # bf16 | fp16 | none
     warmup_frac: float = 0.03
+    lr_min_factor: float = 0.05  # cosine-decay floor (LR never below this * peak)
+    lr_stable_frac: float = 0.0  # WSD: fraction of steps to hold peak LR before decaying
     patience: int = 10
     num_workers: int = 0
     val_every: int = 1
