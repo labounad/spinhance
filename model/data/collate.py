@@ -8,6 +8,7 @@ from __future__ import annotations
 import torch
 
 from model.schemas import SpinBatch
+from model.schemas.batch import RegionTokenBatch
 
 __all__ = ["collate_spin_batch"]
 
@@ -15,6 +16,11 @@ __all__ = ["collate_spin_batch"]
 def collate_spin_batch(samples) -> SpinBatch:
     def stack(key):
         return torch.stack([s[key] for s in samples])
+
+    region_tokens = None
+    if "region_features" in samples[0]:
+        region_tokens = RegionTokenBatch(features=stack("region_features"),  # (B,R,F)
+                                         mask=stack("region_mask"))           # (B,R)
 
     return SpinBatch(
         spectrum=stack("spectrum"),
@@ -26,5 +32,6 @@ def collate_spin_batch(samples) -> SpinBatch:
         degeneracy_values=stack("degeneracy_values"),
         molecule_ids=[s["mol_id"] for s in samples],
         smiles=[s.get("smiles") for s in samples],
+        region_tokens=region_tokens,
         metadata={"bucket_keys": [s["bucket_key"] for s in samples]},
     )

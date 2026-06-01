@@ -8,5 +8,6 @@ from model.architectures.base import SpinArchitecture
 # Import concrete models so their @ARCHITECTURES.register decorators run.
 from model.architectures import resnet1d as _resnet1d       # noqa: F401
 from model.architectures import attention_pool as _attn     # noqa: F401
+from model.architectures import spingraph_decoder as _spingraph  # noqa: F401
 
 __all__ = ["ARCHITECTURES", "build_architecture", "SpinArchitecture"]

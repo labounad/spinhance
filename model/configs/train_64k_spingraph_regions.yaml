@@ -1,0 +1,66 @@
+# Phase 2 — spingraph_decoder + SUPPORT-REGION TOKENS (IDEAS D/E/H).
+# = train_64k_spingraph_canonical.yaml (canonical loss, no Hungarian) PLUS
+# support-region tokenization: each spectrum is also encoded as up to 48 region
+# tokens (local shape + integration metadata) fused with the global branch. Tests
+# whether the chemically-structured input — especially the integration cue —
+# lifts degeneracy / coupling beyond the global-only spingraph result.
+#
+# Compare against session022 (global-only canonical) and the CNN baseline floor.
+run:
+  name: spingraph_regions
+  output_dir: model/runs
+
+data:
+  records: mol_to_spin_system/data/spin_systems_chembl.json
+  spectra: simulation/data/spectra
+  field: 90
+  split: none
+  region_tokens: true           # << activates the region branch
+  region_max: 48
+  region_kwargs: {}             # defaults: threshold_frac 0.02, min_gap 8, margin 4, min_width 4
+
+model:
+  name: spingraph_decoder
+  size: medium
+  dim: 256
+  enc_layers: 2
+  dec_layers: 4
+  n_heads: 8
+  dropout: 0.1
+  region_feat_dim: 80           # must match model.data.regions.FEAT_DIM
+
+loss:
+  name: composite
+  terms:
+    - name: matrix
+      weight: 1.0
+    - name: surrogate_spectral
+      weight: 0.6
+      start_epoch: 20
+      ramp_epochs: 10
+      checkpoint: model_artifacts/surrogate/session012_best.pt
+      field: 90
+      w1_weight: 1.0
+      cosine_weight: 0.5
+      use_clean_target: true
+
+training:
+  epochs: 100
+  batch_size: 256
+  lr: 0.0003
+  weight_decay: 0.01
+  amp: bf16
+  warmup_frac: 0.05
+  lr_stable_frac: 0.60
+  lr_min_factor: 0.40
+  grad_clip: 1.0
+  patience: 20
+  num_workers: 8
+  val_every: 1
+  seed: 0
+
+diagnostics:
+  enabled: true
+  log_every_steps: 50
+  probe_every_epochs: 5
+  probe_count: 16

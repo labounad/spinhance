@@ -1,0 +1,74 @@
+# Phase 1 — spingraph_decoder (IDEAS north-star C+G+K+L), GLOBAL-only.
+# Transformer encoder over spectral tokens + 8-query DETR decoder + symmetric
+# node/edge heads, trained with the existing Hungarian set-matching loss then the
+# frozen surrogate spectral-consistency loss. NO region tokens yet (Phase 2).
+#
+# 3-stage curriculum (DETR query decoders collapse without canonical warmup):
+#   ep 0–15  : canonical `matrix` loss anchors queries to a shift-sorted order
+#   ep 15–20 : crossover — matrix decays out as `hungarian` ramps in (S8-invariant)
+#   ep 30–40 : `surrogate_spectral` ramps to 0.6, held to 100 (the winning recipe)
+# LR: WSD (hold peak 3e-4 to ~ep63, floor 1.2e-4) — the schedule that won the baseline.
+#
+# Beat the baseline floor (RESULTS.md): shift 0.279 / J 1.80 / F1 0.807.
+run:
+  name: spingraph_p1
+  output_dir: model/runs
+
+data:
+  records: mol_to_spin_system/data/spin_systems_chembl.json
+  spectra: simulation/data/spectra
+  field: 90
+  split: none
+
+model:
+  name: spingraph_decoder
+  size: medium                  # ResNet conv stem preset
+  dim: 256
+  enc_layers: 2
+  dec_layers: 4
+  n_heads: 8
+  dropout: 0.1
+
+loss:
+  name: composite
+  terms:
+    - name: matrix              # Stage 0: canonical anchor, decays out at crossover
+      weight: 1.0
+      decay_start_epoch: 15
+      decay_epochs: 5
+      end_weight: 0.0
+    - name: hungarian           # Stage 1: permutation-invariant set matching
+      weight: 1.0
+      start_epoch: 15
+      ramp_epochs: 5
+      match_degeneracy_weight: 1.0
+    - name: surrogate_spectral  # Stage 2: frozen surrogate spectral consistency
+      weight: 0.6
+      start_epoch: 30
+      ramp_epochs: 10
+      checkpoint: model_artifacts/surrogate/session012_best.pt
+      field: 90
+      w1_weight: 1.0
+      cosine_weight: 0.5
+      use_clean_target: true
+
+training:
+  epochs: 100
+  batch_size: 256
+  lr: 0.0003
+  weight_decay: 0.01
+  amp: bf16
+  warmup_frac: 0.05             # slightly longer warmup for the decoder
+  lr_stable_frac: 0.60          # WSD: hold peak LR
+  lr_min_factor: 0.40           # decay floor 40% of peak
+  grad_clip: 1.0
+  patience: 20
+  num_workers: 8
+  val_every: 1
+  seed: 0
+
+diagnostics:
+  enabled: true
+  log_every_steps: 50
+  probe_every_epochs: 5
+  probe_count: 16

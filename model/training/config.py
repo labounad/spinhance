@@ -7,6 +7,7 @@ component configs consumed by the registries).
 """
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,11 @@ class DataCfg:
     field: int = 90
     split: str = "scaffold"      # "scaffold" | "none"
     max_mol: int = 0
+    region_tokens: bool = False  # extract support-region tokens (Family D/E/H); off = unchanged
+    region_max: int = 48         # max regions per spectrum (padded/truncated)
+    # NOTE: the attribute `field` (NMR field) above shadows dataclasses.field in
+    # this class body, so qualify it for the mutable default.
+    region_kwargs: dict = dataclasses.field(default_factory=dict)
 
 
 @dataclass

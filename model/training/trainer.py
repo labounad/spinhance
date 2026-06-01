@@ -75,8 +75,10 @@ class Trainer:
         std = Standardizer().fit(by_fold["train"], vocab)
         field = cfg.data.field
         sf = f"spec{field}"
-        mk = lambda recs, aug: SpectrumMatrixDataset(recs, vocab, std, spectrum_field=sf,
-                                                     augment=aug, seed=cfg.training.seed)
+        mk = lambda recs, aug: SpectrumMatrixDataset(
+            recs, vocab, std, spectrum_field=sf, augment=aug, seed=cfg.training.seed,
+            region_tokens=cfg.data.region_tokens, region_max=cfg.data.region_max,
+            region_kwargs=cfg.data.region_kwargs)
         ds = {"train": mk(by_fold["train"], True), "val": mk(by_fold["val"], False)}
 
         cb = class_balance(by_fold["train"], vocab)
