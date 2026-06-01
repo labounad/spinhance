@@ -36,6 +36,7 @@ class Term:
     name: str
     loss: Loss
     weight: float = 1.0
+    init_weight: float = 0.0               # weight held from epoch 0 until start_epoch (ramp floor)
     start_epoch: int = 0
     ramp_epochs: int = 0
     decay_start_epoch: int | None = None   # None = no decay (ramp-and-hold)
@@ -59,16 +60,16 @@ class CompositeLoss(Loss):
     def _weight(self, t: Term) -> float:
         e = self.epoch
         if e < t.start_epoch:
-            return 0.0
+            return t.init_weight            # held floor before the ramp (0 by default)
         # decay phase takes precedence once reached (ramp -> hold -> decay)
         if t.decay_start_epoch is not None and e >= t.decay_start_epoch:
             if t.decay_epochs > 0:
                 frac = min(1.0, (e - t.decay_start_epoch + 1) / t.decay_epochs)
                 return t.weight + (t.end_weight - t.weight) * frac
             return t.end_weight
-        if t.ramp_epochs > 0:
+        if t.ramp_epochs > 0:               # linear init_weight -> weight over ramp_epochs
             frac = min(1.0, (e - t.start_epoch + 1) / t.ramp_epochs)
-            return t.weight * frac
+            return t.init_weight + (t.weight - t.init_weight) * frac
         return t.weight
 
     def __call__(self, output: ModelOutput, batch: SpinBatch) -> LossOutput:
@@ -103,6 +104,7 @@ def build_composite(terms_cfg: list[dict], **shared) -> CompositeLoss:
         tc = dict(tc)
         name = tc.pop("name")
         weight = tc.pop("weight", 1.0)
+        init_weight = tc.pop("init_weight", 0.0)
         start = tc.pop("start_epoch", 0)
         ramp = tc.pop("ramp_epochs", 0)
         decay_start = tc.pop("decay_start_epoch", None)
@@ -112,7 +114,7 @@ def build_composite(terms_cfg: list[dict], **shared) -> CompositeLoss:
         for k, v in shared.items():
             kwargs.setdefault(k, v)
         sub = build_loss(name, **_filter_kwargs(name, kwargs))
-        terms.append(Term(name=name, loss=sub, weight=weight,
+        terms.append(Term(name=name, loss=sub, weight=weight, init_weight=init_weight,
                           start_epoch=start, ramp_epochs=ramp,
                           decay_start_epoch=decay_start, decay_epochs=decay,
                           end_weight=end_weight))
