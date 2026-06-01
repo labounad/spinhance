@@ -131,8 +131,14 @@
     const host = $("#txViewer"); if (!host) return;
     fetch("data/test_explorer.json").then(r => r.json()).then(data => {
       const ppm = data.ppm, mols = data.molecules; let idx = 0;
+      // per-model predictions: pick which model to test
+      const models = data.models || [{ key: "_", label: "model" }];
+      let mkey = (models.find(x => x.key === "light025") || models[0]).key;
+      const predOf = (m) => (m.preds ? m.preds[mkey] : m);   // back-compat with old single-model format
       const spec = $("#txSpec", host), sel = $("#txSel", host), meta = $("#txMeta", host), mat = $("#txMatrix", host);
+      const modSel = $("#txModel", host);
       const el3d = $("#tx3d", host), load3d = $("#tx3dLoad", host); let v3d = null;
+      if (modSel) { modSel.innerHTML = models.map(mm => `<option value="${mm.key}">${mm.label}</option>`).join(""); modSel.value = mkey; }
       sel.innerHTML = mols.map((m, i) => `<option value="${i}">${m.id} · ${m.n_spins}H</option>`).join("");
       function ensure3d(cb) {
         if (window.$3Dmol) return cb(window.$3Dmol);
@@ -152,21 +158,21 @@
         });
       }
       function drawSpec() {
-        const m = mols[idx], c = C();
+        const m = mols[idx], P = predOf(m), c = C();
         linePlot(spec, [
           { color: c.faint, width: 1.6, pts: m.input.map((v, i) => [ppm[i], v]) },
-          { color: c.accent, width: 2, pts: m.rendered.map((v, i) => [ppm[i], v]) },
+          { color: c.accent, width: 2, pts: P.rendered.map((v, i) => [ppm[i], v]) },
         ], { xlabel: "ppm", x0: 0, x1: 12, y0: 0, invertX: true, noY: true });
       }
       function drawMatrix() {
-        const m = mols[idx]; const G = 8;
+        const m = mols[idx], P = predOf(m); const G = 8;
         const cell = (t, p, unit) => { const d = Math.abs((+t) - (+p)); const bad = unit === "ppm" ? d > 0.1 : d > 1.5;
           return `<td class="num">${t}</td><td class="num pred${bad ? ' off' : ''}">${p}</td>`; };
         let rows = "";
         for (let i = 0; i < G; i++)
-          rows += `<tr><td class="gi">${i + 1}</td>${cell(m.true_shift[i].toFixed(2), m.pred_shift[i].toFixed(2), "ppm")}${cell(m.true_deg[i], m.pred_deg[i], "n")}</tr>`;
+          rows += `<tr><td class="gi">${i + 1}</td>${cell(m.true_shift[i].toFixed(2), P.pred_shift[i].toFixed(2), "ppm")}${cell(m.true_deg[i], P.pred_deg[i], "n")}</tr>`;
         // J heatmaps (true vs pred): 64 cells flattened into an 8-col grid
-        const maxJ = Math.max(1, ...m.true_J.flat().map(Math.abs), ...m.pred_J.flat().map(Math.abs));
+        const maxJ = Math.max(1, ...m.true_J.flat().map(Math.abs), ...P.pred_J.flat().map(Math.abs));
         const grid = (M) => {
           let cells = "";
           M.forEach(row => row.forEach(v => {
@@ -177,15 +183,16 @@
         };
         mat.innerHTML =
           `<table class="nodes"><thead><tr><th>#</th><th>δ true</th><th>δ pred</th><th>n true</th><th>n pred</th></tr></thead><tbody>${rows}</tbody></table>
-           <div class="jwrap"><div><div class="jlbl">J — target</div>${grid(m.true_J)}</div><div><div class="jlbl">J — predicted</div>${grid(m.pred_J)}</div></div>`;
+           <div class="jwrap"><div><div class="jlbl">J — target</div>${grid(m.true_J)}</div><div><div class="jlbl">J — predicted</div>${grid(P.pred_J)}</div></div>`;
       }
       function show() {
-        const m = mols[idx]; sel.value = idx;
+        const m = mols[idx], P = predOf(m); sel.value = idx;
         meta.innerHTML = `<span class="mono">${m.smiles || m.id}</span> · ${m.n_spins} protons ·
-          shift MAE <b>${m.shift_mae.toFixed(3)}</b> ppm · J MAE <b>${m.j_mae.toFixed(2)}</b> Hz`;
+          shift MAE <b>${P.shift_mae.toFixed(3)}</b> ppm · J MAE <b>${P.j_mae.toFixed(2)}</b> Hz`;
         drawSpec(); drawMatrix(); render3d(m);
       }
       sel.onchange = () => { idx = +sel.value; show(); };
+      if (modSel) modSel.onchange = () => { mkey = modSel.value; show(); };
       $("#txPrev", host).onclick = () => { idx = (idx - 1 + mols.length) % mols.length; show(); };
       $("#txNext", host).onclick = () => { idx = (idx + 1) % mols.length; show(); };
       show(); window.addEventListener("resize", drawSpec);
