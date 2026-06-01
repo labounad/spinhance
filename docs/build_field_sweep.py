@@ -37,7 +37,7 @@ from simulation.pyspin.composite import (  # noqa: E402
 
 # ── config ────────────────────────────────────────────────────────────────────
 LOW_MHZ, HIGH_MHZ = 90.0, 600.0
-N_FIELDS = 16            # geometric frames between low and high field
+N_FIELDS = 48            # geometric frames between low and high field (dense → smooth sweep, no wobble)
 PPM_FROM, PPM_TO = 0.0, 12.0
 SIM_POINTS = 32768       # 2**15 — simulated AND STORED over the TIGHT window
 DISP_POINTS = SIM_POINTS # store every simulated point (no downsampling) -> smooth peaks
