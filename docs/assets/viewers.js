@@ -97,7 +97,7 @@
     { m: "022", arch: "spingraph + surrogate-spectral", data: "64k ChEMBL", p: "10M", shift: "0.064", j: "0.91", f1: "0.916", deg: "0.928", st: "superseded" },
     { m: "025", arch: "spingraph, shift-2×, WSD LR", data: "64k ChEMBL", p: "10M", shift: "0.037", j: "0.59", f1: "0.940", deg: "0.945", st: "production" },
     { m: "026", arch: "025 + peak channel + soft-equiv", data: "64k ChEMBL", p: "10M", shift: "0.037", j: "0.65", f1: "0.940", deg: "0.960", st: "done" },
-    { m: "light·025", arch: "025 recipe", data: "500k PubChem", p: "10M", shift: "0.083", j: "1.03", f1: "0.915", deg: "0.943", st: "running · ep5" },
+    { m: "light·025", arch: "025 recipe", data: "500k PubChem", p: "10M", shift: "0.057", j: "0.76", f1: "0.943", deg: "0.958", st: "done · ep13" },
     { m: "light·026", arch: "026 recipe", data: "500k PubChem", p: "10M", shift: "0.100", j: "1.48", f1: "0.848", deg: "0.882", st: "running · ep2" },
     { m: "xl·025", arch: "025 recipe, xl", data: "3.2M PubChem", p: "57M", shift: "—", j: "—", f1: "—", deg: "—", st: "running" },
     { m: "xl·026", arch: "026 recipe, xl", data: "3.2M PubChem", p: "57M", shift: "—", j: "—", f1: "—", deg: "—", st: "running" },
