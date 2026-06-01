@@ -62,9 +62,12 @@ def _output(requires_grad=True, with_aux=True):
 
 # ── model contract: aux logits + peak channel ──────────────────────────────────
 
-def test_edge_head_emits_soft_equiv_logits():
-    out = _model().eval()(_batch())
-    se = out.auxiliary["soft_equiv_logits"]
+def test_soft_equiv_logits_exposed_only_when_enabled():
+    # default (e.g. the 025 recipe): the flag is UNtrained, so it must NOT be exposed —
+    # decode keys off the key's presence and would otherwise average random groups.
+    assert "soft_equiv_logits" not in _model().eval()(_batch()).auxiliary
+    # use_soft_equiv=True (the 026 recipe): exposed for the loss + decode-time averaging.
+    se = _model(use_soft_equiv=True).eval()(_batch()).auxiliary["soft_equiv_logits"]
     assert se.shape == (B, E) and torch.isfinite(se).all()
 
 
