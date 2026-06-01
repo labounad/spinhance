@@ -34,10 +34,22 @@ st.set_page_config(page_title="SpinHance Training", layout="wide")
 
 # ── S3 I/O helpers ─────────────────────────────────────────────────────────────
 
+def _creds_error(exc: Exception) -> None:
+    msg = str(exc)
+    if any(kw in msg for kw in ("Token has expired", "Unable to locate credentials",
+                                "ExpiredToken", "NoCredentialsError")):
+        st.error(
+            "**AWS credentials expired or missing.**  \n"
+            "Run: `aws sso login --profile hack-scripps`  \n"
+            "Then restart Streamlit (or set `AWS_PROFILE=hack-scripps` in your shell)."
+        )
+
+
 def _s3_read_json(uri: str, default=None):
     try:
         return s3io.get_json(uri, default)
-    except Exception:
+    except Exception as e:
+        _creds_error(e)
         return default
 
 
@@ -51,14 +63,16 @@ def _s3_read_jsonl(uri: str) -> pd.DataFrame:
             except json.JSONDecodeError:
                 pass
         return pd.json_normalize(rows) if rows else pd.DataFrame()
-    except Exception:
+    except Exception as e:
+        _creds_error(e)
         return pd.DataFrame()
 
 
 def _list_sessions() -> list[str]:
     try:
         return sorted(s3io.list_prefixes(S3_TRAINING), reverse=True)
-    except Exception:
+    except Exception as e:
+        _creds_error(e)
         return []
 
 
@@ -84,7 +98,12 @@ def _resolve_run_uri(session_uri: str) -> str:
 with st.sidebar:
     st.title("SpinHance Training")
     session_options = _list_sessions()
-    if session_options:
+    manual = st.text_input("Paste URI (overrides dropdown)", placeholder=f"{S3_TRAINING}/…")
+    if manual.strip():
+        raw = manual.strip().rstrip("/")
+        run_uri = _resolve_run_uri(raw)
+        session_name = raw.rsplit("/", 1)[-1]
+    elif session_options:
         session_name = st.selectbox("Session", session_options)
         run_uri = _resolve_run_uri(f"{S3_TRAINING}/{session_name}")
     else:
