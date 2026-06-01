@@ -52,6 +52,17 @@ def test_index_maps_global_to_part_row(tmp_path):
         assert np.array_equal(ss[i], flat[i])
 
 
+def test_open_mmaps_capped_lru(tmp_path):
+    """Shuffled access across many shards must NOT leak file descriptors — the
+    LRU keeps at most max_open mmaps open (regression for OSError: Too many open
+    files at 3200 shards)."""
+    _write_parts(tmp_path, sizes=[2] * 20)              # 20 shards, 40 rows
+    ss = StackedSpectra(tmp_path, max_open=5)
+    for i in range(40):                                  # touch every shard
+        _ = ss[i]
+    assert len(ss._mmaps) <= 5
+
+
 def test_parts_sorted_numerically_not_lexically(tmp_path):
     # 12 parts: lexical sort would put part_10 before part_2
     _write_parts(tmp_path, sizes=[1] * 12)
@@ -69,6 +80,35 @@ def test_records_gzip_jsonl_and_max_mol(tmp_path):
     assert [r["row"] for r in recs] == [0, 1, 2, 3]
     assert recs[0]["mol_id"] == "mol_000000"
     assert recs[0]["shifts"].shape == (2,)
+
+
+def test_out_of_vocab_degeneracy_filtered(tmp_path):
+    """A molecule with an out-of-vocab degeneracy (e.g. 5) is skipped, and the
+    surviving records keep their global ``row`` (so the spectrum mapping holds)."""
+    rp = tmp_path / "recs.json.gz"
+    with gzip.open(rp, "wt") as f:
+        # idx 0,2 valid (deg 1,3); idx 1 has deg 5 (out of vocab) -> dropped
+        for i, degs in enumerate([(1, 3), (1, 5), (3, 1)]):
+            f.write(json.dumps({"chembl_id": f"m{i}", "labels": ["A", "B"],
+                                "spin_groups": [[2.0, degs[0]], [4.0, degs[1]]],
+                                "couplings": []}) + "\n")
+    recs = load_pubchem_records(rp)
+    assert [r["row"] for r in recs] == [0, 2]            # idx 1 filtered, rows preserved
+
+
+def test_reservoir_sampling(tmp_path):
+    """sample_n draws a uniform random subset (seeded, reproducible) whose records
+    keep their global row; no duplicates."""
+    rp = tmp_path / "recs.json.gz"
+    _write_records(rp, 100)
+    a = load_pubchem_records(rp, sample_n=10, sample_seed=0)
+    b = load_pubchem_records(rp, sample_n=10, sample_seed=0)
+    c = load_pubchem_records(rp, sample_n=10, sample_seed=1)
+    assert len(a) == 10
+    assert [r["row"] for r in a] == [r["row"] for r in b]    # deterministic per seed
+    assert [r["row"] for r in a] != [r["row"] for r in c]    # seed changes the sample
+    assert all(0 <= r["row"] < 100 for r in a)
+    assert len(set(r["row"] for r in a)) == 10               # no duplicates
 
 
 def test_dataset_pulls_correct_spectrum(tmp_path):

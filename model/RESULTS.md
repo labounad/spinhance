@@ -1,34 +1,60 @@
 # SpinHance Model Results
 
-## Current status (2026-06-01)
+## Training history (2026-06-01) — presentation summary
 
-Lineage of the `spingraph_decoder` production model:
+Metrics throughout are **`shift_mae_ppm / j_mae_hz / presence_f1 / deg_balanced_acc`**
+(physical units, held-out val). Lower shift/J is better; higher F1/deg is better.
+All models are the `spingraph_decoder` (structured query decoder).
 
-| run | model | data | recipe | result | status |
+| session | model | data | recipe | result (shift/J/F1/deg) | status |
 |---|---|---|---|---|---|
+| CNN baseline | resnet1d | 64k ChEMBL | matrix | 0.279 / 1.80 / 0.807 / 0.732 | floor |
 | 022 | medium 10M | 64k | canonical matrix + surrogate-spectral | 0.064 / 0.91 / 0.916 / 0.928 | superseded |
-| **025** | medium 10M | 64k | matrix, **shift wt 2×**, matrix-only, WSD LR | **0.037 / 0.59 / 0.94 / 0.945** | **production** |
-| 026 | medium 10M | 64k | 025 + **peak channel** + **soft-equiv** | in progress (ep35: 0.066/1.00, soft-equiv flag 99% acc) | running |
-| 027 | **xl 57M** | 500k PubChem | 025 recipe (scale-up baseline) | queued (capacity) | — |
-| 028 | **xl 57M** | 500k PubChem | 026 recipe | queued (capacity) | — |
+| **025** | medium 10M | 64k | matrix, **shift wt 2×**, WSD LR | **0.037 / 0.59 / 0.94 / 0.945** | **production** |
+| 026 | medium 10M | 64k | 025 + **peak channel** + **soft-equiv** | 0.0361 / 0.644 / 0.941 / 0.950 | done (≈025) |
+| light-025 | medium 10M | **500k** PubChem (random) | 025 recipe | running (HPC A6000) | — |
+| light-026 | medium 10M | **500k** PubChem (random) | 026 recipe | running (HPC A6000) | — |
+| xl-025 | **xl 57M** | **3.2M** PubChem (full) | 025 recipe | running (HPC A6000) | — |
+| xl-026 | **xl 57M** | **3.2M** PubChem (full) | 026 recipe | running (HPC A6000) | — |
 
-Metrics are `shift_mae_ppm / j_mae_hz / presence_f1 / deg_balanced_acc`.
+### The story in three arcs
 
-**Two architecture ideas added in 026** (`a64f608`):
+**1. Architecture (the big win).** The structured query decoder — ResNet1D conv stem →
+ppm-positioned tokens → Transformer encoder → 8 spin-group queries → Transformer decoder →
+node heads + symmetric pairwise edge head — beat the dense-CNN baseline **4.4× on shift**
+(0.279→0.064). Then **weighting chemical shifts 2× + WSD LR** (session 025) nearly halved
+shift again to **0.037 ppm / 0.59 Hz** — the production model.
+
+**2. Two inductive biases (session 026).**
 - **Peak-channel input** (`model.use_peak_channel`): a 2nd conv input channel — an in-model
-  peak-emphasis map (local maxima > per-sample threshold, Gaussian-smoothed) derived from the
-  spectrum — as a shift-localization prior. No data-pipeline change (no train/serve skew).
+  peak-emphasis map (local maxima above a per-sample threshold, Gaussian-smoothed) computed
+  from the spectrum in `forward`. A shift-localization prior with no data-pipeline change /
+  no train-serve skew.
 - **Soft-equivalence flag** (`PairwiseEdgeHead` 3rd logit + `SoftEquivLoss` + decode averaging):
-  two groups with the same shift but different couplings (accidental degeneracy) are flagged
-  per-edge (BCE) and their predicted shifts pulled together (consistency penalty) + hard-averaged
-  at decode, so a degenerate pair renders as one peak, not a spurious split doublet. In 026 the
-  flag head hits ~99% acc/recall on the ~8.5% of edges that are soft-equivalent.
+  groups with the *same shift but different couplings* (accidental degeneracy) are flagged
+  per-edge (BCE, ~99% acc/recall on the ~8.5% of edges that qualify), their predicted shifts
+  pulled together (consistency penalty), and hard-averaged at decode — so a degenerate pair
+  renders as **one peak, not a spurious split doublet**. *Result at 64k: ≈ 025 on aggregate
+  MAE (shift tie, J slightly worse, deg slightly better) — the soft-equiv gain is **qualitative**
+  (correct peak multiplicity), which mean shift-MAE can't capture.* The 500k/3M runs test it at scale.
 
-**3M+ PubChem scaling** (`ff46b0a`): `SIZE_PRESETS['xl']` (~57M params at dim512/enc4/dec6);
-`StackedSpectra` reads the stacked `part_NNNNN.npy` shards (1000 mols each, 90 MHz only) keyed by
-record order to `spin_systems_pubchem.json.gz`; `data.parts` selects this path. **Lesson:** at
-≥500k records, per-worker DataLoader copies of the record list (COW broken by refcounting) OOM a
-16 GB box — use `num_workers≤2` (or a big-RAM node); the full 3.2M set needs ≥32 GB RAM regardless.
+**3. Data scaling — 64k ChEMBL → 3.2M PubChem.** New stacked-shard data path: `StackedSpectra`
+mmaps `part_NNNNN.npy` shards (1000 spectra each, 90 MHz only) keyed by record order to
+`spin_systems_pubchem.json.gz`; `data.parts` selects it, `data.sample_n` draws a uniform random
+subset (reservoir sampling). `SIZE_PRESETS['xl']` (~57M params) for the larger regime. Two scales
+in flight on the HPC: a fast **medium / 500k-random "light"** A/B and the full **xl / 3.2M** A/B.
+
+### Hard-won lessons (worth a slide)
+- **Out-of-vocab degeneracy.** PubChem has spin groups with 5 and 8 equivalent protons that
+  64k ChEMBL never did (8 groups in 25.6M, 0.00003%) — the degeneracy vocab `(1,2,3,4,6,9,12,18)`
+  crashed `Standardizer.fit`. Fix: filter those few molecules (keeps the model identical to 025/026).
+- **DataLoader memory at scale.** Persistent workers each fork-copy the record list and Python
+  refcounting breaks copy-on-write, so 8 workers × ≥500k records OOM a 16 GB box (fine at 64k).
+  Fix: `num_workers ≤ 2–4` and a big-RAM node; the full 3.2M needs ≥32 GB RAM.
+- **Infra:** AWS L4/A10G capacity was exhausted across all sizes, so 3M training moved to the
+  **Scripps Garibaldi HPC** (idle bf16 A6000/A5000, data already local, 251 GB RAM). A multi-GPU
+  DDP build was added but the cluster's NCCL rendezvous fails (`c10d` address-family error); the
+  proven **single-GPU A6000** path is what's running. DDP remains an optional future speedup.
 
 ## ⭐⭐ PRODUCTION MODEL — `spingraph_decoder` (structured query decoder)
 
