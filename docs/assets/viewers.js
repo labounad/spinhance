@@ -192,6 +192,228 @@
     }).catch(e => { host.innerHTML = "<p class='muted'>test explorer data unavailable</p>"; console.error(e); });
   }
 
-  function boot() { initCurves(); initTable(); initExplorer(); }
+  // ====================== 4. MOLECULE BROWSER (3Dmol.js) ===================
+  function initSpinViewer() {
+    var host      = $("#svViewer");     if (!host) return;
+    var tileCont  = $("#svTiles",      host);
+    var molBox    = $("#svMolBox",     host);
+    var headId    = $("#svId",         host);
+    var headSub   = $("#svSub",        host);
+    var tableBody = $("#svTableBody",  host);
+    var smilesVal = $("#svSmiles",     host);
+    var mols = [], current = null, hoverLabel = null;
+    var overlay, ctx;
+
+    // All molecules display at this fixed scale (px per native SVG pixel).
+    // ChemDraw exports all molecules at the same bond length in SVG px, so
+    // a single PIXEL_SCALE makes every structure appear at the same bond size.
+    var PIXEL_SCALE = 3;
+
+    function svgUri(svg) {
+      return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+    }
+
+    // ---- Canvas overlay (spotlight effect) ----
+    // All coordinates are in PIXEL space (canvas buffer px = molBox display px).
+    // Atom positions (p[0], p[1]) are fractions of the ORIGINAL SVG viewBox;
+    // we convert using imgW/imgH (displayed image dimensions) + offset for centering.
+
+    function atomPx(p) {
+      // Returns {x, y} in canvas pixel space, accounting for centered image offset
+      if (!current) return {x:0, y:0};
+      var imgW = current.svg_w * PIXEL_SCALE;
+      var imgH = current.svg_h * PIXEL_SCALE;
+      var boxW = overlay.width, boxH = overlay.height;
+      var offX = (boxW - imgW) / 2;
+      var offY = (boxH - imgH) / 2;
+      return {x: offX + p[0] * imgW, y: offY + p[1] * imgH};
+    }
+
+    function drawOverlay(activeLabel) {
+      if (!overlay || !current) return;
+      var W = overlay.width, H = overlay.height;
+      ctx.clearRect(0, 0, W, H);
+      var r = 10;   // fixed pixel radius for glow circles
+
+      if (!activeLabel) {
+        current.groups.forEach(function(g) {
+          g.atoms.forEach(function(p) {
+            var pt = atomPx(p);
+            ctx.beginPath(); ctx.arc(pt.x, pt.y, r, 0, Math.PI*2);
+            ctx.fillStyle = g.color + "40"; ctx.fill();
+            ctx.strokeStyle = g.color; ctx.lineWidth = 1.5;
+            ctx.globalAlpha = 0.65; ctx.stroke(); ctx.globalAlpha = 1;
+          });
+        });
+        return;
+      }
+
+      // Spotlight: dark veil + reveal active group
+      ctx.fillStyle = "rgba(0,0,0,0.55)"; ctx.fillRect(0, 0, W, H);
+      var ag = current.groups.find(function(g){ return g.label === activeLabel; });
+      if (!ag) return;
+
+      ctx.globalCompositeOperation = "destination-out";
+      ag.atoms.forEach(function(p) {
+        var pt = atomPx(p);
+        var gr = ctx.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, r*2.8);
+        gr.addColorStop(0,   "rgba(0,0,0,1)");
+        gr.addColorStop(0.5, "rgba(0,0,0,0.82)");
+        gr.addColorStop(1,   "rgba(0,0,0,0)");
+        ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(pt.x, pt.y, r*2.8, 0, Math.PI*2); ctx.fill();
+      });
+      ctx.globalCompositeOperation = "source-over";
+
+      ag.atoms.forEach(function(p) {
+        var pt = atomPx(p);
+        ctx.beginPath(); ctx.arc(pt.x, pt.y, r, 0, Math.PI*2);
+        ctx.strokeStyle = ag.color; ctx.lineWidth = 2.5;
+        ctx.shadowColor = ag.color; ctx.shadowBlur = 10;
+        ctx.stroke(); ctx.shadowBlur = 0;
+      });
+    }
+
+    function resizeOverlay() {
+      // Canvas covers the full molBox; buffer = display size (no stretching)
+      var w = molBox.clientWidth  || 500;
+      var h = molBox.clientHeight || 300;
+      overlay.width  = w;
+      overlay.height = h;
+      drawOverlay(hoverLabel);
+    }
+
+    function setHover(label) {
+      if (label === hoverLabel) return;
+      hoverLabel = label;
+      tableBody.querySelectorAll("tr").forEach(function(tr) {
+        tr.classList.toggle("sv-hover", tr.dataset.label === label);
+      });
+      drawOverlay(label);
+    }
+
+    // ---- Table ----
+    function buildTable() {
+      tableBody.innerHTML = "";
+      current.groups.forEach(function(g) {
+        var tr = document.createElement("tr"); tr.dataset.label = g.label;
+        var tdD = document.createElement("td"); tdD.className = "sg-dot-cell";
+        var dot = document.createElement("span"); dot.className = "sv-dot";
+        dot.style.background = g.color; tdD.appendChild(dot);
+        var tdL = document.createElement("td"); tdL.className = "sg-label";
+        tdL.style.color = g.color; tdL.textContent = g.label;
+        var tdT = document.createElement("td"); tdT.className = "sg-type";
+        tdT.textContent = g.tier_label;
+        var tdC = document.createElement("td"); tdC.className = "sg-count";
+        tdC.textContent = g.h_count;
+        tr.append(tdD, tdL, tdT, tdC);
+        tr.addEventListener("mouseenter", function() { setHover(g.label); });
+        tr.addEventListener("mouseleave", function() { setHover(null); });
+        tableBody.appendChild(tr);
+      });
+    }
+
+    // ---- Select ----
+    function select(idx) {
+      tileCont.querySelectorAll(".sv-tile").forEach(function(t, i) {
+        t.classList.toggle("sv-active", i === idx);
+        if (i === idx) t.scrollIntoView({block:"nearest"});
+      });
+      current = mols[idx]; hoverLabel = null;
+      headId.textContent  = current.id;
+      headSub.textContent = current.formula + " · " + current.n_protons + " protons";
+      smilesVal.textContent = current.smiles;
+      buildTable();
+
+      // Replace molecule image
+      var oldImg = molBox.querySelector("img");
+      if (oldImg) oldImg.remove();
+
+      if (current.svg) {
+        var img = document.createElement("img");
+        img.className = "sv-mol-img"; img.alt = current.id;
+        // Size at fixed scale so all molecules have the same bond size on screen
+        var imgW = current.svg_w * PIXEL_SCALE;
+        var imgH = current.svg_h * PIXEL_SCALE;
+        img.style.width  = imgW + "px";
+        img.style.height = imgH + "px";
+        img.src = svgUri(current.svg);
+        molBox.insertBefore(img, overlay);
+        requestAnimationFrame(resizeOverlay);
+      }
+    }
+
+    // ---- Gallery ----
+    function buildGallery(data) {
+      mols = data.molecules;
+      tileCont.innerHTML = "";
+      mols.forEach(function(mol, i) {
+        var dotColor = (mol.groups.find(function(g){return g.tier==="HARD";}) ||
+                        mol.groups.find(function(g){return g.tier==="SOFT";}) ||
+                        mol.groups[0]).color;
+        var tile = document.createElement("div"); tile.className = "sv-tile";
+        var dot  = document.createElement("span"); dot.className = "sv-tile-dot";
+        dot.style.background = dotColor;
+        var body = document.createElement("div"); body.className = "sv-tile-body";
+        var idEl = document.createElement("div"); idEl.className = "sv-tile-id";
+        idEl.textContent = mol.id;
+        var sub  = document.createElement("div"); sub.className = "sv-tile-sub";
+        sub.textContent = mol.formula + " · " + mol.n_protons + "H";
+        body.append(idEl, sub); tile.append(dot, body);
+        tile.addEventListener("click", function() { select(i); });
+        tileCont.appendChild(tile);
+      });
+      if (mols.length) select(0);
+    }
+
+    // ---- Gallery height sync ----
+    function syncGalleryHeight() {
+      var card   = host.querySelector(".sv-detail-card");
+      var galCol = host.querySelector(".sv-gallery-col");
+      if (!card || !galCol) return;
+      var bodyH = card.offsetHeight - 42;
+      galCol.style.maxHeight = Math.round(bodyH * 0.67) + 40 + "px";
+      galCol.style.alignSelf  = "start";
+      galCol.style.marginTop  = "42px";
+    }
+
+    // ---- Init ----
+    // Build overlay canvas once, keep it
+    overlay = document.createElement("canvas");
+    overlay.className = "sv-overlay";
+    ctx = overlay.getContext("2d");
+    molBox.appendChild(overlay);
+
+    overlay.addEventListener("mousemove", function(e) {
+      if (!current) return;
+      var rect = overlay.getBoundingClientRect();
+      var mx = e.clientX - rect.left;   // pixel coords in canvas space
+      var my = e.clientY - rect.top;
+      var best = 20, bestLbl = null;    // 20px hit threshold
+      current.groups.forEach(function(g) {
+        g.atoms.forEach(function(p) {
+          var pt = atomPx(p);
+          var d = Math.hypot(mx - pt.x, my - pt.y);
+          if (d < best) { best = d; bestLbl = g.label; }
+        });
+      });
+      setHover(bestLbl);
+    });
+    overlay.addEventListener("mouseleave", function() { setHover(null); });
+    window.addEventListener("resize", resizeOverlay);
+
+    fetch("data/spin_viewer.json")
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        buildGallery(data);
+        requestAnimationFrame(syncGalleryHeight);
+        window.addEventListener("resize", syncGalleryHeight);
+      })
+      .catch(function(e) {
+        tileCont.innerHTML = "<p class='sv-empty'>Molecule browser unavailable.</p>";
+        console.error(e);
+      });
+  }
+
+  function boot() { initCurves(); initTable(); initExplorer(); initSpinViewer(); }
   if (document.readyState !== "loading") boot(); else document.addEventListener("DOMContentLoaded", boot);
 })();

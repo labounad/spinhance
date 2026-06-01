@@ -256,6 +256,71 @@
   .jlbl{font-size:11px;color:var(--ink-faint);margin-bottom:5px}
   .jgrid{display:grid;grid-template-columns:repeat(8,13px);grid-auto-rows:13px;gap:1px}
   .jgrid i{background:var(--accent);border-radius:2px;display:block;min-height:13px}
+
+  /* ---- Molecule browser (Screen section) ---- */
+  /* gallery col uses align-self:end so its bottom aligns with the card bottom;
+     margin-top pushes it down to start at the 3D viewer (below the card header ~42px + body offset) */
+  .sv-wrap{display:grid;grid-template-columns:200px 1fr;gap:18px;margin-top:34px;align-items:start}
+  @media(max-width:900px){.sv-wrap{grid-template-columns:1fr}}
+  .sv-gallery-col{overflow-y:auto;scrollbar-width:none;background:var(--panel);
+    border:1px solid var(--line);border-radius:14px;padding:8px}
+  .sv-gallery-col::-webkit-scrollbar{display:none}
+  .sv-tiles{display:flex;flex-direction:column;gap:4px}
+  .sv-tile{cursor:pointer;border-radius:8px;border:1.5px solid var(--line);
+    padding:7px 10px;background:var(--panel-2,var(--bg-soft,#f0f1f3));
+    transition:border-color .15s,background .15s;display:flex;align-items:center;gap:9px}
+  [data-theme="dark"] .sv-tile{background:var(--bg-soft,#0c0f15)}
+  .sv-tile:hover{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,transparent)}
+  .sv-tile.sv-active{border-color:var(--accent);
+    background:color-mix(in srgb,var(--accent) 12%,transparent)}
+  .sv-tile-dot{width:10px;height:10px;border-radius:50%;flex:none}
+  .sv-tile-body{min-width:0}
+  .sv-tile-id{font-size:11px;font-weight:700;color:var(--ink);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sv-tile-sub{font-size:10px;color:var(--ink-faint);margin-top:1px}
+  .sv-detail-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;
+    box-shadow:var(--shadow);overflow:hidden}
+  .sv-head{padding:10px 16px;border-bottom:1px solid var(--line);display:flex;
+    align-items:baseline;gap:10px}
+  .sv-head-id{font-size:14px;font-weight:800;color:var(--ink)}
+  .sv-head-sub{font-size:12px;color:var(--ink-faint)}
+  .sv-body{display:flex;align-items:stretch;min-height:300px}
+  .sv-mol-box{position:relative;flex:1;background:#000;min-width:0;
+    height:320px;overflow:hidden;display:flex;align-items:center;justify-content:center}
+  .sv-mol-img{display:block;flex:none}   /* JS sets explicit px width/height */
+  .sv-overlay{position:absolute;inset:0;cursor:crosshair}
+  .sv-table-col{flex:0 0 182px;border-left:1px solid var(--line);
+    display:flex;flex-direction:column;min-width:0}
+  .sv-tbl-head{padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--ink-faint);border-bottom:1px solid var(--line);flex:none}
+  .sv-tbl-scroll{flex:1;overflow-y:auto}
+  .sv-table{border-collapse:collapse;width:100%;font-size:12.5px}
+  .sv-table th{position:sticky;top:0;padding:5px 8px;text-align:left;background:var(--panel);
+    color:var(--ink-faint);font-weight:600;font-size:10.5px;
+    border-bottom:1px solid var(--line);white-space:nowrap;z-index:1}
+  .sv-table tr{cursor:default}
+  .sv-table tr:not(:last-child) td{border-bottom:1px solid var(--line)}
+  .sv-table tr.sv-hover td,.sv-table tr:hover td{
+    background:color-mix(in srgb,#f5d642 14%,transparent)}
+  .sv-dot{width:9px;height:9px;border-radius:50%;display:inline-block;
+    vertical-align:middle;flex:none;transition:box-shadow .15s}
+  .sv-table tr.sv-hover .sv-dot,.sv-table tr:hover .sv-dot{
+    box-shadow:0 0 0 3px color-mix(in srgb,currentColor 30%,transparent)}
+  .sv-table td{padding:5px 8px}
+  .sv-table td.sg-dot-cell{width:14px;padding-right:2px}
+  .sv-table td.sg-label{font-weight:800;font-family:ui-monospace,monospace;
+    font-size:13px;padding-left:4px}
+  .sv-table td.sg-type{color:var(--ink-faint);font-size:11.5px;white-space:nowrap}
+  .sv-table td.sg-count{text-align:right;font-variant-numeric:tabular-nums;
+    color:var(--ink-soft);padding-right:10px}
+  .sv-smiles{padding:7px 14px;border-top:1px solid var(--line);display:flex;
+    align-items:baseline;gap:8px;background:color-mix(in srgb,var(--bg) 35%,transparent)}
+  .sv-smiles-lbl{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--ink-faint);white-space:nowrap;flex:none}
+  .sv-smiles-val{font-size:11px;font-family:"SF Mono",ui-monospace,Menlo,monospace;
+    color:var(--ink-soft);word-break:break-all;line-height:1.45;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .sv-empty{color:var(--ink-faint);font-size:13px;padding:20px;text-align:center}
 </style>
 </head>
 <body>
@@ -278,6 +343,7 @@
     <div class="nav-links">
       <a href="#overview">Overview</a>
       <a href="#pipeline">Pipeline</a>
+      <a href="#screen">Dataset</a>
       <a href="#results">Results</a>
       <a href="#explore">Explore</a>
       <a href="#team">Team</a>
@@ -412,6 +478,66 @@
            block — invariant to the arbitrary labeling of groups (S₈ permutation).</p>
       </div>
     </div>
+  </div>
+</section>
+
+<!-- ============ MOLECULE BROWSER ============ -->
+<section class="block" id="screen">
+  <div class="wrap">
+    <div class="kicker">The screening dataset</div>
+    <h2>The 8-spin library.</h2>
+    <p class="lead" style="font-size:16px">Each molecule has exactly eight magnetically distinct ¹H spin groups (A–H). Hover the table or the 3D structure to see which atoms belong to which group.</p>
+
+    <div class="sv-wrap" id="svViewer">
+      <!-- Gallery: scrollable tile list -->
+      <div class="sv-gallery-col">
+        <div class="sv-tiles" id="svTiles">
+          <div class="sv-empty">Loading…</div>
+        </div>
+      </div>
+
+      <!-- Detail panel -->
+      <div class="sv-detail-col">
+        <div class="sv-detail-card">
+
+          <!-- Header bar -->
+          <div class="sv-head">
+            <span class="sv-head-id" id="svId">—</span>
+            <span class="sv-head-sub" id="svSub"></span>
+          </div>
+
+          <!-- 3D viewer + spin-group table -->
+          <div class="sv-body">
+            <!-- ChemDraw SVG + canvas hover overlay (built by JS) -->
+            <div class="sv-mol-box" id="svMolBox"></div>
+            <!-- Spin-group table -->
+            <div class="sv-table-col">
+              <div class="sv-tbl-head">Spin groups</div>
+              <div class="sv-tbl-scroll">
+                <table class="sv-table">
+                  <thead>
+                    <tr>
+                      <th colspan="2">Group</th>
+                      <th>Equivalence</th>
+                      <th style="text-align:right">Protons</th>
+                    </tr>
+                  </thead>
+                  <tbody id="svTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- SMILES bar -->
+          <div class="sv-smiles">
+            <span class="sv-smiles-lbl">SMILES</span>
+            <span class="sv-smiles-val mono" id="svSmiles">—</span>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
   </div>
 </section>
 
