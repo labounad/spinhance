@@ -243,6 +243,10 @@
   .tx-navgrp{display:flex;align-items:center;gap:8px}
   .tx-modlabel{display:flex;align-items:center;gap:6px;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-faint);font-weight:700}
   .tx-modlabel select{text-transform:none;letter-spacing:0;color:var(--accent);border-color:var(--accent)}
+  .tx-filter{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-soft);cursor:pointer;user-select:none}
+  .tx-status{font-size:13px;font-weight:600;margin:12px 0 2px;padding:5px 11px;border-radius:8px;display:inline-block}
+  .tx-status.is-test{color:var(--accent-2);background:color-mix(in srgb,var(--accent-2) 15%,transparent)}
+  .tx-status.is-ood{color:#f5a623;background:color-mix(in srgb,#f5a623 15%,transparent)}
   .tx-sel{font:inherit;font-size:13px;padding:5px 8px;border-radius:8px;border:1px solid var(--line-strong);background:var(--panel);color:var(--ink)}
   .tx-meta{font-size:13px;color:var(--ink-soft);margin-bottom:12px}
   .tx-meta .mono{font-family:ui-monospace,monospace;font-size:12px;color:var(--ink)}
@@ -839,15 +843,18 @@
       <div class="vb-head"><h3>Held-out test-molecule explorer <span class="split-tag split-test">test</span></h3>
         <div class="tx-nav">
           <label class="tx-modlabel">model <select id="txModel" class="tx-sel"></select></label>
+          <label class="tx-filter"><input type="checkbox" id="txFilter"> only this model&rsquo;s test set</label>
           <span class="tx-navgrp">
             <button class="car-btn" id="txPrev" aria-label="Previous molecule">&#8249;</button>
             <select id="txSel" class="tx-sel"></select>
             <button class="car-btn" id="txNext" aria-label="Next molecule">&#8250;</button>
           </span>
         </div></div>
+      <div class="tx-status" id="txStatus"></div>
       <div class="tx-meta" id="txMeta"></div>
       <div class="tx-legend">
-        <span><i class="sw" style="background:var(--ink-faint)"></i>target spectrum (90&nbsp;MHz)</span>
+        <span><i class="sw" style="background:var(--accent-2)"></i>target — held-out test</span>
+        <span><i class="sw" style="background:#f5a623"></i>target — out-of-distribution</span>
         <span><i class="sw" style="background:var(--accent)"></i>rendered from prediction</span>
       </div>
       <canvas id="txSpec" class="vb-canvas"></canvas>
