@@ -214,6 +214,9 @@
 
   /* ---- interactive viewers (Explore) ---- */
   .viewer-block{margin-top:34px;padding:22px;border:1px solid var(--line);border-radius:16px;background:var(--panel)}
+  .explore-row{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start;margin-top:34px}
+  .explore-row > .viewer-block{margin-top:0}
+  @media(max-width:860px){.explore-row{grid-template-columns:1fr}}
   .vb-head{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:14px}
   .vb-head h3{font-size:17px;margin:0}
   .vb-controls{display:flex;gap:6px;flex-wrap:wrap}
@@ -665,18 +668,21 @@
       held-out test-molecule explorer — pick a molecule the model never saw and compare its predicted
       spin system against ground truth, then re-render the prediction through the exact simulator.</p>
 
-    <!-- 1. learning curves -->
-    <div class="viewer-block" id="lcViewer">
-      <div class="vb-head"><h3>Learning curves</h3><div class="vb-controls" id="lcMetrics"></div></div>
-      <div class="lc-legend" id="lcLegend"></div>
-      <canvas id="lcCanvas" class="vb-canvas"></canvas>
-    </div>
+    <!-- 1 + 2 side by side -->
+    <div class="explore-row">
+      <!-- 1. learning curves -->
+      <div class="viewer-block" id="lcViewer">
+        <div class="vb-head"><h3>Learning curves</h3><div class="vb-controls" id="lcMetrics"></div></div>
+        <div class="lc-legend" id="lcLegend"></div>
+        <canvas id="lcCanvas" class="vb-canvas"></canvas>
+      </div>
 
-    <!-- 2. comparison table -->
-    <div class="viewer-block">
-      <div class="vb-head"><h3>Model comparison</h3>
-        <span class="muted" style="font-size:13px">click a column to sort</span></div>
-      <div id="cmpTable" class="cmp-wrap"></div>
+      <!-- 2. comparison table -->
+      <div class="viewer-block">
+        <div class="vb-head"><h3>Model comparison</h3>
+          <span class="muted" style="font-size:13px">click to sort</span></div>
+        <div id="cmpTable" class="cmp-wrap"></div>
+      </div>
     </div>
 
     <!-- 3. test-molecule explorer -->
