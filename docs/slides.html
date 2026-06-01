@@ -1092,24 +1092,29 @@ let MOL = null;
 const _cv = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
 function graphSVG(opts) {
-  // 8 nodes on a circle; colours/δ/couplings come straight from the dataset record
-  const g = MOL.groups, N = g.length;
-  const cx = opts.cx, cy = opts.cy, R = opts.R, r = opts.r;
-  const pos = {};
-  g.forEach((gg, i) => { const a = -Math.PI / 2 + i * 2 * Math.PI / N;
-    pos[gg.label] = [cx + R * Math.cos(a), cy + R * Math.sin(a)]; });
+  const g = MOL.groups, byLabel = {}; g.forEach(x => byLabel[x.label] = x);
+  // lay coupled groups next to each other so the couplings read as a connected graph
+  const labels = g.map(x => x.label), adj = {}; labels.forEach(l => adj[l] = []);
+  MOL.couplings.forEach(([u, v]) => { adj[u].push(v); adj[v].push(u); });
+  const seen = new Set(), order = [];
+  labels.forEach(l => { if (seen.has(l)) return; const st = [l];
+    while (st.length) { const n = st.pop(); if (seen.has(n)) continue; seen.add(n); order.push(n);
+      adj[n].forEach(m => { if (!seen.has(m)) st.push(m); }); } });
+  const N = order.length, cx = opts.cx, cy = opts.cy, R = opts.R, r = opts.r, pos = {};
+  order.forEach((l, i) => { const a = -Math.PI / 2 + i * 2 * Math.PI / N;
+    pos[l] = [cx + R * Math.cos(a), cy + R * Math.sin(a)]; });
   let edges = "", jl = "";
   if (opts.edges) {
     MOL.couplings.forEach(([u, v, j]) => {
       const [x1, y1] = pos[u], [x2, y2] = pos[v], strong = j >= 5;
-      edges += `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${_cv('--accent')}" stroke-width="2" opacity="${strong ? .75 : .3}"/>`;
-      if (strong) { const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+      edges += `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${_cv('--accent')}" stroke-width="${strong ? 2.4 : 1.6}" opacity="${strong ? .72 : .42}"/>`;
+      if (opts.jlabels && strong) { const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
         jl += `<rect x="${(mx - 21).toFixed(1)}" y="${(my - 8).toFixed(1)}" width="42" height="14" rx="4" fill="${_cv('--panel-2')}" stroke="${_cv('--line')}"/>`
             + `<text x="${mx.toFixed(1)}" y="${(my + 2.5).toFixed(1)}" text-anchor="middle" style="font:600 9px ui-sans-serif" fill="${_cv('--ink-soft')}">${j.toFixed(1)} Hz</text>`; }
     });
   }
   let nodes = "";
-  g.forEach(gg => { const [x, y] = pos[gg.label];
+  order.forEach(l => { const gg = byLabel[l], [x, y] = pos[l];
     nodes += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r}" fill="${gg.color}" stroke="${_cv('--panel')}" stroke-width="2.5"/>`;
     if (opts.delta)
       nodes += `<text x="${x.toFixed(1)}" y="${(y - 1).toFixed(1)}" text-anchor="middle" style="font:700 11px ui-sans-serif" fill="#fff">${gg.delta.toFixed(1)}</text>`
@@ -1125,18 +1130,17 @@ function renderStages() {
   const mol = document.getElementById("s1mol");
   if (mol) {
     const w = MOL.svg_w, h = MOL.svg_h;
-    let dots = "";
+    // soft highlight halos BEHIND the structure (like the site's library viewer) — no labels on the molecule
+    let halos = "";
     MOL.groups.forEach(g => g.atoms.forEach(([ax, ay]) => {
-      const x = (ax * w).toFixed(1), y = (ay * h).toFixed(1);
-      dots += `<circle cx="${x}" cy="${y}" r="6" fill="${g.color}" stroke="${_cv('--panel')}" stroke-width="1.4"/>`
-            + `<text x="${x}" y="${(ay * h - 8).toFixed(1)}" text-anchor="middle" style="font:700 7.5px ui-sans-serif" fill="${g.color}">${g.label}</text>`;
+      halos += `<circle cx="${(ax * w).toFixed(1)}" cy="${(ay * h).toFixed(1)}" r="8.5" fill="${g.color}" opacity="0.5"/>`;
     }));
-    mol.innerHTML = `<div class="molwrap">${MOL.svg}<svg class="ovl" viewBox="0 0 ${w} ${h}">${dots}</svg></div>`;
+    mol.innerHTML = `<div class="molwrap"><svg class="ovl" viewBox="0 0 ${w} ${h}">${halos}</svg>${MOL.svg}</div>`;
   }
   const s1g = document.getElementById("s1graph");
-  if (s1g) s1g.innerHTML = graphSVG({ cx: 92, cy: 92, R: 70, r: 14, edges: false, delta: false, maxh: 220 });
+  if (s1g) s1g.innerHTML = graphSVG({ cx: 96, cy: 96, R: 74, r: 15, edges: true, delta: false, jlabels: false, maxh: 230 });
   const s2g = document.getElementById("s2graph");
-  if (s2g) s2g.innerHTML = graphSVG({ cx: 150, cy: 130, R: 104, r: 22, edges: true, delta: true, maxh: 300 });
+  if (s2g) s2g.innerHTML = graphSVG({ cx: 150, cy: 130, R: 104, r: 22, edges: true, delta: true, jlabels: true, maxh: 300 });
 }
 
 function loadStageMol() {
