@@ -26,7 +26,7 @@
     canvas.width = W * dpr; canvas.height = H * dpr;
     const ctx = canvas.getContext("2d"); ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, W, H);
-    const padL = 52, padR = 14, padT = 12, padB = 30;
+    const padL = opts.noY ? 16 : 52, padR = 14, padT = 12, padB = 30;
     const xs = series.flatMap(s => s.pts.map(p => p[0]));
     const ys = series.flatMap(s => s.pts.map(p => p[1]));
     if (!xs.length) return;
@@ -34,11 +34,12 @@
     let y0 = opts.y0 != null ? opts.y0 : Math.min(...ys), y1 = opts.y1 != null ? opts.y1 : Math.max(...ys);
     if (y0 === y1) { y1 = y0 + 1; }
     const pad = (y1 - y0) * 0.08; y0 -= pad; y1 += pad;
-    const X = v => padL + (v - x0) / (x1 - x0 || 1) * (W - padL - padR);
+    // invertX: high→low ppm (standard NMR view)
+    const X = v => { const f = (v - x0) / (x1 - x0 || 1); return padL + (opts.invertX ? 1 - f : f) * (W - padL - padR); };
     const Y = v => H - padB - (v - y0) / (y1 - y0 || 1) * (H - padT - padB);
-    // grid + y ticks
+    // grid + y ticks (skipped for noY, e.g. NMR spectra where intensity is arbitrary)
     ctx.strokeStyle = c.line; ctx.fillStyle = c.faint; ctx.font = "11px system-ui,sans-serif"; ctx.lineWidth = 1;
-    for (let i = 0; i <= 4; i++) {
+    if (!opts.noY) for (let i = 0; i <= 4; i++) {
       const yv = y0 + (y1 - y0) * i / 4, yy = Y(yv);
       ctx.globalAlpha = .5; ctx.beginPath(); ctx.moveTo(padL, yy); ctx.lineTo(W - padR, yy); ctx.stroke(); ctx.globalAlpha = 1;
       ctx.textAlign = "right"; ctx.fillText(yv.toFixed(opts.yd != null ? opts.yd : 2), padL - 6, yy + 3);
@@ -137,7 +138,7 @@
         linePlot(spec, [
           { color: c.faint, width: 1.6, pts: m.input.map((v, i) => [ppm[i], v]) },
           { color: c.accent, width: 2, pts: m.rendered.map((v, i) => [ppm[i], v]) },
-        ], { xlabel: "ppm", x0: 0, x1: 12, y0: 0, yd: 2 });
+        ], { xlabel: "ppm", x0: 0, x1: 12, y0: 0, invertX: true, noY: true });
       }
       function drawMatrix() {
         const m = mols[idx]; const G = 8;
