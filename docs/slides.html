@@ -41,7 +41,12 @@
   }
   html,body{background:var(--bg);}
   .reveal .slides{text-align:left;}
-  .reveal section{height:100%;}
+  /* Reveal sizes sections to their content, which makes height:100%/flex:1
+     collapse. Fix: every slide's content lives in a DEFINITE-size "stage"
+     (1184x628, fits 1280x720 with margin); Reveal centers it, and percentage
+     heights / flex:1 inside resolve deterministically. */
+  .reveal .slides > section{padding:0;}
+  .stage{position:relative;width:1184px;height:628px;}
   .reveal h1,.reveal h2,.reveal h3{
     font-family:inherit; color:var(--ink); line-height:1.12; letter-spacing:-.02em;
     margin:0; text-transform:none; font-weight:800;
@@ -53,7 +58,8 @@
   .reveal ::selection{background:color-mix(in srgb,var(--accent) 40%,transparent);}
 
   /* slide chrome */
-  .slidepad{padding:54px 64px; height:100%; display:flex; flex-direction:column;}
+  .slidepad{position:relative; width:1184px; height:628px; padding:46px 60px;
+    display:flex; flex-direction:column;}
   .eyebrow{font-size:15px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent-2);font-weight:700;margin-bottom:8px;}
   .kicker{font-size:15px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);font-weight:700;margin-bottom:12px;}
   .lead{color:var(--ink-soft);font-size:22px;max-width:1040px;}
@@ -68,24 +74,40 @@
   .spin-dot .spin-vec{stroke:var(--trace);}
 
   /* ================= Slide 1 — the live sweep ================= */
-  #s-hero{position:relative;overflow:hidden;}
+  .hero-stage{position:relative;width:1184px;height:628px;overflow:hidden;border-radius:16px;}
   #heroCanvas{position:absolute;inset:0;width:100%;height:100%;display:block;z-index:0;}
   .hero-grad{position:absolute;inset:0;z-index:1;pointer-events:none;
     background:linear-gradient(180deg,var(--bg) 0%,color-mix(in srgb,var(--bg) 35%,transparent) 26%,transparent 50%,
       color-mix(in srgb,var(--bg) 55%,transparent) 86%,var(--bg) 100%);}
-  .hero-fg{position:relative;z-index:2;height:100%;display:flex;flex-direction:column;justify-content:space-between;}
-  .hero-head h1{font-size:clamp(34px,4.4vw,58px);font-weight:800;max-width:18ch;}
+  /* header pinned top, gauge pinned bottom — absolute anchoring so the control
+     row is ALWAYS inside the slide no matter how the headline wraps */
+  .hero-head{position:absolute;left:60px;right:60px;top:46px;z-index:2;}
+  .hero-head h1{font-size:clamp(32px,4vw,54px);font-weight:800;max-width:18ch;}
   .hero-head .eyebrow{margin-bottom:6px;}
-  .hero-head p{color:var(--ink-soft);font-size:21px;max-width:46ch;margin-top:12px;}
-  .mol-tag{font-size:16px;color:var(--ink-soft);margin-top:14px;}
+  .hero-head p{color:var(--ink-soft);font-size:20px;max-width:46ch;margin-top:12px;}
+  .mol-tag{font-size:16px;color:var(--ink-soft);}
   .mol-tag b{color:var(--ink);} .mol-tag .smi{color:var(--accent);}
-  .gauge{display:flex;flex-direction:column;align-items:flex-start;gap:9px;}
+  .gauge{position:absolute;left:60px;right:60px;bottom:42px;z-index:2;
+    display:flex;flex-direction:column;align-items:flex-start;gap:10px;}
   .field-read{font-weight:800;letter-spacing:-.03em;font-size:clamp(30px,3.6vw,44px);
     font-variant-numeric:tabular-nums;color:var(--ink);}
   .field-read .u{font-size:.42em;color:var(--ink-faint);font-weight:600;margin-left:6px;}
-  .bar{width:min(520px,60vw);height:6px;border-radius:99px;background:var(--line-strong);position:relative;overflow:hidden;}
+  /* draggable field slider: a real range input overlaid on the gradient bar */
+  .slider-wrap{position:relative;width:min(520px,60vw);height:22px;display:flex;align-items:center;}
+  .bar{position:absolute;left:0;right:0;height:6px;border-radius:99px;background:var(--line-strong);overflow:hidden;pointer-events:none;}
   .bar i{position:absolute;left:0;top:0;bottom:0;border-radius:99px;width:0%;
     background:linear-gradient(90deg,var(--accent),var(--accent-2));}
+  #fieldSlider{position:relative;width:100%;height:22px;margin:0;background:transparent;cursor:pointer;
+    -webkit-appearance:none;appearance:none;}
+  #fieldSlider:focus{outline:none;}
+  #fieldSlider::-webkit-slider-runnable-track{height:6px;background:transparent;}
+  #fieldSlider::-moz-range-track{height:6px;background:transparent;}
+  #fieldSlider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:18px;height:18px;border-radius:50%;
+    background:var(--ink);border:2px solid var(--accent-2);margin-top:-6px;transition:transform .12s;
+    box-shadow:0 0 11px color-mix(in srgb,var(--accent) 75%,transparent);}
+  #fieldSlider::-webkit-slider-thumb:hover{transform:scale(1.16);}
+  #fieldSlider::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:var(--ink);
+    border:2px solid var(--accent-2);box-shadow:0 0 11px color-mix(in srgb,var(--accent) 75%,transparent);}
   .bar-tags{width:min(520px,60vw);display:flex;justify-content:space-between;font-size:14px;color:var(--ink-faint);}
   .ctlrow{display:flex;gap:10px;align-items:center;margin-top:8px;}
   .pill-btn{cursor:pointer;border:1px solid var(--line-strong);background:var(--panel);color:var(--ink);
@@ -147,7 +169,7 @@
     padding-left:16px;font-style:italic;max-width:62ch;}
 
   /* big quote slide */
-  .quote-wrap{height:100%;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;gap:18px;}
+  .quote-wrap{display:flex;flex-direction:column;justify-content:center;align-items:flex-start;gap:18px;}
   .quote-wrap blockquote{margin:0;border:0;box-shadow:none;background:none;font-style:normal;
     font-size:clamp(26px,3vw,40px);line-height:1.32;font-weight:700;color:var(--ink);max-width:24ch;}
   .quote-wrap blockquote .hl{
@@ -194,26 +216,31 @@
 
   <!-- ============================ SLIDE 1 — problem + the bet (LIVE SWEEP) ============================ -->
   <section id="s-hero" data-background-color="var(--bg)">
+    <div class="hero-stage">
     <canvas id="heroCanvas"></canvas>
     <div class="hero-grad"></div>
-    <div class="slidepad hero-fg">
-      <div class="hero-head">
-        <div class="eyebrow">The problem &amp; the bet</div>
-        <h1>High-field structure, locked behind a $1M magnet.</h1>
-        <p>At low field the chemical-shift spread Δν shrinks toward <i>J</i>, so multiplets overlap —
-          the spectrum goes <b>second-order</b>. Peak-picking fails, and benchtops get dismissed as
-          "low information." <b>They aren't.</b></p>
-      </div>
-      <div class="gauge">
-        <div class="field-read"><span id="fieldVal">90</span><span class="u">MHz</span></div>
+    <div class="hero-head">
+      <div class="eyebrow">The problem &amp; the bet</div>
+      <h1>High-field structure, locked behind a $1M magnet.</h1>
+      <p>At low field the chemical-shift spread Δν shrinks toward <i>J</i>, so multiplets overlap —
+        the spectrum goes <b>second-order</b>. Peak-picking fails, and benchtops get dismissed as
+        "low information." <b>They aren't.</b></p>
+    </div>
+    <div class="gauge">
+      <div class="field-read"><span id="fieldVal">90</span><span class="u">MHz</span></div>
+      <div class="slider-wrap">
         <div class="bar"><i id="barFill"></i></div>
-        <div class="bar-tags"><span>90 MHz · benchtop · ~$50k</span><span>600 MHz · cryomagnet · ~$1M</span></div>
-        <div class="mol-tag" id="molTag">—</div>
-        <div class="ctlrow">
-          <button class="pill-btn" id="replayBtn">↻ sweep 90→600</button>
-          <button class="pill-btn" id="shuffleBtn">⤭ new molecule</button>
-        </div>
+        <input type="range" id="fieldSlider" min="0" max="1000" step="1" value="0"
+               aria-label="drag to set field strength" />
       </div>
+      <div class="bar-tags"><span>90 MHz · benchtop · ~$50k</span><span>600 MHz · cryomagnet · ~$1M</span></div>
+      <div class="mol-tag" id="molTag">—</div>
+      <div class="ctlrow">
+        <button class="pill-btn" id="replayBtn">▶ play sweep 90→600</button>
+        <button class="pill-btn" id="shuffleBtn">⟳ new molecule</button>
+        <span class="faint" style="font-size:13px">…or drag the slider to any field</span>
+      </div>
+    </div>
     </div>
     <aside class="notes">
       Lucas, ~1:30. 1) High-field NMR is the gold standard for structure, but expensive, centralized, gatekept.
@@ -482,9 +509,12 @@ const Sweep = (() => {
     if (!cv || !meta) return;
     const { cur, field } = interp(heroP);
     render(cv, cur, { fan: true });
-    const fv = document.getElementById("fieldVal"), bf = document.getElementById("barFill");
+    const fv = document.getElementById("fieldVal"), bf = document.getElementById("barFill"),
+          sl = document.getElementById("fieldSlider");
     if (fv) fv.textContent = Math.round(field);
     if (bf) bf.style.width = (heroP * 100).toFixed(1) + "%";
+    // keep the slider knob in sync (autoplay moves it; skip while user drags)
+    if (sl && document.activeElement !== sl) sl.value = Math.round(heroP * 1000);
   }
   function tick(ts) {
     if (!animStart) animStart = ts;
@@ -493,9 +523,15 @@ const Sweep = (() => {
     if (e < 1) raf = requestAnimationFrame(tick);
     else animating = false;
   }
+  function pauseHero() { cancelAnimationFrame(raf); animating = false; }
   function playHero() {
-    cancelAnimationFrame(raf); animStart = 0; heroP = 0; animating = true;
+    pauseHero(); animStart = 0; heroP = 0; animating = true;
     raf = requestAnimationFrame(tick);
+  }
+  function scrubHero(p) {           // manual drag: stop autoplay, jump to field
+    pauseHero();
+    heroP = Math.min(1, Math.max(0, p));
+    paintHero();
   }
 
   function paintProof() {
@@ -515,8 +551,10 @@ const Sweep = (() => {
       }).catch(e => { console.error("field_sweep.json failed", e);
         const t = document.getElementById("molTag"); if (t) t.textContent = "spectra failed to load"; });
     },
-    shuffle() { pick(); heroP = 0; paintHero(); paintProof(); },
-    playHero, paintHero, paintProof, refreshColors,
+    shuffle() { pauseHero(); pick(); heroP = 0;
+      const sl = document.getElementById("fieldSlider"); if (sl) sl.value = 0;
+      paintHero(); paintProof(); },
+    playHero, pauseHero, scrubHero, paintHero, paintProof, refreshColors,
     get ready() { return !!meta; },
   };
 })();
@@ -531,7 +569,9 @@ Reveal.initialize({
 
 function sizeFor(slide) {
   if (!Sweep.ready) return;
-  if (slide && slide.id === "s-hero") Sweep.playHero();
+  // render the hero at its current field (manual control); the play button or
+  // slider drives the sweep — don't force an autoplay on every slide entry.
+  if (slide && slide.id === "s-hero") Sweep.paintHero();
   else if (slide && slide.id === "s-proof") Sweep.paintProof();
 }
 
@@ -557,6 +597,16 @@ window.addEventListener("resize", () => {
 document.addEventListener("click", (e) => {
   if (e.target.closest("#replayBtn")) Sweep.playHero();
   if (e.target.closest("#shuffleBtn")) { Sweep.shuffle(); }
+});
+
+// drag the slider -> scrub to any field (pauses autoplay)
+document.addEventListener("input", (e) => {
+  if (e.target.id === "fieldSlider") Sweep.scrubHero(e.target.value / 1000);
+});
+// keep arrow/Home/End on the focused slider from also navigating Reveal slides
+document.getElementById("fieldSlider").addEventListener("keydown", (e) => {
+  if (["ArrowLeft","ArrowRight","ArrowUp","ArrowDown","Home","End"].includes(e.key))
+    e.stopPropagation();
 });
 
 /* theme toggle on 't' (light/dark, same tokens as the site) */
