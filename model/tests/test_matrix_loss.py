@@ -95,6 +95,47 @@ def test_finite_and_scalar():
     assert lo.total.dim() == 0 and math.isfinite(lo.total.item())
 
 
+def test_focal_runs_finite_grad_and_scalar():
+    batch, iu, pres, jval, deg_cls = _targets()
+    out = ModelOutput(
+        shifts=batch.shifts.clone().requires_grad_(True),
+        coupling_values=jval.clone().requires_grad_(True),
+        coupling_presence_logits=torch.zeros(B, E, requires_grad=True),
+        degeneracy_logits=torch.randn(B, G, C, requires_grad=True),
+    )
+    lo = MatrixLoss(deg_focal_gamma=2.0, presence_focal_gamma=2.0)(out, batch).validate()
+    assert lo.total.dim() == 0 and math.isfinite(lo.total.item())
+    lo.total.backward()
+    assert torch.isfinite(out.degeneracy_logits.grad).all()
+
+
+def test_focal_gamma_zero_matches_plain():
+    """gamma=0 must take the focal-free path and equal the default loss exactly."""
+    batch, iu, pres, jval, deg_cls = _targets(seed=3)
+    out = ModelOutput(
+        shifts=batch.shifts + 0.3, coupling_values=jval + 0.2,
+        coupling_presence_logits=torch.randn(B, E),
+        degeneracy_logits=torch.randn(B, G, C),
+    )
+    plain = MatrixLoss()(out, batch)
+    z = MatrixLoss(deg_focal_gamma=0.0, presence_focal_gamma=0.0)(out, batch)
+    assert abs(plain.metrics["deg"] - z.metrics["deg"]) < 1e-6
+    assert abs(plain.metrics["presence"] - z.metrics["presence"]) < 1e-6
+
+
+def test_focal_downweights_easy_examples():
+    """On a mostly-correct prediction, focal shrinks the deg+presence terms vs plain."""
+    batch, iu, pres, jval, deg_cls = _targets(seed=7)
+    out = _perfect_output(batch, iu, pres, jval, deg_cls)
+    # soften the (otherwise saturated) logits so 'easy but not perfect' applies
+    out.degeneracy_logits = out.degeneracy_logits.clamp(-3.0, 3.0)
+    out.coupling_presence_logits = out.coupling_presence_logits.clamp(-3.0, 3.0)
+    plain = MatrixLoss()(out, batch)
+    foc = MatrixLoss(deg_focal_gamma=2.0, presence_focal_gamma=2.0)(out, batch)
+    assert foc.metrics["deg"] < plain.metrics["deg"]
+    assert foc.metrics["presence"] < plain.metrics["presence"]
+
+
 def test_class_weights_accepted():
     batch, iu, pres, jval, deg_cls = _targets()
     out = _perfect_output(batch, iu, pres, jval, deg_cls)
