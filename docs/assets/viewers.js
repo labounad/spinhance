@@ -276,7 +276,7 @@
       if (!activeLabel) {
         current.groups.forEach(function(g) {
           g.atoms.forEach(function(p) {
-            var pt = offPx(p, g);
+            var pt = atomPx(p);   // static view: circles sit on the atom (methylene split is hover-only)
             ctx.beginPath(); ctx.arc(pt.x, pt.y, r, 0, Math.PI*2);
             ctx.fillStyle = g.color + "40"; ctx.fill();
             ctx.strokeStyle = g.color; ctx.lineWidth = 1.5;
