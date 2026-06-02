@@ -144,10 +144,15 @@ class SurrogateTrainer:
         bs = int(_g(cfg, "training.batch_size", 256))
         collate = make_surrogate_collate(self.fields)
         pin = self.device != "cpu"
-        train_dl = DataLoader(ds["train"], batch_size=bs, shuffle=True, drop_last=True,
-                              collate_fn=collate, num_workers=nw, pin_memory=pin)
-        val_dl = DataLoader(ds["val"], batch_size=bs, shuffle=False,
-                            collate_fn=collate, num_workers=nw, pin_memory=pin)
+        dl_kw = {"collate_fn": collate, "num_workers": nw, "pin_memory": pin}
+        if nw > 0:
+            # Python 3.14 defaults to forkserver, which pickles the worker args —
+            # the collate closure isn't picklable. fork (used by the inverse trainer
+            # too) inherits it instead. persistent_workers avoids re-fork per epoch.
+            dl_kw["multiprocessing_context"] = "fork"
+            dl_kw["persistent_workers"] = True
+        train_dl = DataLoader(ds["train"], batch_size=bs, shuffle=True, drop_last=True, **dl_kw)
+        val_dl = DataLoader(ds["val"], batch_size=bs, shuffle=False, **dl_kw)
 
         epochs = int(_g(cfg, "training.epochs", 80))
         opt, sched = build_optimizer_and_scheduler(
