@@ -22,12 +22,16 @@ BUNDLE="${BUNDLE:-/gpfs/home/labounader/bundle_500k_s0}"
 # RECORDS defaults to the bundle's own records; override for the 600 bundle, whose
 # shards share the 90-bundle records (same molecules + order, spectra differ).
 RECORDS="${RECORDS:-$BUNDLE/records.json.gz}"
+# PRELOAD=true loads the whole bundle into RAM once (fast sequential reads) so
+# training isn't bottlenecked by random mmap reads off GPFS. Needs --mem >= bundle
+# size (33 GB @ 2^14/500k, 131 GB @ 2^16/1M) — set it at sbatch submit time.
+PRELOAD="${PRELOAD:-false}"
 
 # point the surrogate trainer at the prebuilt bundle (records + stacked shards)
 DATA_OV="--set data.records=$RECORDS \
  --set data.parts=$BUNDLE \
  --set data.sample_n=0 \
- --set data.preload=false \
+ --set data.preload=$PRELOAD \
  --set training.num_workers=4"
 
 echo "host $(hostname) | bundle $BUNDLE | records $RECORDS | config $CONFIG run $RUN_NAME"
