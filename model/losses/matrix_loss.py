@@ -12,6 +12,17 @@ matrix-form contract. No renderer dependency.
 ``deg_class_weight`` (C,) and ``presence_pos_weight`` (scalar) counter class
 imbalance (degeneracy ~89% d=1; couplings sparse). They are optional and moved to
 the prediction's device lazily.
+
+Two optional **focal** modulators (Lin et al. 2017) down-weight easy, well-classified
+examples so gradients concentrate on the hard tail — they target the two documented
+imbalance bottlenecks without touching the converged shift/J-magnitude terms:
+
+  * ``deg_focal_gamma``      focal cross-entropy on degeneracy (compounds with the
+                             class weights) -> lifts rare-class balanced accuracy.
+  * ``presence_focal_gamma`` focal BCE on coupling presence -> sharpens the sparse,
+                             easy-negative-dominated presence boundary -> F1.
+
+Both default to 0.0, which reproduces the plain CE / BCE exactly.
 """
 from __future__ import annotations
 
@@ -36,13 +47,16 @@ class MatrixLoss(Loss):
     name = "matrix"
 
     def __init__(self, weights=None, huber_beta: float = 1.0,
-                 deg_class_weight=None, presence_pos_weight=None):
+                 deg_class_weight=None, presence_pos_weight=None,
+                 deg_focal_gamma: float = 0.0, presence_focal_gamma: float = 0.0):
         self.w = dict(_DEFAULT_WEIGHTS)
         if weights:
             self.w.update(weights)
         self.huber_beta = huber_beta
         self.deg_class_weight = _as_tensor(deg_class_weight)
         self.presence_pos_weight = _as_tensor(presence_pos_weight)
+        self.deg_focal_gamma = float(deg_focal_gamma)
+        self.presence_focal_gamma = float(presence_focal_gamma)
 
     def __call__(self, output: ModelOutput, batch: SpinBatch) -> LossOutput:
         device = output.shifts.device
@@ -62,14 +76,34 @@ class MatrixLoss(Loss):
         ppw = self.presence_pos_weight
         if ppw is not None:
             ppw = ppw.to(device)
-        presence = F.binary_cross_entropy_with_logits(pred_pres, mask, pos_weight=ppw)
+        if self.presence_focal_gamma > 0:
+            bce_el = F.binary_cross_entropy_with_logits(
+                pred_pres, mask, pos_weight=ppw, reduction="none")
+            p = torch.sigmoid(pred_pres)
+            pt = p * mask + (1.0 - p) * (1.0 - mask)             # prob of the true class
+            focal = (1.0 - pt).clamp_min(0.0).pow(self.presence_focal_gamma)
+            presence = (focal * bce_el).mean()
+        else:
+            presence = F.binary_cross_entropy_with_logits(pred_pres, mask, pos_weight=ppw)
 
         B, Gd, C = output.degeneracy_logits.shape
         dcw = self.deg_class_weight
         if dcw is not None:
             dcw = dcw.to(device)
-        deg = F.cross_entropy(output.degeneracy_logits.reshape(B * Gd, C),
-                              batch.degeneracy_classes.reshape(B * Gd), weight=dcw)
+        deg_logits = output.degeneracy_logits.reshape(B * Gd, C)
+        deg_tgt = batch.degeneracy_classes.reshape(B * Gd)
+        if self.deg_focal_gamma > 0:
+            logp = F.log_softmax(deg_logits, dim=-1)
+            logp_t = logp.gather(1, deg_tgt[:, None]).squeeze(1)  # (N,) log prob of target
+            focal = (1.0 - logp_t.exp()).clamp_min(0.0).pow(self.deg_focal_gamma)
+            ce_t = -logp_t
+            if dcw is not None:                                  # weighted-mean (matches CE semantics)
+                w_t = dcw[deg_tgt]
+                deg = (focal * w_t * ce_t).sum() / w_t.sum().clamp_min(1.0)
+            else:
+                deg = (focal * ce_t).mean()
+        else:
+            deg = F.cross_entropy(deg_logits, deg_tgt, weight=dcw)
 
         total = (self.w["shift"] * shift + self.w["jmag"] * jmag
                  + self.w["presence"] * presence + self.w["deg"] * deg)
