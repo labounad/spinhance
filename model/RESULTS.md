@@ -12,10 +12,29 @@ All models are the `spingraph_decoder` (structured query decoder).
 | 022 | medium 10M | 64k | canonical matrix + surrogate-spectral | 0.064 / 0.91 / 0.916 / 0.928 | superseded |
 | **025** | medium 10M | 64k | matrix, **shift wt 2×**, WSD LR | **0.037 / 0.59 / 0.94 / 0.945** | **production** |
 | 026 | medium 10M | 64k | 025 + **peak channel** + **soft-equiv** | 0.0361 / 0.644 / 0.941 / 0.950 | done (≈025) |
-| light-025 | medium 10M | **500k** PubChem (random) | 025 recipe | running (HPC A6000) | — |
-| light-026 | medium 10M | **500k** PubChem (random) | 026 recipe | running (HPC A6000) | — |
-| xl-025 | **xl 57M** | **3.2M** PubChem (full) | 025 recipe | running (HPC A6000) | — |
-| xl-026 | **xl 57M** | **3.2M** PubChem (full) | 026 recipe | running (HPC A6000) | — |
+| light-025 | medium 10M | **500k** PubChem (random) | 025 recipe, e80 | **0.046 / 0.58 / 0.970 / 0.977** (best ep43) | done |
+| light-026 | medium 10M | **500k** PubChem (random) | 026 recipe, e80 | running (HPC A5000) | — |
+| xl-025 | **xl 57M** | **1M** PubChem | 025 recipe | diverged ep7 → relaunched (stable LR) | rerun |
+| xl-026 | **xl 57M** | **1M** PubChem | 026 recipe | diverged ep7 → relaunched (stable LR) | rerun |
+
+> Metrics here are **canonical** (shift-sorted) on each run's own held-out val split.
+> The per-molecule Hungarian-matched metric was **removed** (2026-06-02) — it was
+> deprecated and its scipy `linear_sum_assignment`-per-molecule loop over a 100k–200k
+> val set dominated validation wall-time. Training was never affected (loss is the
+> `matrix` term; early-stopping scores on canonical `shift_mae_ppm + j_mae_hz/10`).
+> Note the 500k/1M runs validate on a **PubChem** split (more diverse than ChEMBL), so
+> their shift MAE is not directly comparable to the 64k-ChEMBL numbers above.
+
+### Update (2026-06-02) — PubChem scaling
+
+- **light-025 (500k) finished clean** with the raised epoch cap (e80): best epoch **43**
+  (well past the old 30-cap), **0.046 ppm / 0.58 Hz / F1 0.970 / deg-bal 0.977** on the
+  PubChem val split. light-026 was relaunched with the same fast-val code and is running.
+- **xl (1M) was the best trajectory we've seen, then diverged.** xl-025 reached
+  **0.118 ppm / 0.86 Hz / F1 0.934 at epoch 6** before a hard divergence at ep7
+  (val shift → ~13 ppm, F1 → 0.46) — a classic DETR-decoder LR/gradient spike.
+  Both xl runs relaunched with a **stabilized recipe**: `lr` 4e-4→**2e-4**,
+  `warmup_frac` 0.02→**0.05**, `grad_clip` 1.0→**0.5** (`train_3M_spingraph_xl_{025,026}.yaml`).
 
 ### The story in three arcs
 
