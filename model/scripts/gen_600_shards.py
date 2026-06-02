@@ -30,7 +30,7 @@ from simulation.graph_io import read_spin_systems, record_to_arrays
 from simulation.pyspin.composite import simulate_spectrum_composite
 
 # module-level config for the worker (set in main before the Pool is created)
-_CFG = {"field": 600.0, "points": 65536, "linewidth": 0.35}
+_CFG = {"field": 600.0, "points": 65536, "linewidth": 0.7, "eta": 0.8}
 
 
 def _simulate_one(rec):
@@ -40,7 +40,7 @@ def _simulate_one(rec):
         _l, shifts, couplings, deg = record_to_arrays(rec)
         _, y = simulate_spectrum_composite(
             np.asarray(shifts, float), np.asarray(couplings, float), list(deg),
-            _CFG["field"], points=P, linewidth_hz=_CFG["linewidth"])
+            _CFG["field"], points=P, linewidth_hz=_CFG["linewidth"], eta=_CFG["eta"])
         return np.asarray(y, np.float32), True
     except Exception:
         return np.zeros(P, np.float32), False
@@ -54,11 +54,13 @@ def main():
     ap.add_argument("--chunk", type=int, default=50000, help="records per shard (match the bundle)")
     ap.add_argument("--field", type=float, default=600.0)
     ap.add_argument("--points", type=int, default=65536)
-    ap.add_argument("--linewidth", type=float, default=0.35)
+    ap.add_argument("--linewidth", type=float, default=0.7)
+    ap.add_argument("--eta", type=float, default=0.8, help="Lorentzian fraction (pseudo-Voigt)")
     ap.add_argument("--workers", type=int, default=8)
     a = ap.parse_args()
 
-    _CFG["field"], _CFG["points"], _CFG["linewidth"] = a.field, a.points, a.linewidth
+    _CFG["field"], _CFG["points"] = a.field, a.points
+    _CFG["linewidth"], _CFG["eta"] = a.linewidth, a.eta
     os.makedirs(a.out, exist_ok=True)
     out_npy = os.path.join(a.out, f"part_{a.shard_index:05d}.npy")
     if os.path.exists(out_npy):
@@ -68,7 +70,8 @@ def main():
     lo, hi = a.shard_index * a.chunk, (a.shard_index + 1) * a.chunk
     recs = [rec for i, rec in read_spin_systems(a.records) if lo <= i < hi]
     print(f"shard {a.shard_index:05d}: {len(recs)} records [{lo},{hi}) | "
-          f"field={a.field} points={a.points} lw={a.linewidth} workers={a.workers}", flush=True)
+          f"field={a.field} points={a.points} lw={a.linewidth} eta={a.eta} "
+          f"workers={a.workers}", flush=True)
     if not recs:
         print("no records in range -> nothing to do", flush=True)
         return
@@ -84,7 +87,7 @@ def main():
     with open(os.path.join(a.out, f"part_{a.shard_index:05d}.meta.json"), "w") as g:
         json.dump({"shard": a.shard_index, "lo": lo, "hi": hi, "n": len(recs),
                    "n_fail": n_fail, "field": a.field, "points": a.points,
-                   "linewidth_hz": a.linewidth}, g)
+                   "linewidth_hz": a.linewidth, "eta": a.eta}, g)
     print(f"part {a.shard_index:05d}: {len(recs)} specs, {n_fail} failed (zero-filled) "
           f"-> {out_npy}", flush=True)
 

@@ -77,3 +77,21 @@ def test_peaks_sit_near_group_shifts():
     # spectral mass should be concentrated in [0.5, 7.5] ppm (where the shifts are)
     in_band = spec[(ppm >= 0.5) & (ppm <= 7.5)].sum() * (12.0 / P)
     assert in_band > 0.9, f"only {in_band:.2f} of integral near the group shifts"
+
+
+def test_pseudovoigt_lineshape_eta():
+    """eta=1.0 == pure Lorentzian (default, unchanged); eta<1 (pseudo-Voigt) differs,
+    stays finite, and renders a valid unit-integral spectrum."""
+    s, c, d = _inputs()
+    lor = SurrogateRenderer(dim=32, depth=2, heads=2, sticks_per_group=16, points=P,
+                            lineshape_eta=1.0)
+    # copy weights so only the kernel differs
+    voigt = SurrogateRenderer(dim=32, depth=2, heads=2, sticks_per_group=16, points=P,
+                              lineshape_eta=0.8)
+    voigt.load_state_dict(lor.state_dict())
+    yl = lor(s, c, d, 600.0)
+    yv = voigt(s, c, d, 600.0)
+    assert yl.shape == (B, P) and torch.isfinite(yv).all()
+    assert not torch.allclose(yl, yv)                       # kernel actually changed the shape
+    dx = (12.0 - 0.0) / P
+    assert torch.allclose(yv.sum(-1) * dx, torch.ones(B), atol=1e-3)   # still unit integral

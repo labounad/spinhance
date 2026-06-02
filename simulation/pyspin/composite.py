@@ -266,15 +266,18 @@ def simulate_spectrum_composite(
     ppm_to=12.0,
     linewidth_hz=1.0,
     intensity_threshold=1e-6,
+    eta=1.0,
 ):
     """Simulate a 1H spectrum using composite-particle reduction.
 
-    Returns (ppm_axis, intensity) normalised to unit integral.
+    ``eta`` is the lineshape Lorentzian fraction (1.0 pure Lorentzian, <1
+    pseudo-Voigt — real lines are Voigt). Returns (ppm_axis, intensity)
+    normalised to unit integral.
     """
     centers, amps = composite_transitions(shifts, couplings, degeneracy,
                                           field_mhz, intensity_threshold)
     ppm = np.linspace(ppm_from, ppm_to, points)
     spec = peaks_to_spectrum(centers, amps, points=points, ppm_from=ppm_from,
                              ppm_to=ppm_to, linewidth_hz=linewidth_hz,
-                             field_mhz=field_mhz, normalize=True)
+                             field_mhz=field_mhz, normalize=True, eta=eta)
     return ppm, spec
