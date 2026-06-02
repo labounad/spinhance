@@ -67,9 +67,28 @@ class SurrogateTrainer:
 
     def _build(self):
         cfg = self.cfg
-        recs = load_records(_g(cfg, "data.records"), _g(cfg, "data.spectra"), fields=self.fields)
-        if _g(cfg, "data.max_mol"):
-            recs = recs[: int(_g(cfg, "data.max_mol"))]
+        parts = _g(cfg, "data.parts")
+        spectra_source = None
+        if parts:                                  # PubChem path: stacked part_<k>.npy shards (single field)
+            if len(self.fields) != 1:
+                raise ValueError(f"data.parts (stacked shards) is single-field; set data.fields=[{self.fields[0]}]")
+            from model.data.records import load_pubchem_records
+            from model.data.stacked_spectra import StackedSpectra
+            recs = load_pubchem_records(_g(cfg, "data.records"),
+                                        max_mol=int(_g(cfg, "data.max_mol", 0) or 0),
+                                        sample_n=int(_g(cfg, "data.sample_n", 0) or 0),
+                                        sample_seed=int(_g(cfg, "data.sample_seed", 0) or 0))
+            spectra_source = StackedSpectra(parts)
+            max_row = max((r["row"] for r in recs), default=-1)
+            if max_row >= len(spectra_source):
+                raise ValueError(f"record row {max_row} >= stacked spectra "
+                                 f"({len(spectra_source)}) — order/count mismatch")
+            if _g(cfg, "data.preload"):
+                spectra_source.preload([r["row"] for r in recs])
+        else:
+            recs = load_records(_g(cfg, "data.records"), _g(cfg, "data.spectra"), fields=self.fields)
+            if _g(cfg, "data.max_mol"):
+                recs = recs[: int(_g(cfg, "data.max_mol"))]
         assignment, report = make_splits(recs, seed=int(_g(cfg, "training.seed", 0)),
                                          compute_scaffold=(_g(cfg, "data.split", "none") == "scaffold"))
         by = {"train": [], "val": []}
@@ -77,7 +96,8 @@ class SurrogateTrainer:
             f = assignment.get(r["mol_id"])
             if f in by:
                 by[f].append(r)
-        ds = {k: SurrogateSpectrumDataset(v, fields=self.fields) for k, v in by.items()}
+        ds = {k: SurrogateSpectrumDataset(v, fields=self.fields, spectra_source=spectra_source)
+              for k, v in by.items()}
 
         mcfg = {k: v for k, v in (_g(cfg, "model", {}) or {}).items() if k != "name"}
         mcfg.setdefault("points", self.points)

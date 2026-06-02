@@ -56,6 +56,30 @@ def test_dataset_and_collate():
     assert b["shifts"].shape == (4, G) and b["spec600"].shape == (4, P)
 
 
+def test_dataset_stacked_source_single_field():
+    """PubChem path: spectra come from a stacked source indexed by record['row']."""
+    recs = _synthetic_records(6)
+    for k, r in enumerate(recs):
+        r["row"] = k                                   # global shard row
+    fake = np.stack([r["spec90"] for r in recs])       # (N, P) stand-in for StackedSpectra
+
+    class _Source:                                     # minimal StackedSpectra interface
+        def __getitem__(self, i): return fake[i]
+        def __len__(self): return len(fake)
+
+    ds = SurrogateSpectrumDataset(recs, fields=(90,), spectra_source=_Source())
+    item = ds[2]
+    assert item["spec90"].shape == (P,)
+    assert np.allclose(item["spec90"].numpy(), fake[2])   # row-indexed, not positional-by-file
+    dl = DataLoader(ds, batch_size=3, collate_fn=make_surrogate_collate((90,)))
+    b = next(iter(dl))
+    assert b["spec90"].shape == (3, P)
+    # multi-field + stacked source is rejected
+    import pytest
+    with pytest.raises(ValueError):
+        SurrogateSpectrumDataset(recs, fields=(90, 600), spectra_source=_Source())
+
+
 def test_surrogate_train_smoke(tmp_path, monkeypatch):
     # records via in-memory arrays; bypass load_records by injecting the split data.
     recs = _synthetic_records(96)

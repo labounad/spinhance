@@ -1,0 +1,51 @@
+# Retrain the differentiable surrogate matrix->spectrum renderer on 500k PubChem,
+# SPECIALIZED to 90 MHz only. Rationale: the inverse model is 90-MHz-only (hard
+# constraint), so its spectral-consistency teacher only ever needs 90 MHz — dropping
+# the 600 MHz field lets all capacity focus on the one field we use, and the more
+# diverse PubChem distribution (vs the 64k-ChEMBL session012 surrogate) makes the
+# teacher faithful where we now train. Targets are the exact pyspin 90 MHz spectra
+# already stacked in the bundle shards (part_<k>.npy, 16384 pts).
+#
+# Submit via model/scripts/train_surrogate_bundle.slurm (overrides data.records/parts
+# to the gpfs bundle). Architecture: scaled up from the 128/depth-4 session012 model
+# to match 8x more, more-diverse data; structural changes (offset_max_hz / sticks /
+# linewidth) deferred to the error-tail diagnosis after this baseline.
+run:
+  name: surrogate_pubchem_90
+  output_dir: model/runs
+
+data:
+  records: data/pubchem/spin_systems_pubchem.json.gz   # -> bundle/records.json.gz by the sbatch
+  parts: data/pubchem/spectra_parts/90MHz              # -> bundle dir by the sbatch
+  fields: [90]              # 90 MHz ONLY (single-field specialization)
+  split: none               # molecule + dedup split
+  sample_n: 0               # the bundle is already the 500k subset
+  preload: false            # mmap the contiguous bundle shards
+
+model:
+  name: surrogate
+  dim: 256                  # up from 128 (session012) for the larger/diverse data
+  depth: 6                  # deeper edge-aware encoder for the low-field second-order regime
+  heads: 8
+  sticks_per_group: 48
+  linewidth_hz: 1.0
+
+loss:
+  mse_weight: 0.3           # W1 + 0.3 * smoothed-MSE
+
+training:
+  epochs: 40
+  batch_size: 256
+  lr: 0.0003
+  weight_decay: 0.01
+  amp: bf16
+  warmup_frac: 0.03
+  grad_clip: 1.0
+  num_workers: 4
+  val_every: 1
+  save_every: 1
+  seed: 0
+
+diagnostics:
+  enabled: true
+  log_every_steps: 100
