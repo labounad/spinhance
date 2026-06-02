@@ -46,13 +46,13 @@ loss:
 training:
   epochs: 60
   batch_size: 256
-  lr: 0.0004
+  lr: 0.0002                # halved from 4e-4: the 56M decoder diverged at ep7 (val shift 0.140->12.9 ppm) on the 1M set
   weight_decay: 0.01
   amp: bf16
-  warmup_frac: 0.02
+  warmup_frac: 0.05         # longer warmup (was 0.02) to settle the transformer decoder before peak LR
   lr_stable_frac: 0.50
   lr_min_factor: 0.30
-  grad_clip: 1.0
+  grad_clip: 0.5            # tighter (was 1.0) to clamp the gradient spike that blew up ep7
   patience: 8
   # see train_3M_spingraph_xl_025.yaml — low workers to avoid the per-worker
   # 500k-record copy thrashing a 16GB g6.xlarge. Full 3.2M needs a big-RAM box.
