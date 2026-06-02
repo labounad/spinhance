@@ -13,7 +13,7 @@
   });
   const SES = {  // colour per model in both viewers
     "022": "#9aa0a6", "025": "var-accent", "026": "var-accent3",
-    "light025": "#e0a44d", "light026": "#c46be0", "xl025": "#e06b6b", "xl026": "#6bd0e0",
+    "light025": "#e0a44d", "light026": "#c46be0", "light027": "#7ee06b", "xl025": "#e06b6b", "xl026": "#6bd0e0",
   };
   const colOf = (k) => { const c = C(); const v = SES[k] || c.soft;
     return v === "var-accent" ? c.accent : v === "var-accent3" ? c.accent3 : v; };
@@ -99,8 +99,8 @@
     { m: "64k·026", arch: "025 + peak channel + soft-equiv", data: "64k ChEMBL", p: "10M", shift: "0.037", j: "0.65", f1: "0.940", deg: "0.960", st: "done" },
     { m: "500k·025", arch: "025 recipe", data: "500k PubChem", p: "10M", shift: "0.036", j: "0.51", f1: "0.969", deg: "0.969", st: "production" },
     { m: "500k·026", arch: "026 recipe", data: "500k PubChem", p: "10M", shift: "0.059", j: "0.89", f1: "0.935", deg: "0.959", st: "running · ep11" },
-    { m: "1M·025", arch: "025 recipe, xl", data: "1M PubChem", p: "57M", shift: "0.053", j: "0.73", f1: "0.948", deg: "0.962", st: "running · ep8" },
-    { m: "1M·026", arch: "026 recipe, xl", data: "1M PubChem", p: "57M", shift: "0.056", j: "0.70", f1: "0.949", deg: "0.960", st: "running · ep8" },
+    { m: "1M·025", arch: "025 recipe, xl", data: "1M PubChem", p: "57M", shift: "0.052", j: "0.59", f1: "0.958", deg: "0.927", st: "running · ep11" },
+    { m: "1M·026", arch: "026 recipe, xl", data: "1M PubChem", p: "57M", shift: "0.046", j: "0.70", f1: "0.961", deg: "0.969", st: "running · ep11" },
   ];
   function initTable() {
     const host = $("#cmpTable"); if (!host) return;
