@@ -19,14 +19,17 @@ export PYTHONPATH=.
 ulimit -n 16384 2>/dev/null || true
 ENVPY=/gpfs/home/labounader/micromamba/envs/spinhance/bin/python
 BUNDLE="${BUNDLE:-/gpfs/home/labounader/bundle_500k_s0}"
+# RECORDS defaults to the bundle's own records; override for the 600 bundle, whose
+# shards share the 90-bundle records (same molecules + order, spectra differ).
+RECORDS="${RECORDS:-$BUNDLE/records.json.gz}"
 
-# point the surrogate trainer at the prebuilt 90 MHz bundle (records + stacked shards)
-DATA_OV="--set data.records=$BUNDLE/records.json.gz \
+# point the surrogate trainer at the prebuilt bundle (records + stacked shards)
+DATA_OV="--set data.records=$RECORDS \
  --set data.parts=$BUNDLE \
  --set data.sample_n=0 \
  --set data.preload=false \
  --set training.num_workers=4"
 
-echo "host $(hostname) | bundle $BUNDLE | config $CONFIG run $RUN_NAME"
+echo "host $(hostname) | bundle $BUNDLE | records $RECORDS | config $CONFIG run $RUN_NAME"
 srun "$ENVPY" -m model.experiments.train_surrogate --config "$CONFIG" \
   --set run.name="$RUN_NAME" $DATA_OV
