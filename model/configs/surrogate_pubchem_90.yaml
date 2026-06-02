@@ -29,6 +29,7 @@ model:
   heads: 8
   sticks_per_group: 48
   linewidth_hz: 1.0
+  lineshape_eta: 1.0        # the 90 bundle was generated pure-Lorentzian; match it (bump to 0.8 if regenerated as pV)
 
 loss:
   mse_weight: 0.3           # W1 + 0.3 * smoothed-MSE

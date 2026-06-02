@@ -42,6 +42,9 @@ def _load_frozen_surrogate(checkpoint: str):
     ckpt = torch.load(checkpoint, map_location="cpu", weights_only=False)
     mcfg = {k: v for k, v in (ckpt.get("cfg", {}).get("model", {}) or {}).items()
             if k != "name"}
+    # legacy checkpoints predate the pseudo-Voigt default and were trained as pure
+    # Lorentzian; pin eta=1.0 unless the checkpoint explicitly recorded a lineshape.
+    mcfg.setdefault("lineshape_eta", 1.0)
     model = build_renderer("surrogate", **mcfg)
     model.load_state_dict(ckpt["model"])
     model.eval()

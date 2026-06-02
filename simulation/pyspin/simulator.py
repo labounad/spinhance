@@ -185,12 +185,16 @@ def build_stick(centers, amps, points, ppm_from, ppm_to):
             + np.bincount(i0 + 1, weights=w * frac, minlength=points + 1)[:points])
 
 
-def lorentzian_convolve(stick, points, ppm_from, ppm_to, hwhm, eta=1.0):
+DEFAULT_LINESHAPE_ETA = 0.8   # project default: real lines are pseudo-Voigt, not pure Lorentzian
+                              # (fit to a real 600 MHz line). Pass eta=1.0 for pure Lorentzian.
+
+
+def lorentzian_convolve(stick, points, ppm_from, ppm_to, hwhm, eta=DEFAULT_LINESHAPE_ETA):
     """FFT-convolve a stick spectrum with a (pseudo-Voigt) kernel of half-width
     ``hwhm`` (ppm). O(points log points), independent of the number of lines.
 
-    ``eta`` is the Lorentzian fraction: 1.0 (default) = pure Lorentzian (the
-    natural NMR lineshape, unchanged); <1 mixes in a Gaussian of equal FWHM, i.e.
+    ``eta`` is the Lorentzian fraction: <1 (default 0.8) is a pseudo-Voigt
+    (Lorentzian T2 (x) Gaussian B0-inhomogeneity, what real lines are); 1.0 mixes in a Gaussian of equal FWHM, i.e.
     a pseudo-Voigt, since a REAL line is Lorentzian (T2) convolved with a Gaussian
     (B0 inhomogeneity). Fitting a real 600 MHz line gives eta ~ 0.8.
     """
@@ -206,7 +210,7 @@ def lorentzian_convolve(stick, points, ppm_from, ppm_to, hwhm, eta=1.0):
                         n=points)
 
 
-def lorentzian_broaden(centers, amps, points, ppm_from, ppm_to, hwhm, eta=1.0):
+def lorentzian_broaden(centers, amps, points, ppm_from, ppm_to, hwhm, eta=DEFAULT_LINESHAPE_ETA):
     """Stick-bin transitions then (pseudo-Voigt) convolve (shared by both engines)."""
     if len(centers) == 0:
         return np.zeros(points)
@@ -215,7 +219,7 @@ def lorentzian_broaden(centers, amps, points, ppm_from, ppm_to, hwhm, eta=1.0):
 
 
 def peaks_to_spectrum(centers_ppm, amps, points=16384, ppm_from=0.0, ppm_to=12.0,
-                      linewidth_hz=1.0, field_mhz=90.0, normalize=True, eta=1.0):
+                      linewidth_hz=1.0, field_mhz=90.0, normalize=True, eta=DEFAULT_LINESHAPE_ETA):
     """Reconstruct a dense spectrum from a peak list (convolve on the fly).
 
     The inverse of storing only line positions + intensities: bin to the grid,

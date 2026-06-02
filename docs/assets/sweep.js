@@ -64,7 +64,10 @@
   const b64u16 = (s) => { const b = atob(s), n = b.length / 2, out = new Float32Array(n);
     for (let i = 0; i < n; i++) out[i] = (b.charCodeAt(2*i) | (b.charCodeAt(2*i+1) << 8)) / 65535; return out; };
 
-  /* broaden one frame's sticks into a normalized Lorentzian curve on the grid */
+  /* broaden one frame's sticks into a normalized pseudo-Voigt curve on the grid.
+     Real lines are Voigt (Lorentzian T2 (x) Gaussian B0-inhomogeneity); ETA is the
+     Lorentzian fraction (fit ~0.8 to a real 600 MHz line; matches the simulator). */
+  const ETA = 0.8, LN2 = Math.log(2);
   function broaden(centers, amps, hwhm) {
     const y = new Float32Array(GRID);
     const dppm = (winHi - winLo) / (GRID - 1);
@@ -75,7 +78,8 @@
       if (k0 < 0) k0 = 0; if (k1 > GRID - 1) k1 = GRID - 1;
       for (let k = k0; k <= k1; k++) {
         const d = (winLo + k * dppm - c) / hwhm;
-        y[k] += a / (1 + d * d);
+        const d2 = d * d;
+        y[k] += a * (ETA / (1 + d2) + (1 - ETA) * Math.exp(-LN2 * d2));  // pseudo-Voigt
       }
     }
     let m = 0; for (let k = 0; k < GRID; k++) if (y[k] > m) m = y[k];
