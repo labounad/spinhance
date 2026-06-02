@@ -38,8 +38,9 @@ ResNet1D conv stem → ppm-positioned global tokens → pre-LN Transformer encod
 8 learned spin-group queries → Transformer decoder → per-node heads (shift +
 degeneracy) + symmetric `PairwiseEdgeHead`. Sizes via `model.size`:
 `medium` ≈ 10M (production), **`xl` ≈ 57M** (`dim512/enc4/dec6`, for the 3M+ regime).
-See `RESULTS.md` for the ablation; production recipe (025) is matrix loss with
-`shift` weighted 2× + WSD LR (`train_64k_spingraph_shift2x_matrixonly.yaml`).
+See `RESULTS.md` for the ablation; the production model is **light-025**
+(`train_500k_light_025.yaml`) — the 025 recipe (matrix loss, `shift` weighted 2× + WSD LR)
+trained on 500k PubChem (0.036 ppm / 0.51 Hz, best ep43), superseding the 64k session-025.
 
 Two optional, default-off inductive biases (added in session026):
 - **`model.use_peak_channel`** — feeds a 2nd conv input channel: an in-model
@@ -110,11 +111,12 @@ The three swappable layers are name-registered; build by string key
 | `surrogate.yaml`, `surrogate_large.yaml` | train the `surrogate` renderer (Stage-2 teacher) |
 | `train_64k_surrogate_spectral*.yaml` (5) | resnet1d · composite(matrix+spectral) · 64k — sessions 015–020 ablations |
 | `train_64k_spingraph_canonical.yaml` | spingraph · composite(matrix+spectral) · 64k — session 022 |
-| `train_64k_spingraph_shift2x_matrixonly.yaml` | spingraph · matrix(shift 2×) · 64k — **session 025 production** |
+| `train_64k_spingraph_shift2x_matrixonly.yaml` | spingraph · matrix(shift 2×) · 64k — session 025 (superseded by light-025) |
 | `train_64k_spingraph_shift2x_spectral.yaml` | session 025 + spectral variant |
 | `train_64k_spingraph_regions.yaml` | spingraph + region tokens · 64k — session 023 (abandoned, slower/no gain) |
 | `train_64k_026_peaks_softequiv.yaml` | spingraph(peak+soft-equiv) · matrix+soft_equiv · 64k — session 026 |
-| `train_500k_light_{025,026}.yaml` | spingraph medium · 025/026 recipe · 500k PubChem |
+| `train_500k_light_025.yaml` | spingraph medium · 025 recipe · 500k PubChem — **production** (0.036 ppm, ep43) |
+| `train_500k_light_026.yaml` | spingraph medium · 026 recipe · 500k PubChem |
 | `train_3M_spingraph_xl_{025,026}.yaml` | spingraph **xl** · 025/026 recipe · 3.2M PubChem |
 
 ## Data paths

@@ -61,12 +61,17 @@ def main():
         smiles = rec.get("smiles", "")
         xyz = B.smiles_to_xyz(smiles, title=molecule_id(rec) or "") if smiles else None
         n_xyz += bool(xyz)
+        # Sticks for every field, then normalise amplitudes by ONE per-MOLECULE
+        # constant (the max line intensity over all frames) — NOT per frame. Per-frame
+        # normalisation made every other line halve whenever the tallest line merged
+        # (a 50% intensity drop mid-sweep); a single scale preserves the true relative
+        # intensities across fields so the area-conserving render grows peaks smoothly.
+        raw = [B.molecule_sticks(shifts, couplings, deg, f, win_lo, win_hi) for f in fields]
+        mol_amax = max((float(ma.max()) for _mc, ma in raw if len(ma)), default=1.0)
         frames = []
-        for f in fields:
-            mc, ma = B.molecule_sticks(shifts, couplings, deg, f, win_lo, win_hi)
-            amax = float(ma.max()) if len(ma) else 1.0
+        for mc, ma in raw:
             cen = np.asarray(mc, dtype="<f4")
-            amp = np.clip(np.round(ma / amax * 65535.0), 0, 65535).astype("<u2")
+            amp = np.clip(np.round(ma / mol_amax * 65535.0), 0, 65535).astype("<u2")
             frames.append({"c": base64.b64encode(cen.tobytes()).decode(),
                            "a": base64.b64encode(amp.tobytes()).decode()})
         mols.append({"id": molecule_id(rec), "chembl_id": rec.get("chembl_id"), "smiles": smiles,
