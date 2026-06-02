@@ -266,7 +266,7 @@ def simulate_spectrum_composite(
     ppm_to=12.0,
     linewidth_hz=1.0,
     intensity_threshold=1e-6,
-    eta=1.0,
+    eta=None,   # None -> simulator.DEFAULT_LINESHAPE_ETA (pseudo-Voigt)
 ):
     """Simulate a 1H spectrum using composite-particle reduction.
 
@@ -274,6 +274,9 @@ def simulate_spectrum_composite(
     pseudo-Voigt — real lines are Voigt). Returns (ppm_axis, intensity)
     normalised to unit integral.
     """
+    if eta is None:
+        from simulation.pyspin.simulator import DEFAULT_LINESHAPE_ETA
+        eta = DEFAULT_LINESHAPE_ETA
     centers, amps = composite_transitions(shifts, couplings, degeneracy,
                                           field_mhz, intensity_threshold)
     ppm = np.linspace(ppm_from, ppm_to, points)

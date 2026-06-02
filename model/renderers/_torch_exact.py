@@ -34,6 +34,7 @@ import torch
 from model.renderers._composite import build_static_plan
 
 DEFAULT_EIGH_EPS = 1.0   # Hz
+DEFAULT_LINESHAPE_ETA = 0.8   # project default: real lines are pseudo-Voigt (eta=1.0 -> pure Lorentzian)
 
 
 # -----------------------------------------------------------------------------
@@ -196,7 +197,7 @@ def _line_kernel(x, hwhm, eta):
     return eta * lor + (1.0 - eta) * gau
 
 
-def _broaden_fft_batch(centers, amps, points, ppm_from, ppm_to, dx, hwhm, device, dtype, eta=1.0):
+def _broaden_fft_batch(centers, amps, points, ppm_from, ppm_to, dx, hwhm, device, dtype, eta=DEFAULT_LINESHAPE_ETA):
     """Batched FFT broadening: centers (B, K), amps (B, K) -> (B, points).
     Fully vectorized — no Python loop over batch items. ``eta`` -> pseudo-Voigt."""
     B = centers.shape[0]
@@ -275,7 +276,7 @@ def simulate_batch(shifts, couplings, degeneracy, field_mhz, points=16384,
     return specs / area                                            # (B, points)
 
 
-def _broaden_fft(centers, amps, points, ppm_from, ppm_to, dx, hwhm, device, dtype, eta=1.0):
+def _broaden_fft(centers, amps, points, ppm_from, ppm_to, dx, hwhm, device, dtype, eta=DEFAULT_LINESHAPE_ETA):
     """Bin sticks (linear interp) then FFT-convolve with a (pseudo-Voigt) kernel.
     Differentiable in centers and amps; O(points log points). ``eta`` -> pseudo-Voigt."""
     pos = (centers - ppm_from) / dx

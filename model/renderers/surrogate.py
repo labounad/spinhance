@@ -69,7 +69,7 @@ class SurrogateRenderer(nn.Module):
                  heads: int = 4, sticks_per_group: int = 48, mlp_ratio: float = 2.0,
                  dropout: float = 0.0, offset_max_hz: float = 60.0,
                  points: int = N_POINTS, ppm_from: float = PPM_FROM, ppm_to: float = PPM_TO,
-                 linewidth_hz: float = 1.0, lineshape_eta: float = 1.0):
+                 linewidth_hz: float = 1.0, lineshape_eta: float = 0.8):
         super().__init__()
         self.G = n_groups
         self.heads = heads
