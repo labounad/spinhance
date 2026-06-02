@@ -75,7 +75,7 @@ def assign_one_enantiomer(mol):
 def depict(mol):
     rdDepictor.Compute2DCoords(mol)
     d = rdMolDraw2D.MolDraw2DSVG(W, H)
-    o = d.drawOptions(); o.useBWAtomPalette(); o.clearBackground = False; o.bondLineWidth = 2
+    o = d.drawOptions(); o.useBWAtomPalette(); o.clearBackground = False; o.bondLineWidth = 1.5  # 75% of the old 2
     d.DrawMolecule(mol)                              # wedges/hashes drawn from the assigned chiral tags
     d.FinishDrawing()
     return whiten(d.GetDrawingText()), {i: d.GetDrawCoords(i) for i in range(mol.GetNumAtoms())}
