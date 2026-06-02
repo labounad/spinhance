@@ -31,9 +31,18 @@ def _load_spectrum(rec, field: int):
 
 
 class SurrogateSpectrumDataset(Dataset):
-    def __init__(self, records, fields=(90, 600)):
+    """``spectra_source`` (optional): a stacked-shard ``StackedSpectra`` for the
+    PubChem path — the spectrum for ``record["row"]`` is fetched from it instead of
+    a per-molecule ``.npy``. Only valid for a SINGLE field (the shards are one field,
+    e.g. 90 MHz); pass ``fields=(90,)``."""
+
+    def __init__(self, records, fields=(90, 600), spectra_source=None):
         self.records = list(records)
         self.fields = tuple(int(f) for f in fields)
+        self.spectra_source = spectra_source
+        if spectra_source is not None and len(self.fields) != 1:
+            raise ValueError("spectra_source (stacked shards) supports exactly one field; "
+                             f"got fields={self.fields}")
 
     def __len__(self):
         return len(self.records)
@@ -46,8 +55,12 @@ class SurrogateSpectrumDataset(Dataset):
             "degeneracy": torch.as_tensor(np.asarray(r["degeneracy"], dtype=np.float32)),  # (G,)
             "mol_id": r.get("mol_id", f"mol_{i:06d}"),
         }
-        for f in self.fields:
-            item[f"spec{f}"] = torch.as_tensor(_load_spectrum(r, f))                    # (P,)
+        if self.spectra_source is not None:                                            # stacked shard by row
+            spec = np.asarray(self.spectra_source[r["row"]], dtype=np.float32)
+            item[f"spec{self.fields[0]}"] = torch.as_tensor(spec)
+        else:
+            for f in self.fields:
+                item[f"spec{f}"] = torch.as_tensor(_load_spectrum(r, f))                # (P,)
         return item
 
 
