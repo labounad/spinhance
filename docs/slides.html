@@ -968,7 +968,7 @@ const Sweep = (() => {
       g.beginPath(); g.moveTo(x, baseY); g.lineTo(x, baseY + 6); g.stroke();
       g.fillText(p.toFixed(sp < 1 ? (sp < 0.5 ? 2 : 1) : 0), x, baseY + 20);
     }
-    g.textAlign = "left"; g.fillText("δ (ppm)", 10, baseY + 20);
+    g.textAlign = "left"; g.fillText("δ (ppm)", 10, baseY + 33);
   }
 
   /* size a canvas backing store honoring Reveal's CSS transform scale + dpr */

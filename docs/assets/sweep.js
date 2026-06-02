@@ -138,7 +138,7 @@
       g.beginPath(); g.moveTo(x, baseY); g.lineTo(x, baseY + 6); g.strokeStyle = colors.grid; g.stroke();
       g.fillText(p.toFixed(sp < 1 ? (sp < 0.5 ? 2 : 1) : 0), x, baseY + 21);
     }
-    g.textAlign = "left"; g.fillText("δ (ppm)", 12, baseY + 21);
+    g.textAlign = "left"; g.fillText("δ (ppm)", 12, baseY + 34);
   }
 
   /* fan + axis are static per molecule/size/theme -> render once to offscreen */
