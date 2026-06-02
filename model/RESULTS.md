@@ -10,12 +10,18 @@ All models are the `spingraph_decoder` (structured query decoder).
 |---|---|---|---|---|---|
 | CNN baseline | resnet1d | 64k ChEMBL | matrix | 0.279 / 1.80 / 0.807 / 0.732 | floor |
 | 022 | medium 10M | 64k | canonical matrix + surrogate-spectral | 0.064 / 0.91 / 0.916 / 0.928 | superseded |
-| **025** | medium 10M | 64k | matrix, **shift wt 2×**, WSD LR | **0.037 / 0.59 / 0.94 / 0.945** | **production** |
+| 025 | medium 10M | 64k | matrix, **shift wt 2×**, WSD LR | 0.037 / 0.59 / 0.94 / 0.945 | superseded (by light-025) |
 | 026 | medium 10M | 64k | 025 + **peak channel** + **soft-equiv** | 0.0361 / 0.644 / 0.941 / 0.950 | done (≈025) |
-| light-025 | medium 10M | **500k** PubChem (random) | 025 recipe, e80 | **0.046 / 0.58 / 0.970 / 0.977** (best ep43) | done |
-| light-026 | medium 10M | **500k** PubChem (random) | 026 recipe, e80 | running (HPC A5000) | — |
-| xl-025 | **xl 57M** | **1M** PubChem | 025 recipe | diverged ep7 → relaunched (stable LR) | rerun |
-| xl-026 | **xl 57M** | **1M** PubChem | 026 recipe | diverged ep7 → relaunched (stable LR) | rerun |
+| **light-025** | medium 10M | **500k** PubChem (random) | 025 recipe, e80 | **0.036 / 0.51 / 0.969 / 0.969** (best ep43) | **production** |
+| light-026 | medium 10M | **500k** PubChem (random) | 026 recipe, e80 | running (best ep10: 0.059 / 0.89 / 0.935 / 0.959) | running |
+| xl-025 | **xl 57M** | **1M** PubChem | 025 recipe, **stable LR** | running, cleared ep7 (best ep5: 0.053 / 0.73 / 0.948 / 0.962) | running |
+| xl-026 | **xl 57M** | **1M** PubChem | 026 recipe, **stable LR** | running, cleared ep7 (best ep7: 0.056 / 0.70 / 0.949 / 0.960) | running |
+
+**Production model = light-025** (500k PubChem, 0.036 ppm / 0.51 Hz / F1 0.969 / deg-bal 0.969,
+best epoch 43): same medium spingraph_decoder + 025 recipe as the 64k production, now trained on
+8× more, more chemically-diverse PubChem data — better J / F1 / degeneracy and broader coverage at
+the same shift accuracy. Supersedes the 64k session-025 as production. The xl (1M, 57M-param) runs
+are on track to beat it once they finish.
 
 > Metrics here are **canonical** (shift-sorted) on each run's own held-out val split.
 > The per-molecule Hungarian-matched metric was **removed** (2026-06-02) — it was

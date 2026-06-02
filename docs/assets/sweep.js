@@ -39,7 +39,8 @@
   const molTag = document.getElementById("molTag");
   const scrollHint = document.getElementById("scrollHint");
 
-  const GRID = 4096;          // broadening resolution (independent of pixels)
+  const GRID = 16384;         // broadening resolution (independent of pixels); high enough to
+                              // resolve the narrow ~0.0009 ppm lines at 600 MHz for area-conserving heights
   const BASE = 0.75, AMP = 0.56;  // baseline at 75% height; peaks rise 56% of height
   const FADE_MIN = 0.14;          // faint persistent backdrop after the sweep completes
   const FADE_VH = 0.85;           // fraction of a viewport over which it fades out
@@ -68,16 +69,22 @@
   const b64u16 = (s) => { const b = atob(s), n = b.length / 2, out = new Float32Array(n);
     for (let i = 0; i < n; i++) out[i] = (b.charCodeAt(2*i) | (b.charCodeAt(2*i+1) << 8)) / 65535; return out; };
 
-  /* Broaden a stick list into a pseudo-Voigt curve on the grid, RAW (no per-frame
-     normalization — heights are made consistent across fields by a single global
-     scale, see chooseMolecule). Real lines are Voigt (Lorentzian T2 (x) Gaussian
-     B0-inhomogeneity); ETA is the Lorentzian fraction (~0.8, matches the simulator).
-     `broadenInto` writes into a reused buffer so the scroll path allocates nothing. */
+  /* Broaden a stick list into a pseudo-Voigt curve, RAW (no per-frame normalization;
+     heights are made consistent across fields by a single global scale, see
+     chooseMolecule). The kernel is AREA-CONSERVING (∫=1, the 1/hwhm factors), so as
+     a line sharpens with field (hwhm ∝ 1/field) its PEAK grows ∝ field — matching
+     reality (a unit-integral spectrum's peaks get taller as they narrow), instead of
+     the old peak-=amplitude kernel that made peaks shrink. Real lines are Voigt
+     (Lorentzian T2 ⊗ Gaussian B0-inhomogeneity); ETA is the Lorentzian fraction.
+     Writes into a reused buffer so the scroll path allocates nothing. */
   const ETA = 0.8, LN2 = Math.log(2);
   function broadenInto(centers, amps, len, hwhm, out) {
     out.fill(0);
     const dppm = (winHi - winLo) / (GRID - 1);
     const cutoff = Math.max(30 * hwhm, dppm * 3);
+    const invH = 1 / hwhm;
+    const cl = ETA / Math.PI * invH;                       // area-normalized Lorentzian coeff
+    const cg = (1 - ETA) * Math.sqrt(LN2 / Math.PI) * invH; // area-normalized Gaussian coeff
     for (let i = 0; i < len; i++) {
       const a = amps[i];
       if (a <= 0) continue;
@@ -87,7 +94,7 @@
       for (let k = k0; k <= k1; k++) {
         const d = (winLo + k * dppm - c) / hwhm;
         const d2 = d * d;
-        out[k] += a * (ETA / (1 + d2) + (1 - ETA) * Math.exp(-LN2 * d2));  // pseudo-Voigt
+        out[k] += a * (cl / (1 + d2) + cg * Math.exp(-LN2 * d2));  // area-conserving pseudo-Voigt
       }
     }
     return out;
