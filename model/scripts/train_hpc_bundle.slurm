@@ -19,12 +19,16 @@ export PYTHONPATH=.
 ulimit -n 16384 2>/dev/null || true
 ENVPY=/gpfs/home/labounader/micromamba/envs/spinhance/bin/python
 BUNDLE="${BUNDLE:-/gpfs/home/labounader/bundle_500k_s0}"
+# PRELOAD=true loads the ~33 GB (500k @ 2^14) bundle into RAM once, so training is
+# immune to GPFS random-mmap contention on busy nodes (the 500k·026 crawl). Set
+# --mem >= 48G at submit when using it.
+PRELOAD="${PRELOAD:-false}"
 
-# point at the prebuilt bundle; sample_n=0 (already sampled), preload the small bundle
+# point at the prebuilt bundle; sample_n=0 (already sampled)
 DATA_OV="--set data.records=$BUNDLE/records.json.gz \
  --set data.parts=$BUNDLE \
  --set data.sample_n=0 --set data.max_mol=0 \
- --set data.preload=false \
+ --set data.preload=$PRELOAD \
  --set training.batch_size=512 --set training.num_workers=4"
 
 echo "host $(hostname) | bundle $BUNDLE | config $CONFIG run $RUN_NAME"
