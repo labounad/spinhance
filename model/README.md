@@ -23,8 +23,8 @@ dataclasses in `model/schemas`.
 | `data/` | records adapter, splits, standardization, transforms, dataset, collate → `SpinBatch` |
 | `architectures/` | spectrum → `ModelOutput` models (registered) |
 | `heads/` | typed output heads (shifts / couplings / presence / degeneracy) |
-| `losses/` | `ModelOutput`+`SpinBatch` → `LossOutput` (matrix, hungarian, surrogate/exact spectral, region, composite) |
-| `renderers/` | spin params → spectrum/summary: `exact_no_grad`, `exact_autograd_experimental`, `surrogate`, `region` |
+| `losses/` | `ModelOutput`+`SpinBatch` → `LossOutput` (`matrix`, `hungarian`, `surrogate_spectral`, `soft_equiv`, `composite`) |
+| `renderers/` | spin params → spectrum/summary: `exact_no_grad`, `exact_autograd_experimental`, `surrogate` |
 | `training/` | config, trainer, loops, schedules, optimizer, checkpointing, seed, runner |
 | `evaluation/` | metrics, hungarian matching, spectral metrics, probes, failure analysis |
 | `diagnostics/` | run-dir writer, run reader, plots, live dashboard |
@@ -52,6 +52,70 @@ Two optional, default-off inductive biases (added in session026):
   supervises it (BCE vs `|δᵢ−δⱼ|≤tol`) + pulls those predicted shifts together;
   `evaluation.metrics.decode` averages flagged groups so a degenerate pair renders
   as one peak, not a split doublet.
+
+## Component registry
+
+The three swappable layers are name-registered; build by string key
+(`build_architecture`, `build_loss`, `build_renderer`).
+
+**Architectures** (`model/architectures/`):
+
+| key | role |
+|---|---|
+| `resnet1d` | dense-CNN baseline: ResNet1D stem → global avg-pool → `TypedMatrixHead`. The floor. |
+| `resnet1d_attention_pool` | ResNet1D + multi-head attention pooling (IDEAS Family B). Works, not primary. |
+| `spingraph_decoder` | **production** — ResNet1D stem → ppm-positioned tokens → Transformer encoder → 8 spin-group queries → Transformer decoder → `NodeHead` + `PairwiseEdgeHead`. |
+
+**Losses** (`model/losses/`):
+
+| key | what it computes |
+|---|---|
+| `matrix` | canonical supervised anchor: shift Huber + presence-masked J Huber + presence BCE + degeneracy CE (standardized space). Per-component `weights` (default `shift 1·jmag 1·presence .5·deg .5`; production overrides `shift: 2.0`). |
+| `hungarian` | permutation-invariant set-matched variant. **Hurts on this distinct-shift data — RESULTS §2; not used.** |
+| `surrogate_spectral` | renders the predicted matrix through the frozen `surrogate` renderer → `w1_weight·W1 + cosine_weight·(1−cos)` vs the (clean) target spectrum. Gradients flow through the frozen teacher; ramp in via `composite`. |
+| `soft_equiv` | edge-flag BCE (`\|δᵢ−δⱼ\|≤tol_ppm`) + shift-consistency penalty for accidental-degeneracy pairs. No-op unless the arch emits `auxiliary["soft_equiv_logits"]`. |
+| `composite` | config-driven weighted sum of the above with per-term curriculum (`init_weight`→`weight` over `start_epoch`/`ramp_epochs`, optional `decay_start_epoch`/`decay_epochs`→`end_weight`). The trainer drives it via `set_epoch`. |
+
+**Renderers** (`model/renderers/`):
+
+| key | role |
+|---|---|
+| `exact_no_grad` | exact quantum simulator, no gradients — Stage-2A evaluation metric. |
+| `exact_autograd_experimental` | exact + autograd, tiny systems only — disabled by default. |
+| `surrogate` | learned differentiable teacher; frozen and used as the `surrogate_spectral` backend. |
+
+**Heads** (`model/heads/`):
+
+| class | used by | outputs |
+|---|---|---|
+| `TypedMatrixHead` | `resnet1d`, `resnet1d_attention_pool` | shift `(B,G)`, J mag `(B,E)`, J presence `(B,E)`, degeneracy `(B,G,C)` |
+| `NodeHead` | `spingraph_decoder` | per-node shift `(B,G)` + degeneracy logits `(B,G,C)` |
+| `PairwiseEdgeHead` | `spingraph_decoder` | symmetric per-edge J mag + presence (+ soft-equiv logit when `use_soft_equiv`); `edge_ij = MLP([h_i+h_j, \|h_i−h_j\|])` |
+
+**Size presets** (`model.size`; `SIZE_PRESETS` in `resnet1d.py`, conv stem shared by all archs):
+
+| size | (stem, stage widths, blocks) | spingraph params | use |
+|---|---|---|---|
+| `tiny` / `small` | (16/24, …, 1-block) | <2M | smoke / debug |
+| `medium` | (32, (64,128,256,512), (2,2,2,2)) | **~10M** | **production** (64k–500k) |
+| `large` | (48, (96,192,384,768), (2,2,3,2)) | ~20M | intermediate |
+| `xl` | (64, (128,256,512,768), (2,3,4,3)) + `dim512/enc4/dec6` | **~57M** | 3M+ PubChem |
+
+**Config index** (`model/configs/`; full ablation history in `RESULTS.md`):
+
+| config(s) | arch · loss · data |
+|---|---|
+| `baseline_matrix.yaml`, `train_64k.yaml` | resnet1d · matrix · 64k ChEMBL (CNN floor) |
+| `hungarian_matrix.yaml` | resnet1d · hungarian · 64k (deprecated approach) |
+| `surrogate.yaml`, `surrogate_large.yaml` | train the `surrogate` renderer (Stage-2 teacher) |
+| `train_64k_surrogate_spectral*.yaml` (5) | resnet1d · composite(matrix+spectral) · 64k — sessions 015–020 ablations |
+| `train_64k_spingraph_canonical.yaml` | spingraph · composite(matrix+spectral) · 64k — session 022 |
+| `train_64k_spingraph_shift2x_matrixonly.yaml` | spingraph · matrix(shift 2×) · 64k — **session 025 production** |
+| `train_64k_spingraph_shift2x_spectral.yaml` | session 025 + spectral variant |
+| `train_64k_spingraph_regions.yaml` | spingraph + region tokens · 64k — session 023 (abandoned, slower/no gain) |
+| `train_64k_026_peaks_softequiv.yaml` | spingraph(peak+soft-equiv) · matrix+soft_equiv · 64k — session 026 |
+| `train_500k_light_{025,026}.yaml` | spingraph medium · 025/026 recipe · 500k PubChem |
+| `train_3M_spingraph_xl_{025,026}.yaml` | spingraph **xl** · 025/026 recipe · 3.2M PubChem |
 
 ## Data paths
 
