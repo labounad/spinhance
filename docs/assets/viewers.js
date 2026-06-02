@@ -256,6 +256,17 @@
       return {x: offX + p[0] * current._dispW, y: offY + p[1] * current._dispH};   // RDKit GetDrawCoords are exact atom centres (no ChemDraw label-anchor offset)
     }
 
+    // Diastereotopic CH2 protons are two groups on the SAME carbon, so their
+    // circles overlap. Each such group carries a unit `off` vector (opposite signs
+    // for the pair); nudge its circle a few px along it so the two are separable —
+    // mousing a row in the table then lights up its own, offset, spot.
+    var OFFSET_PX = 7;
+    function offPx(p, g) {
+      var pt = atomPx(p);
+      if (g && g.off && (g.off[0] || g.off[1])) { pt.x += g.off[0] * OFFSET_PX; pt.y += g.off[1] * OFFSET_PX; }
+      return pt;
+    }
+
     function drawOverlay(activeLabel) {
       if (!overlay || !current) return;
       var W = overlay.width, H = overlay.height;
@@ -265,7 +276,7 @@
       if (!activeLabel) {
         current.groups.forEach(function(g) {
           g.atoms.forEach(function(p) {
-            var pt = atomPx(p);
+            var pt = offPx(p, g);
             ctx.beginPath(); ctx.arc(pt.x, pt.y, r, 0, Math.PI*2);
             ctx.fillStyle = g.color + "40"; ctx.fill();
             ctx.strokeStyle = g.color; ctx.lineWidth = 1.5;
@@ -287,7 +298,7 @@
 
       ctx.globalCompositeOperation = "destination-out";
       ag.atoms.forEach(function(p) {
-        var pt = atomPx(p);
+        var pt = offPx(p, ag);
         var gr = ctx.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, r*2.8);
         gr.addColorStop(0,   revealOpaque);
         gr.addColorStop(0.5, revealMid);
@@ -297,7 +308,7 @@
       ctx.globalCompositeOperation = "source-over";
 
       ag.atoms.forEach(function(p) {
-        var pt = atomPx(p);
+        var pt = offPx(p, ag);
         ctx.beginPath(); ctx.arc(pt.x, pt.y, r, 0, Math.PI*2);
         ctx.strokeStyle = ag.color; ctx.lineWidth = 2.5;
         ctx.shadowColor = ag.color; ctx.shadowBlur = 10;
@@ -435,7 +446,7 @@
       var best = 20, bestLbl = null;    // 20px hit threshold
       current.groups.forEach(function(g) {
         g.atoms.forEach(function(p) {
-          var pt = atomPx(p);
+          var pt = offPx(p, g);
           var d = Math.hypot(mx - pt.x, my - pt.y);
           if (d < best) { best = d; bestLbl = g.label; }
         });
