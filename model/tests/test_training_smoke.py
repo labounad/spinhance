@@ -78,8 +78,8 @@ def test_smoke_status_and_summary_contents(tmp_path):
     summary = json.loads((run_dir / "summary.json").read_text())
     assert summary["state"] == "finished"
     assert "best_metrics" in summary
-    # val metrics include the Hungarian-matched fields
-    assert "h_shift_mae_ppm" in summary["best_metrics"]
+    # val metrics include the canonical physical fields
+    assert "shift_mae_ppm" in summary["best_metrics"]
 
 
 def test_smoke_metrics_jsonl_has_train_and_val_rows(tmp_path):

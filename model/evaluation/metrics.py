@@ -12,8 +12,6 @@ from __future__ import annotations
 
 import numpy as np
 
-from model.evaluation.hungarian import hungarian_perm
-
 __all__ = ["decode", "compute_metrics", "evaluate_output"]
 
 _TRIU_CACHE: dict[int, tuple] = {}
@@ -88,7 +86,7 @@ def decode(pred, standardizer, vocab, presence_thresh=0.5, soft_equiv_thresh=0.5
 
 def compute_metrics(pred, target, standardizer, vocab, presence_thresh=0.5):
     """pred & target: numpy dicts in STANDARDIZED space. Returns physical metrics
-    incl. Hungarian-matched shift/J/degeneracy (scipy optional)."""
+    in canonical (shift-sorted) order."""
     G = pred["shifts"].shape[1]
     dec = decode(pred, standardizer, vocab, presence_thresh)
 
@@ -125,25 +123,6 @@ def compute_metrics(pred, target, standardizer, vocab, presence_thresh=0.5):
                 presence_acc=pres_acc, presence_f1=float(f1),
                 presence_precision=float(prec), presence_recall=float(rec),
                 deg_acc=deg_acc, deg_acc_balanced=deg_acc_balanced)
-
-    try:
-        B = dec["shifts"].shape[0]
-        perms = hungarian_perm(dec["shifts"], tgt_shifts)
-        bi = np.arange(B)[:, None]
-        base["h_shift_mae_ppm"] = float(np.abs(dec["shifts"][bi, perms] - tgt_shifts).mean())
-
-        tgt_C = _pairs_to_matrix(tgt_jmag, G)
-        h_j_errs: list[float] = []
-        for b in range(B):
-            p = perms[b]
-            pC = dec["couplings"][b][p][:, p]
-            mb = tgt_present[b]
-            if mb.any():
-                h_j_errs.extend(np.abs(pC[iu[0], iu[1]][mb] - tgt_C[b][iu[0], iu[1]][mb]).tolist())
-        base["h_j_mae_hz"] = float(np.mean(h_j_errs)) if h_j_errs else 0.0
-        base["h_deg_acc"] = float((pred_deg[bi, perms] == tgt_deg).mean())
-    except Exception:
-        pass
 
     return base
 

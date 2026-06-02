@@ -146,8 +146,7 @@ class ProbeEvaluator:
 
         (epoch_dir / "predictions.json").write_text(json.dumps(per_mol, indent=2))
         agg = {}
-        for k in ("shift_mae_ppm", "j_mae_hz", "presence_f1", "deg_acc",
-                  "h_shift_mae_ppm", "h_j_mae_hz"):
+        for k in ("shift_mae_ppm", "j_mae_hz", "presence_f1", "deg_acc"):
             vals = [m[k] for m in per_mol if k in m]
             if vals:
                 agg[k] = float(np.mean(vals))

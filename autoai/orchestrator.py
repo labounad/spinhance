@@ -404,7 +404,7 @@ def _auto_lesson(result: WorkerResult) -> str:
         compact = diagnostics.get("compact_best_metrics") or {}
         dominant = diagnostics.get("dominant_failure", "none")
         pieces = []
-        for key in ("shift_mae_ppm", "h_shift_mae_ppm", "j_mae_hz", "presence_f1", "deg_acc"):
+        for key in ("shift_mae_ppm", "j_mae_hz", "presence_f1", "deg_acc"):
             value = compact.get(key)
             if isinstance(value, float):
                 pieces.append(f"{key}={value:.4g}")

@@ -151,7 +151,6 @@ def _load_val_metrics(run_prefix: str) -> list[dict]:
         rows.append({
             "epoch": int(d.get("epoch", -1)), "score": score,
             "shift_mae_ppm": shift, "j_mae_hz": j,
-            "h_shift_mae_ppm": float(m.get("h_shift_mae_ppm", float("nan"))),
             "presence_f1": float(m.get("presence_f1", float("nan"))),
             "deg_acc": float(m.get("deg_acc_balanced", m.get("deg_acc", float("nan")))),
         })
