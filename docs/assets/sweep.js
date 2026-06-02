@@ -57,44 +57,93 @@
   }
 
   /* ---------- data ---------- */
-  let meta = null, mol = null, curves = [], winLo = 0, winHi = 1;
+  let meta = null, mol = null, winLo = 0, winHi = 1;
+  let frameCurves = [];      // raw broadened curve per field frame (for the static fan)
+  let morphs = [];           // matched line pairs between adjacent frames (for the trace)
+  let globalScale = 1;       // single height scale across all frames (no per-frame re-pinning)
+  let bufC = null, bufA = null, bufCur = null;   // reused scratch buffers (no per-scroll alloc)
 
   const b64f32 = (s) => { const b = atob(s), n = b.length / 4, u = new Uint8Array(b.length);
     for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return new Float32Array(u.buffer, 0, n); };
   const b64u16 = (s) => { const b = atob(s), n = b.length / 2, out = new Float32Array(n);
     for (let i = 0; i < n; i++) out[i] = (b.charCodeAt(2*i) | (b.charCodeAt(2*i+1) << 8)) / 65535; return out; };
 
-  /* broaden one frame's sticks into a normalized pseudo-Voigt curve on the grid.
-     Real lines are Voigt (Lorentzian T2 (x) Gaussian B0-inhomogeneity); ETA is the
-     Lorentzian fraction (fit ~0.8 to a real 600 MHz line; matches the simulator). */
+  /* Broaden a stick list into a pseudo-Voigt curve on the grid, RAW (no per-frame
+     normalization — heights are made consistent across fields by a single global
+     scale, see chooseMolecule). Real lines are Voigt (Lorentzian T2 (x) Gaussian
+     B0-inhomogeneity); ETA is the Lorentzian fraction (~0.8, matches the simulator).
+     `broadenInto` writes into a reused buffer so the scroll path allocates nothing. */
   const ETA = 0.8, LN2 = Math.log(2);
-  function broaden(centers, amps, hwhm) {
-    const y = new Float32Array(GRID);
+  function broadenInto(centers, amps, len, hwhm, out) {
+    out.fill(0);
     const dppm = (winHi - winLo) / (GRID - 1);
     const cutoff = Math.max(30 * hwhm, dppm * 3);
-    for (let i = 0; i < centers.length; i++) {
-      const c = centers[i], a = amps[i];
+    for (let i = 0; i < len; i++) {
+      const a = amps[i];
+      if (a <= 0) continue;
+      const c = centers[i];
       let k0 = Math.floor((c - cutoff - winLo) / dppm), k1 = Math.ceil((c + cutoff - winLo) / dppm);
       if (k0 < 0) k0 = 0; if (k1 > GRID - 1) k1 = GRID - 1;
       for (let k = k0; k <= k1; k++) {
         const d = (winLo + k * dppm - c) / hwhm;
         const d2 = d * d;
-        y[k] += a * (ETA / (1 + d2) + (1 - ETA) * Math.exp(-LN2 * d2));  // pseudo-Voigt
+        out[k] += a * (ETA / (1 + d2) + (1 - ETA) * Math.exp(-LN2 * d2));  // pseudo-Voigt
       }
     }
-    let m = 0; for (let k = 0; k < GRID; k++) if (y[k] > m) m = y[k];
-    if (m > 0) for (let k = 0; k < GRID; k++) y[k] /= m;
-    return y;
+    return out;
+  }
+  const broadenSticks = (c, a, hwhm) => broadenInto(c, a, c.length, hwhm, new Float32Array(GRID));
+
+  /* Decode one frame's base64 sticks and sort by ppm (needed for the line matcher). */
+  function decodeSorted(fr) {
+    const c = b64f32(fr.c), a = b64u16(fr.a), n = c.length;
+    const idx = Array.from({ length: n }, (_, k) => k).sort((p, q) => c[p] - c[q]);
+    const cs = new Float32Array(n), as = new Float32Array(n);
+    for (let k = 0; k < n; k++) { cs[k] = c[idx[k]]; as[k] = a[idx[k]]; }
+    return { c: cs, a: as };
+  }
+
+  /* Match lines between two adjacent (sorted) frames so the sweep MORPHS peaks
+     (centers + amps interpolate, peaks translate) instead of cross-fading two
+     finished curves — which is what made peaks sag/bounce mid-interpolation.
+     Two-pointer by ppm: |Δ|<=TOL -> matched; else the lower line is a death
+     (amp fades to 0 in place) or birth (fades in), so line count can change. */
+  const MATCH_TOL = 0.04;   // ppm; > adjacent-frame drift (~4%), < typical line spacing
+  function matchPair(lc, la, hc, ha) {
+    const cLo = [], aLo = [], cHi = [], aHi = [];
+    let i = 0, j = 0;
+    const push = (clo, alo, chi, ahi) => { cLo.push(clo); aLo.push(alo); cHi.push(chi); aHi.push(ahi); };
+    while (i < lc.length && j < hc.length) {
+      if (Math.abs(hc[j] - lc[i]) <= MATCH_TOL) { push(lc[i], la[i], hc[j], ha[j]); i++; j++; }
+      else if (lc[i] < hc[j]) { push(lc[i], la[i], lc[i], 0); i++; }   // death
+      else { push(hc[j], 0, hc[j], ha[j]); j++; }                     // birth
+    }
+    while (i < lc.length) { push(lc[i], la[i], lc[i], 0); i++; }
+    while (j < hc.length) { push(hc[j], 0, hc[j], ha[j]); j++; }
+    return { cLo: Float32Array.from(cLo), aLo: Float32Array.from(aLo),
+             cHi: Float32Array.from(cHi), aHi: Float32Array.from(aHi) };
   }
 
   function chooseMolecule(data) {
     meta = data.meta;
     mol = data.molecules[Math.floor(Math.random() * data.molecules.length)];
     [winLo, winHi] = mol.win;
-    curves = mol.frames.map((fr, idx) => {
-      const hwhm = (meta.linewidth_hz / 2) / meta.fields_mhz[idx];
-      return broaden(b64f32(fr.c), b64u16(fr.a), hwhm);
-    });
+    // decode + sort sticks per frame, broaden each frame raw (for the fan), and
+    // precompute the line matching between adjacent frames (for the morph).
+    const sticks = mol.frames.map(decodeSorted);
+    frameCurves = sticks.map((s, idx) =>
+      broadenSticks(s.c, s.a, (meta.linewidth_hz / 2) / meta.fields_mhz[idx]));
+    // one global height scale (max over all frames) -> heights vary smoothly &
+    // physically instead of every frame re-pinning its tallest peak to 1.
+    globalScale = 0;
+    for (const cv of frameCurves) for (let k = 0; k < GRID; k++) if (cv[k] > globalScale) globalScale = cv[k];
+    if (!(globalScale > 0)) globalScale = 1;
+    morphs = []; let maxLen = 0;
+    for (let i = 0; i < sticks.length - 1; i++) {
+      const m = matchPair(sticks[i].c, sticks[i].a, sticks[i + 1].c, sticks[i + 1].a);
+      morphs.push(m); if (m.cLo.length > maxLen) maxLen = m.cLo.length;
+    }
+    bufC = new Float32Array(maxLen); bufA = new Float32Array(maxLen); bufCur = new Float32Array(GRID);
     molTag.innerHTML = `<b>${mol.chembl_id || mol.id || "molecule"}</b> &nbsp;` +
       `<span class="mono smi" id="smilesCopy" title="Click to copy SMILES">${mol.smiles || ""}</span>` +
       `<span class="copied" id="copiedMsg" style="opacity:0">✓ copied</span>`;
@@ -152,7 +201,7 @@
     fctx.clearRect(0, 0, W, H);
     drawAxis(fctx, baseY);
     fctx.strokeStyle = colors.fan; fctx.lineWidth = 1.1; fctx.lineJoin = "round";
-    for (const c of curves) curvePath(c, fctx, amp, baseY);
+    for (const c of frameCurves) curvePath(c, fctx, amp / globalScale, baseY);
   }
 
   const clamp01 = (x) => Math.min(1, Math.max(0, x));
@@ -174,15 +223,26 @@
     ctx.clearRect(0, 0, W, H);
     ctx.drawImage(fan, 0, 0, W, H);
 
-    const fpos = p * (curves.length - 1);
-    const lo = Math.floor(fpos), hi = Math.min(curves.length - 1, lo + 1), t = fpos - lo;
-    const a = curves[lo], b = curves[hi];
-    const cur = new Float32Array(GRID);
-    for (let k = 0; k < GRID; k++) cur[k] = a[k] * (1 - t) + b[k] * t;
+    const n = frameCurves.length;
+    const fpos = p * (n - 1);
+    const lo = Math.floor(fpos), hi = Math.min(n - 1, lo + 1), t = fpos - lo;
+
+    // Morph in PEAK space: interpolate matched line centers+amps, broaden ONCE at
+    // the continuous current field. Peaks translate/merge smoothly (no cross-fade
+    // sag). At t=0/1 this reproduces a frame exactly, so it's seamless with the fan.
+    let cur;
+    if (lo < morphs.length) {
+      const m = morphs[lo], L = m.cLo.length, s = 1 - t;
+      for (let i = 0; i < L; i++) { bufC[i] = m.cLo[i] * s + m.cHi[i] * t; bufA[i] = m.aLo[i] * s + m.aHi[i] * t; }
+      const fcur = meta.fields_mhz[lo] * s + meta.fields_mhz[hi] * t;
+      cur = broadenInto(bufC, bufA, L, (meta.linewidth_hz / 2) / fcur, bufCur);
+    } else {
+      cur = frameCurves[lo];      // exactly on the last frame
+    }
 
     ctx.strokeStyle = colors.trace; ctx.lineWidth = 2.6; ctx.lineJoin = "round"; ctx.lineCap = "round";
     ctx.shadowColor = colors.accent; ctx.shadowBlur = colors.dark ? 20 : 6;
-    curvePath(cur, ctx, amp, baseY);
+    curvePath(cur, ctx, amp / globalScale, baseY);
     ctx.shadowBlur = 0;
 
     const fields = meta.fields_mhz;
