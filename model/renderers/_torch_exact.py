@@ -184,9 +184,21 @@ def simulate(shifts, couplings, degeneracy, field_mhz, points=16384,
     return grid, spec / area
 
 
-def _broaden_fft_batch(centers, amps, points, ppm_from, ppm_to, dx, hwhm, device, dtype):
+def _line_kernel(x, hwhm, eta):
+    """Pseudo-Voigt convolution kernel. ``eta`` = Lorentzian fraction: 1.0 = pure
+    Lorentzian (natural lineshape, unchanged); <1 mixes in a Gaussian of equal
+    FWHM (B0-inhomogeneity broadening -> real lines are Voigt)."""
+    lor = 1.0 / (1.0 + (x / hwhm) ** 2)
+    if eta >= 1.0:
+        return lor
+    import math
+    gau = torch.exp(-math.log(2.0) * (x / hwhm) ** 2)       # same FWHM as the Lorentzian
+    return eta * lor + (1.0 - eta) * gau
+
+
+def _broaden_fft_batch(centers, amps, points, ppm_from, ppm_to, dx, hwhm, device, dtype, eta=1.0):
     """Batched FFT broadening: centers (B, K), amps (B, K) -> (B, points).
-    Fully vectorized — no Python loop over batch items."""
+    Fully vectorized — no Python loop over batch items. ``eta`` -> pseudo-Voigt."""
     B = centers.shape[0]
     pos   = (centers - ppm_from) / dx                             # (B, K)
     valid = (pos >= 0) & (pos <= points - 1) & (amps.detach() > 0)  # (B, K) bool mask
@@ -205,7 +217,7 @@ def _broaden_fft_batch(centers, amps, points, ppm_from, ppm_to, dx, hwhm, device
     stick = stick_flat.reshape(B, points + 1)[:, :points]          # (B, points)
 
     x        = (torch.arange(points, device=device, dtype=dtype) - points // 2) * dx
-    kern     = torch.fft.ifftshift(1.0 / (1.0 + (x / hwhm) ** 2))
+    kern     = torch.fft.ifftshift(_line_kernel(x, hwhm, eta))
     kern_fft = torch.fft.rfft(kern)                                # shared kernel
     return torch.fft.irfft(torch.fft.rfft(stick) * kern_fft, n=points)  # (B, points)
 
@@ -263,9 +275,9 @@ def simulate_batch(shifts, couplings, degeneracy, field_mhz, points=16384,
     return specs / area                                            # (B, points)
 
 
-def _broaden_fft(centers, amps, points, ppm_from, ppm_to, dx, hwhm, device, dtype):
-    """Bin sticks (linear interp) then FFT-convolve with a Lorentzian kernel.
-    Differentiable in centers and amps; O(points log points)."""
+def _broaden_fft(centers, amps, points, ppm_from, ppm_to, dx, hwhm, device, dtype, eta=1.0):
+    """Bin sticks (linear interp) then FFT-convolve with a (pseudo-Voigt) kernel.
+    Differentiable in centers and amps; O(points log points). ``eta`` -> pseudo-Voigt."""
     pos = (centers - ppm_from) / dx
     valid = (pos >= 0) & (pos <= points - 1) & (amps > 0)
     pos = pos[valid]; w = amps[valid]
@@ -278,8 +290,7 @@ def _broaden_fft(centers, amps, points, ppm_from, ppm_to, dx, hwhm, device, dtyp
     stick = stick.index_add(0, i0 + 1, w * frac)
     stick = stick[:points]
     x = (torch.arange(points, device=device, dtype=dtype) - points // 2) * dx
-    kern = 1.0 / (1.0 + (x / hwhm) ** 2)
-    kern = torch.fft.ifftshift(kern)
+    kern = torch.fft.ifftshift(_line_kernel(x, hwhm, eta))
     out = torch.fft.irfft(torch.fft.rfft(stick) * torch.fft.rfft(kern), n=points)
     return out
 

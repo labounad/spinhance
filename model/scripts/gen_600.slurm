@@ -22,5 +22,5 @@ echo "host $(hostname) | shard $SLURM_ARRAY_TASK_ID | src $SRC_BUNDLE | out $OUT
   --records "$SRC_BUNDLE/records.json.gz" \
   --out "$OUT" \
   --shard-index "$SLURM_ARRAY_TASK_ID" \
-  --chunk 50000 --field 600 --points 65536 --linewidth 0.35 \
+  --chunk 50000 --field 600 --points 65536 --linewidth 0.7 --eta 0.8 \
   --workers "${SLURM_CPUS_PER_TASK:-8}"

@@ -185,37 +185,46 @@ def build_stick(centers, amps, points, ppm_from, ppm_to):
             + np.bincount(i0 + 1, weights=w * frac, minlength=points + 1)[:points])
 
 
-def lorentzian_convolve(stick, points, ppm_from, ppm_to, hwhm):
-    """FFT-convolve a stick spectrum with a Lorentzian of half-width ``hwhm`` (ppm).
+def lorentzian_convolve(stick, points, ppm_from, ppm_to, hwhm, eta=1.0):
+    """FFT-convolve a stick spectrum with a (pseudo-Voigt) kernel of half-width
+    ``hwhm`` (ppm). O(points log points), independent of the number of lines.
 
-    O(points log points), independent of the number of lines.
+    ``eta`` is the Lorentzian fraction: 1.0 (default) = pure Lorentzian (the
+    natural NMR lineshape, unchanged); <1 mixes in a Gaussian of equal FWHM, i.e.
+    a pseudo-Voigt, since a REAL line is Lorentzian (T2) convolved with a Gaussian
+    (B0 inhomogeneity). Fitting a real 600 MHz line gives eta ~ 0.8.
     """
     dppm = (ppm_to - ppm_from) / points
     x = (np.arange(points) - points // 2) * dppm
-    kern = 1.0 / (1.0 + (x / hwhm) ** 2)
+    lor = 1.0 / (1.0 + (x / hwhm) ** 2)
+    if eta >= 1.0:
+        kern = lor
+    else:
+        gau = np.exp(-np.log(2.0) * (x / hwhm) ** 2)        # same FWHM as the Lorentzian
+        kern = eta * lor + (1.0 - eta) * gau
     return np.fft.irfft(np.fft.rfft(stick) * np.fft.rfft(np.fft.ifftshift(kern)),
                         n=points)
 
 
-def lorentzian_broaden(centers, amps, points, ppm_from, ppm_to, hwhm):
-    """Stick-bin transitions then Lorentzian-convolve (shared by both engines)."""
+def lorentzian_broaden(centers, amps, points, ppm_from, ppm_to, hwhm, eta=1.0):
+    """Stick-bin transitions then (pseudo-Voigt) convolve (shared by both engines)."""
     if len(centers) == 0:
         return np.zeros(points)
     return lorentzian_convolve(build_stick(centers, amps, points, ppm_from, ppm_to),
-                               points, ppm_from, ppm_to, hwhm)
+                               points, ppm_from, ppm_to, hwhm, eta=eta)
 
 
 def peaks_to_spectrum(centers_ppm, amps, points=16384, ppm_from=0.0, ppm_to=12.0,
-                      linewidth_hz=1.0, field_mhz=90.0, normalize=True):
+                      linewidth_hz=1.0, field_mhz=90.0, normalize=True, eta=1.0):
     """Reconstruct a dense spectrum from a peak list (convolve on the fly).
 
     The inverse of storing only line positions + intensities: bin to the grid,
-    Lorentzian-broaden with the stored linewidth, and (by default) renormalise
-    to unit integral — matching the spectra produced directly by the engines.
+    broaden with the stored linewidth (``eta`` controls the lineshape: 1.0 pure
+    Lorentzian, <1 pseudo-Voigt), and (by default) renormalise to unit integral.
     """
     hwhm = (linewidth_hz / 2.0) / field_mhz
     spec = lorentzian_broaden(np.asarray(centers_ppm), np.asarray(amps),
-                              points, ppm_from, ppm_to, hwhm)
+                              points, ppm_from, ppm_to, hwhm, eta=eta)
     if normalize:
         total = spec.sum() * ((ppm_to - ppm_from) / points)
         if total > 0:

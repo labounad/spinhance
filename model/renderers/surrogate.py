@@ -69,7 +69,7 @@ class SurrogateRenderer(nn.Module):
                  heads: int = 4, sticks_per_group: int = 48, mlp_ratio: float = 2.0,
                  dropout: float = 0.0, offset_max_hz: float = 60.0,
                  points: int = N_POINTS, ppm_from: float = PPM_FROM, ppm_to: float = PPM_TO,
-                 linewidth_hz: float = 1.0):
+                 linewidth_hz: float = 1.0, lineshape_eta: float = 1.0):
         super().__init__()
         self.G = n_groups
         self.heads = heads
@@ -78,6 +78,7 @@ class SurrogateRenderer(nn.Module):
         self.points = points
         self.ppm_from, self.ppm_to = ppm_from, ppm_to
         self.linewidth_hz = linewidth_hz
+        self.lineshape_eta = lineshape_eta     # Lorentzian fraction; <1 => pseudo-Voigt kernel
 
         # token features: [shift/12, deg/9, total|J|/100, log10(field)/3]
         self.token_in = nn.Linear(4, dim)
@@ -131,6 +132,7 @@ class SurrogateRenderer(nn.Module):
         dx = (self.ppm_to - self.ppm_from) / self.points
         hwhm = (self.linewidth_hz / 2.0) / field
         spec = _broaden_fft_batch(centers, amps, self.points, self.ppm_from,
-                                  self.ppm_to, dx, hwhm, device, dtype)      # (B, points)
+                                  self.ppm_to, dx, hwhm, device, dtype,
+                                  eta=self.lineshape_eta)                    # (B, points)
         spec = spec.clamp_min(0.0)
         return spec / (spec.sum(-1, keepdim=True) * dx + 1e-12)             # unit integral
