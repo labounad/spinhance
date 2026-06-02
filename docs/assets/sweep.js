@@ -103,23 +103,35 @@
     return { c: cs, a: as };
   }
 
-  /* Match lines between two adjacent (sorted) frames so the sweep MORPHS peaks
-     (centers + amps interpolate, peaks translate) instead of cross-fading two
-     finished curves — which is what made peaks sag/bounce mid-interpolation.
-     Two-pointer by ppm: |Δ|<=TOL -> matched; else the lower line is a death
-     (amp fades to 0 in place) or birth (fades in), so line count can change. */
-  const MATCH_TOL = 0.04;   // ppm; > adjacent-frame drift (~4%), < typical line spacing
+  /* Match lines between two adjacent frames so the sweep MORPHS peaks (centers +
+     amps interpolate, peaks translate) instead of cross-fading two finished
+     curves — which made peaks sag/bounce mid-interpolation. Unmatched lines fade
+     in place (birth/death), so the line count can change.
+
+     GREEDY-NEAREST bipartite match (not an in-order two-pointer): collect all
+     candidate pairs within TOL, assign by increasing distance with each line used
+     once. This is robust to merges/splits — when two lines merge, the survivor
+     keeps its near match and the other simply dies, instead of the two-pointer
+     mis-pairing every downstream line by one position (the cascade that made a
+     whole cluster of aromatic peaks slide ~0.03 ppm and jump in height). */
+  const MATCH_TOL = 0.02;   // ppm cap on a match; beyond this a line is a birth/death
   function matchPair(lc, la, hc, ha) {
+    const triples = [];     // candidate [distance, i, j] pairs within TOL (built once at load)
+    for (let i = 0; i < lc.length; i++)
+      for (let j = 0; j < hc.length; j++) {
+        const dij = Math.abs(lc[i] - hc[j]);
+        if (dij <= MATCH_TOL) triples.push([dij, i, j]);
+      }
+    triples.sort((p, q) => p[0] - q[0]);
+    const usedI = new Uint8Array(lc.length), usedJ = new Uint8Array(hc.length);
     const cLo = [], aLo = [], cHi = [], aHi = [];
-    let i = 0, j = 0;
-    const push = (clo, alo, chi, ahi) => { cLo.push(clo); aLo.push(alo); cHi.push(chi); aHi.push(ahi); };
-    while (i < lc.length && j < hc.length) {
-      if (Math.abs(hc[j] - lc[i]) <= MATCH_TOL) { push(lc[i], la[i], hc[j], ha[j]); i++; j++; }
-      else if (lc[i] < hc[j]) { push(lc[i], la[i], lc[i], 0); i++; }   // death
-      else { push(hc[j], 0, hc[j], ha[j]); j++; }                     // birth
+    for (const [, i, j] of triples) {
+      if (usedI[i] || usedJ[j]) continue;
+      usedI[i] = 1; usedJ[j] = 1;
+      cLo.push(lc[i]); aLo.push(la[i]); cHi.push(hc[j]); aHi.push(ha[j]);   // matched
     }
-    while (i < lc.length) { push(lc[i], la[i], lc[i], 0); i++; }
-    while (j < hc.length) { push(hc[j], 0, hc[j], ha[j]); j++; }
+    for (let i = 0; i < lc.length; i++) if (!usedI[i]) { cLo.push(lc[i]); aLo.push(la[i]); cHi.push(lc[i]); aHi.push(0); }  // death
+    for (let j = 0; j < hc.length; j++) if (!usedJ[j]) { cLo.push(hc[j]); aLo.push(0); cHi.push(hc[j]); aHi.push(ha[j]); }  // birth
     return { cLo: Float32Array.from(cLo), aLo: Float32Array.from(aLo),
              cHi: Float32Array.from(cHi), aHi: Float32Array.from(aHi) };
   }

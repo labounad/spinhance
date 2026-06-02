@@ -37,7 +37,9 @@ from simulation.pyspin.composite import (  # noqa: E402
 
 # ── config ────────────────────────────────────────────────────────────────────
 LOW_MHZ, HIGH_MHZ = 90.0, 600.0
-N_FIELDS = 48            # geometric frames between low and high field (dense → smooth sweep, no wobble)
+N_FIELDS = 96            # geometric frames 90->600 MHz. Upsampled 48->96: smaller field
+                         # steps -> smaller per-frame line drift -> the morph interpolation
+                         # (docs/assets/sweep.js) tracks peaks more reliably + smoother sweep.
 PPM_FROM, PPM_TO = 0.0, 12.0
 SIM_POINTS = 32768       # 2**15 — simulated AND STORED over the TIGHT window
 DISP_POINTS = SIM_POINTS # store every simulated point (no downsampling) -> smooth peaks
