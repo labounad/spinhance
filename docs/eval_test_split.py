@@ -49,7 +49,7 @@ for tag,path in CKPTS.items():
         for k in P: P[k].append(p[k])
     pred={k:np.concatenate(v) for k,v in P.items()}
     met=compute_metrics(pred,targets(std,vocab),std,vocab)
-    out[tag]={"test":{k:round(float(met[k]),4) for k in ("shift_mae_ppm","j_mae_hz","presence_f1","deg_acc_balanced","h_shift_mae_ppm","h_j_mae_hz")},
+    out[tag]={"test":{k:round(float(met[k]),4) for k in ("shift_mae_ppm","j_mae_hz","presence_f1","deg_acc_balanced")},
               "val":VAL[tag]}
     print(tag,"TEST:",out[tag]["test"])
 out["_meta"]={"split":"random 70/20/10 seed 0","test_n_total":len(test),"test_n_eval":len(sample),

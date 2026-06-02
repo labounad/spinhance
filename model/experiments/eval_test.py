@@ -70,8 +70,7 @@ def main():
     print(f"\n===== TEST-SET ({len(test)} molecules) | {name} | "
           f"region_tokens={args.region_tokens} =====")
     for k in ("shift_mae_ppm", "j_mae_hz", "presence_f1", "presence_precision",
-              "presence_recall", "deg_acc", "deg_acc_balanced",
-              "h_shift_mae_ppm", "h_j_mae_hz"):
+              "presence_recall", "deg_acc", "deg_acc_balanced"):
         if k in agg:
             print(f"  {k:22s} {agg[k]/max(1,n):.4f}")
 

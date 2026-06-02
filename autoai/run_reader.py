@@ -344,9 +344,7 @@ def summarize_metrics_for_agent(metrics: dict) -> dict:
     """Compact metric subset for experiment-log display and model-selection prompts."""
     keys = (
         "shift_mae_ppm",
-        "h_shift_mae_ppm",
         "j_mae_hz",
-        "h_j_mae_hz",
         "presence_f1",
         "deg_acc",
         "deg_acc_balanced",

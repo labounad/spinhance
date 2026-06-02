@@ -171,7 +171,6 @@ def _dashboard():
             # matrix model
             ("metrics.shift_mae_ppm", "Shift MAE (ppm)"),
             ("metrics.j_mae_hz", "J MAE (Hz)"),
-            ("metrics.h_shift_mae_ppm", "Hungarian shift MAE (ppm)"),
             ("metrics.presence_f1", "Presence F1"),
             ("metrics.deg_acc_balanced", "Degeneracy acc (balanced)"),
             # surrogate renderer (matrix -> spectrum)
