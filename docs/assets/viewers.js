@@ -94,13 +94,13 @@
   // ====================== 2. COMPARISON TABLE ==============================
   const RUNS = [
     { m: "CNN baseline", arch: "ResNet-1D + typed heads", data: "64k ChEMBL", p: "5.0M", shift: "0.279", j: "1.80", f1: "0.807", deg: "0.732", st: "floor" },
-    { m: "022", arch: "spingraph + surrogate-spectral", data: "64k ChEMBL", p: "10M", shift: "0.064", j: "0.91", f1: "0.916", deg: "0.928", st: "superseded" },
-    { m: "025", arch: "spingraph, shift-2×, WSD LR", data: "64k ChEMBL", p: "10M", shift: "0.037", j: "0.59", f1: "0.940", deg: "0.945", st: "superseded" },
-    { m: "026", arch: "025 + peak channel + soft-equiv", data: "64k ChEMBL", p: "10M", shift: "0.037", j: "0.65", f1: "0.940", deg: "0.960", st: "done" },
-    { m: "light·025", arch: "025 recipe", data: "500k PubChem", p: "10M", shift: "0.036", j: "0.51", f1: "0.969", deg: "0.969", st: "production" },
-    { m: "light·026", arch: "026 recipe", data: "500k PubChem", p: "10M", shift: "0.059", j: "0.89", f1: "0.935", deg: "0.959", st: "running · ep11" },
-    { m: "xl·025", arch: "025 recipe, xl", data: "1M PubChem", p: "57M", shift: "0.053", j: "0.73", f1: "0.948", deg: "0.962", st: "running · ep8" },
-    { m: "xl·026", arch: "026 recipe, xl", data: "1M PubChem", p: "57M", shift: "0.056", j: "0.70", f1: "0.949", deg: "0.960", st: "running · ep8" },
+    { m: "64k·022", arch: "spingraph + surrogate-spectral", data: "64k ChEMBL", p: "10M", shift: "0.064", j: "0.91", f1: "0.916", deg: "0.928", st: "superseded" },
+    { m: "64k·025", arch: "spingraph, shift-2×, WSD LR", data: "64k ChEMBL", p: "10M", shift: "0.037", j: "0.59", f1: "0.940", deg: "0.945", st: "superseded" },
+    { m: "64k·026", arch: "025 + peak channel + soft-equiv", data: "64k ChEMBL", p: "10M", shift: "0.037", j: "0.65", f1: "0.940", deg: "0.960", st: "done" },
+    { m: "500k·025", arch: "025 recipe", data: "500k PubChem", p: "10M", shift: "0.036", j: "0.51", f1: "0.969", deg: "0.969", st: "production" },
+    { m: "500k·026", arch: "026 recipe", data: "500k PubChem", p: "10M", shift: "0.059", j: "0.89", f1: "0.935", deg: "0.959", st: "running · ep11" },
+    { m: "1M·025", arch: "025 recipe, xl", data: "1M PubChem", p: "57M", shift: "0.053", j: "0.73", f1: "0.948", deg: "0.962", st: "running · ep8" },
+    { m: "1M·026", arch: "026 recipe, xl", data: "1M PubChem", p: "57M", shift: "0.056", j: "0.70", f1: "0.949", deg: "0.960", st: "running · ep8" },
   ];
   function initTable() {
     const host = $("#cmpTable"); if (!host) return;
