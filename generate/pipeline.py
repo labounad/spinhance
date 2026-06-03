@@ -336,6 +336,14 @@ def run_pipeline(
         chunk:   list[tuple[str, str, str]] = []
         pending: set = set()
 
+        # Kept results are buffered, not streamed, so the final dataset can be
+        # emitted in a deterministic order (sorted by a stable key) regardless
+        # of worker-completion order.  Without this the CSV/XYZ row order — and
+        # therefore which row a downstream "first occurrence" dedup keeps — would
+        # vary run to run, defeating byte-reproducibility.  Each buffered entry
+        # is ``(row, xyz)`` exactly as returned by :func:`_screen_chunk`.
+        collected: list[tuple[tuple[str, str, str, int, str], str | None]] = []
+
         def _flush_chunk() -> None:
             """Submit the current chunk to the pool, draining if needed."""
             nonlocal pending
@@ -344,22 +352,19 @@ def run_pipeline(
             if len(pending) >= max_pending:
                 # Block until at least one future completes before submitting.
                 done, pending = _fut_wait(pending, return_when=FIRST_COMPLETED)
-                _write_done(done)
+                _collect_done(done)
             pending.add(
                 pool.submit(_screen_chunk, list(chunk), min_groups, max_groups, want_xyz)
             )
             chunk.clear()
 
-        def _write_done(futures) -> None:
-            """Write results from a set of completed futures; refresh postfix."""
-            nonlocal kept, xyz_written
+        def _collect_done(futures) -> None:
+            """Buffer results from completed futures; refresh the progress bar."""
+            nonlocal kept
             for fut in futures:
                 for row, xyz in fut.result():
-                    writer.writerow(row)
+                    collected.append((row, xyz))
                     kept += 1
-                    if want_xyz and xyz is not None:
-                        gz.write(xyz)
-                        xyz_written += 1
             if pbar is not None:
                 pbar.set_postfix(
                     heur=f"{heur_pass:,}",
@@ -413,7 +418,19 @@ def run_pipeline(
         # Drain all in-flight futures.
         if pending:
             done, _ = _fut_wait(pending, return_when="ALL_COMPLETED")
-            _write_done(done)
+            _collect_done(done)
+
+        # Emit deterministically: sort by a stable key so regeneration is
+        # byte-reproducible and a downstream "first occurrence" dedup keeps a
+        # fixed representative.  InChIKey is the primary key (a canonical
+        # structure identifier); SMILES and source id break any ties (e.g. an
+        # empty InChIKey, or stereoisomers sharing a skeleton InChIKey).
+        collected.sort(key=lambda item: (item[0][2], item[0][1], item[0][0]))
+        for row, xyz in collected:
+            writer.writerow(row)
+            if want_xyz and xyz is not None:
+                gz.write(xyz)
+                xyz_written += 1
 
     if pbar is not None:
         pbar.close()

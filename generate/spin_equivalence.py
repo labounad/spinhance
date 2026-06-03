@@ -84,6 +84,21 @@ from .config import (
 _EXCHANGEABLE_PARENTS: frozenset[int] = frozenset({7, 8, 16})
 
 
+class EmbedFailure(Exception):
+    """Raised when 3-D embedding fails for a molecule being classified.
+
+    A 2-D fallback (``use_3d=False``) cannot resolve diastereotopic CH₂
+    stereochemistry: ``AssignStereochemistryFrom3D`` has no coordinates to
+    read, so the two diastereotopic protons collapse to identical
+    D-substitution SMILES and are mis-grouped (e.g. as an impossible 2-H HARD
+    rotor) — corrupting the spin-group count.  Rather than emit a wrong
+    classification, the analysis paths raise this so the caller drops the
+    molecule.  The screening pipeline already treats any exception from
+    :func:`classify_spin_groups` as a skip, so embed-failed molecules are
+    excluded from the dataset.
+    """
+
+
 # ── Heuristic pre-filter ──────────────────────────────────────────────────────
 
 def _count_proton_bearing_carbons(mol: Chem.Mol) -> int:
@@ -644,6 +659,9 @@ def analyze_spin_systems(mol: Chem.Mol) -> tuple[int, list[int]]:
     determine the averaged shift.  It does **not** set the spin-group count.
     """
     mol_h, use_3d = embed_3d(mol)
+    if not use_3d:
+        # 2-D fallback mis-groups diastereotopic CH₂; drop the molecule.
+        raise EmbedFailure("3-D embedding failed; refusing 2-D fallback")
 
     # Keep exchangeable protons (N-H, O-H, S-H) in the molecule so they
     # act as structural context during the D-substitution test.  Only
@@ -747,6 +765,9 @@ def classify_spin_groups(mol: Chem.Mol) -> tuple[Chem.Mol, list[SpinGroup]]:
     from ``candidate_atoms`` so they are never classified as spin groups.
     """
     mol_h, use_3d = embed_3d(mol)
+    if not use_3d:
+        # 2-D fallback mis-groups diastereotopic CH₂; drop the molecule.
+        raise EmbedFailure("3-D embedding failed; refusing 2-D fallback")
 
     # Non-exchangeable C-H protons only; exchangeable H stay for context.
     candidate_h = [

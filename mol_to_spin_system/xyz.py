@@ -38,6 +38,7 @@ class LabeledSpinSystem:
     meta: dict
     shift_ranges: np.ndarray | None = None
     coupling_types: list[str] | None = None
+    equiv_orbit: list[int] | None = None
 
     def to_dict(self) -> dict:
         """JSON-serializable record for this molecule."""
@@ -58,6 +59,13 @@ class LabeledSpinSystem:
         if self.coupling_types is not None:
             # parallel to couplings: the dominant mechanism per group pair
             d["coupling_types"] = list(self.coupling_types)
+        if self.equiv_orbit is not None:
+            # parallel to labels/spin_groups: the canonical symmetry-orbit id of
+            # each group (groups sharing an id are homotopic/enantiotopic — i.e.
+            # chemically equivalent — and MUST share one randomized shift in the
+            # bake; see mol_to_spin_system.augment.sample_record). Distinct ids
+            # are sampled independently even if their base Pretsch shift coincides.
+            d["equiv_orbit"] = [int(o) for o in self.equiv_orbit]
         return d
 
 
@@ -154,16 +162,26 @@ def entry_to_spin_system(
     class_atoms: dict[tuple, list[int]] = {}
     for i, c in class_of.items():
         class_atoms.setdefault(c, []).append(i)
-    class_stat = {
-        c: np.mean([per_atom[i] for i in idxs if i in per_atom], axis=0)
-        for c, idxs in class_atoms.items()
-    }  # each -> array([mean, min, max])
+    class_stat = {}  # each -> array([mean, min, max])
+    for c, idxs in class_atoms.items():
+        vals = [per_atom[i] for i in idxs if i in per_atom]
+        if not vals:  # A6: no predicted shift for this class -> drop the record (no silent NaN)
+            raise ValueError("no predicted shift for an equivalence class")
+        class_stat[c] = np.mean(vals, axis=0)
 
     # spin groups, sorted Excel-style (A..Z, AA..)
     group_atoms: dict[str, list[int]] = {}
     for i, g in group_of.items():
         group_atoms.setdefault(g, []).append(i)
     labels = sorted(group_atoms, key=lambda s: (len(s), s))
+
+    # Canonical symmetry orbit per group: groups whose protons share a graph
+    # automorphism rank are chemically equivalent (homotopic/enantiotopic) and
+    # must share a randomized shift downstream. This is BROADER than the tier
+    # `class_of` — e.g. two symmetry-equivalent OMe are separate HARD groups but
+    # one orbit. (breakTies=False keeps symmetry classes; ties NOT broken.)
+    sym_rank = list(Chem.CanonicalRankAtoms(mol, breakTies=False))
+    equiv_orbit = [int(sym_rank[group_atoms[g][0]]) for g in labels]
 
     shifts = np.zeros((len(labels), 2))
     shift_ranges = np.zeros((len(labels), 2))
@@ -197,7 +215,7 @@ def entry_to_spin_system(
     coupling_types = [key_type[k] for k in ordered]
 
     return LabeledSpinSystem(
-        labels, shifts, coupling_list, comment, shift_ranges, coupling_types
+        labels, shifts, coupling_list, comment, shift_ranges, coupling_types, equiv_orbit
     )
 
 

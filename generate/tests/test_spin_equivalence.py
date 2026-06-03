@@ -27,6 +27,7 @@ from generate.spin_equivalence import (
     embed_3d,
     strip_exchangeable_protons,
     substitution_signature,
+    EmbedFailure,
 )
 from generate.config import N_SPIN_GROUPS
 
@@ -291,6 +292,47 @@ class TestPassesHeuristic:
         ok, _, n_h = passes_heuristic(_mol("FC(F)(F)F"))
         assert not ok
         assert n_h == 0
+
+
+# ── embed-failure handling (C3) ────────────────────────────────────────────────
+
+class TestEmbedFailureDropped:
+    """When 3-D embedding fails, the molecule must be dropped, not mis-grouped.
+
+    The 2-D fallback (``use_3d=False``) cannot resolve diastereotopic CH₂
+    stereochemistry and previously mis-grouped such protons (e.g. as an
+    impossible 2-H HARD rotor).  The classification entry points now raise
+    :class:`EmbedFailure` so the caller drops the molecule instead.
+    """
+
+    def test_classify_raises_on_embed_failure(self, monkeypatch):
+        import generate.spin_equivalence as se
+
+        # Force embed_3d to report failure (no usable 3-D conformer).
+        monkeypatch.setattr(
+            se, "embed_3d", lambda mol: (Chem.AddHs(mol), False)
+        )
+        with pytest.raises(EmbedFailure):
+            se.classify_spin_groups(_mol("C[C@H](N)C(=O)O"))
+
+    def test_analyze_raises_on_embed_failure(self, monkeypatch):
+        import generate.spin_equivalence as se
+
+        monkeypatch.setattr(
+            se, "embed_3d", lambda mol: (Chem.AddHs(mol), False)
+        )
+        with pytest.raises(EmbedFailure):
+            se.analyze_spin_systems(_mol("C[C@H](N)C(=O)O"))
+
+    def test_molecule_to_xyz_drops_embed_failure(self, monkeypatch):
+        """The standalone XYZ path returns None (drop) on embed failure."""
+        import generate.spin_equivalence as se
+        from generate.xyz_writer import molecule_to_xyz
+
+        monkeypatch.setattr(
+            se, "embed_3d", lambda mol: (Chem.AddHs(mol), False)
+        )
+        assert molecule_to_xyz("C[C@H](N)C(=O)O") is None
 
 
 def test_contains_nonprotium_isotope():

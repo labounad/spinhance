@@ -76,7 +76,7 @@ AROM_INCR: dict[str, tuple[float, float, float]] = {
     "C#CPh":          ( 0.20, -0.04, -0.07),  # –C≡C–phenyl
     "phenyl":         ( 0.22,  0.06, -0.04),  # –phenyl
     "2-pyridyl":      ( 0.73,  0.09,  0.02),  # –2-pyridyl (uncertain)
-    "CH=CH2":         ( 0.08, -0.02, -0.09),  # –CH=CH2  (starter; vinyl)
+    "CH=CH2":         ( 0.06, -0.03, -0.10),  # –CH=CH2 (vinyl) — Pretsch p178 o/m/p (was a CH2Cl copy)
     # p178 — halogens (X)
     "F":              (-0.31, -0.03, -0.21),  # –F
     "Cl":             (-0.01, -0.06, -0.12),  # –Cl  (p178: -0.01/-0.06/-0.12)
@@ -131,7 +131,7 @@ AROM_INCR: dict[str, tuple[float, float, float]] = {
     "COCl":           ( 0.77,  0.15,  0.35),  # –COCl
     "COBr":           ( 0.70,  0.15,  0.32),  # –COBr
     "CH=N-phenyl":    ( 0.64,  0.24,  0.24),  # –CH=N–phenyl
-    "C#N":            ( 0.32,  0.14,  0.28),  # –C≡N (nitrile)  (uncertain — shares p179 NCS row)
+    "C#N":            ( 0.36,  0.18,  0.28),  # –C≡N (nitrile) — Pretsch p179 o/m/p (was an NCS copy)
     # p179 — metals / misc (M) — rare in drug-like sets, included for completeness
     "Si(CH3)3":       ( 0.19,  0.00,  0.00),  # –Si(CH3)3
 }
@@ -849,11 +849,40 @@ def _hetero_shift(mol: Chem.Mol, h_idx: int, c_idx: int) -> tuple[float, bool] |
         if base is None:
             continue
         uncertain_rings = {"oxazole", "isoxazole", "imidazole", "pyrazole"}
-        # flag if substituted (ring carbon bears a non-H heavy substituent) too
-        substituted = any(
-            n.GetIdx() not in ring and n.GetAtomicNum() > 1
-            for n in mol.GetAtomWithIdx(c_idx).GetNeighbors())
-        return base, (name in uncertain_rings or substituted)
+        # Substituent correction.  We have no per-ring Z-increment table for
+        # heteroaromatics, so we approximate substituent effects with the
+        # monosubstituted-BENZENE increments (AROM_INCR, p178-179) applied by
+        # ring distance from each substituent-bearing ring carbon to this H's
+        # carbon.  This is a documented approximation (benzene increments borrowed
+        # for hetero rings); ANY substituted hetero ring is therefore flagged
+        # uncertain regardless of whether a correction was applied.  If a
+        # substituent cannot be classified we leave its contribution out (honest:
+        # value stays the parent base for that term) but still flag.
+        rlist = list(ring)
+        rset = set(ring)
+        delta = base
+        substituted = False
+        for other in ring:
+            if other == c_idx:
+                continue
+            oc = mol.GetAtomWithIdx(other)
+            if oc.GetAtomicNum() != 6:
+                continue
+            key = _aryl_subst(mol, oc, rset)
+            if key is None:
+                continue  # bare ring CH, no substituent
+            substituted = True
+            incr = AROM_INCR.get(key)
+            if incr is None:
+                continue  # unclassifiable substituent -> no correction, but flag
+            d = _ring_distance(mol, rlist, c_idx, other)
+            if d == 1:
+                delta += incr[0]
+            elif d == 2:
+                delta += incr[1]
+            elif d == 3:
+                delta += incr[2]
+        return delta, (name in uncertain_rings or substituted)
     return None
 
 

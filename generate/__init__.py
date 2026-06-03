@@ -47,6 +47,7 @@ from .spin_equivalence import (
     strip_exchangeable_protons,
     substitution_signature,
     analyze_spin_systems,
+    EmbedFailure,
 )
 from .pipeline import run_pipeline
 
@@ -65,6 +66,7 @@ __all__ = [
     "strip_exchangeable_protons",
     "substitution_signature",
     "analyze_spin_systems",
+    "EmbedFailure",
     # pipeline
     "run_pipeline",
 ]

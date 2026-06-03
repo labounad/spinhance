@@ -34,7 +34,17 @@ KARPLUS_J0 = 8.5
 KARPLUS_J180 = 9.5
 KARPLUS_OFFSET = -0.3
 
-ROTATABLE_BASE = 7.3   # ethane-like, freely rotating
+ROTATABLE_BASE = 7.3   # ethane-like, freely rotating (sp3-sp3)
+
+# Single bond between two olefinic sp2 carbons (a conjugated =CH-CH= linkage,
+# e.g. the C2-C3 bond of a 1,3-diene).  The ethane base (7.3 Hz) is wrong here:
+# the rotamer population is dominated by the planar conjugated forms, giving a
+# much larger 3J.  Pretsch (Tables of Spectral Data, 2009, p.166) lists the
+# s-trans diene 3J at ~10.4 Hz and the s-cis (locked) form lower (~5-7 Hz).
+# Acyclic 1,3-dienes overwhelmingly populate s-trans, so we use that value for
+# freely-rotating sp2-sp2 single bonds; ring-locked sp2-sp2 bonds still fall
+# through to the 3D-dihedral Karplus branch above.  (B5.)
+DIENE_SP2_SP2 = 10.4   # s-trans 1,3-butadiene central-bond 3J
 
 # Decrement (Hz) per electronegative substituent bonded to a coupling carbon,
 # keyed by atomic number. Tuned to the mono-substituted Pretsch anchors:
@@ -71,6 +81,21 @@ def _heavy_neighbor(mol: Chem.Mol, h_idx: int) -> int | None:
     """The single heavy atom a hydrogen is bonded to (None if isolated)."""
     nbrs = mol.GetAtomWithIdx(h_idx).GetNeighbors()
     return nbrs[0].GetIdx() if nbrs else None
+
+
+def _is_olefinic_sp2_carbon(atom: Chem.Atom) -> bool:
+    """True if a carbon is a non-aromatic sp2 carbon bearing a C=C double bond.
+
+    Aromatic carbons are excluded: ring couplings are handled by the aromatic
+    module, not here.
+    """
+    if atom.GetAtomicNum() != 6 or atom.GetIsAromatic():
+        return False
+    for bond in atom.GetBonds():
+        if (bond.GetBondType() == Chem.BondType.DOUBLE
+                and bond.GetOtherAtom(atom).GetAtomicNum() == 6):
+            return True
+    return False
 
 
 def _rotatable_j(mol: Chem.Mol, ca: int, cb: int) -> float:
@@ -122,9 +147,20 @@ def vicinal_couplings(mol: Chem.Mol) -> dict[tuple[int, int], float]:
                 continue
 
             if bond.IsInRing():
+                # Ring-locked dihedral: Karplus on the actual 3D geometry.
+                # NOTE (B3): this samples a single embedded conformer, so the
+                # ring J-set depends on the embed seed (chair vs twist-boat).
+                # A proper fix would Karplus-average over an ETKDG ensemble or
+                # use ring-type defaults; left as a known limitation here.
                 phi = rdMolTransforms.GetDihedralDeg(conf, i, ci, cj, j)
                 j_hz = karplus(phi)
+            elif _is_olefinic_sp2_carbon(ai) and _is_olefinic_sp2_carbon(aj):
+                # Conjugated =CH-CH= single bond (e.g. 1,3-diene C2-C3): not a
+                # freely-rotating sp3-sp3 bond.  Use the s-trans diene value
+                # rather than the ethane base.  (B5.)
+                j_hz = DIENE_SP2_SP2
             else:
+                # sp3-sp3 (and sp-sp2 / mixed) freely-rotating single bonds.
                 j_hz = _rotatable_j(mol, ci, cj)
             couplings[(i, j)] = round(j_hz, 1)
     return couplings
@@ -140,6 +176,7 @@ if __name__ == "__main__":
         ("CC(F)F", "1,1-difluoroethane"),
         ("CC(Cl)Cl", "1,1-dichloroethane"),
         ("CCC#N", "propionitrile"),
+        ("C=CC=C", "1,3-butadiene"),   # sp2-sp2 central bond -> s-trans diene 3J
     ]
     for smi, name in probes:
         mol = make_test_mol_3d(smi)
