@@ -666,7 +666,7 @@
                   <div class="detail-row"><span class="dl">Fix:</span><span class="dv">Lorentzian-regularized VJP: F<sub>ij</sub> = &Delta;E/(&Delta;E&sup2;+&epsilon;&sup2;), &epsilon; tied to linewidth (~1&nbsp;Hz). Verified vs finite differences to ~1e&minus;6</span></div>
                   <div class="detail-row"><span class="dl">Composite reduction:</span><span class="dv">Avoids the 2^N explicit expansion; largest Mz block &le; 256 for 91% of molecules, &le; 1024 for 99%</span></div>
                   <div class="detail-row"><span class="dl">Role:</span><span class="dv">Frozen teacher for Stage 2 spectral-consistency loss; also used as eval metric and post-hoc probe</span></div>
-                  <div class="detail-row"><span class="dl">Retrained:</span><span class="dv">Field-specialized 90-MHz surrogate retrained on 500k PubChem with a pseudo-Voigt lineshape (fit to a real 600&nbsp;MHz instrument) &rarr; cos 0.998, up from 0.986; a separate 2&#185;&#8310; 600-MHz renderer is training for high-field visualization</span></div>
+                  <div class="detail-row"><span class="dl">Retrained:</span><span class="dv">Field-specialized renderers retrained on PubChem with a pseudo-Voigt lineshape (fit to a real 600&nbsp;MHz instrument): a 90-MHz surrogate (500k) &rarr; cos 0.998 (up from 0.986), and a separate 2&#185;&#8310; 600-MHz renderer (1M) &rarr; cos 0.993, for high-field visualization</span></div>
                 </div>
                 <div class="insight-box">
                   <b>Key finding:</b> the composite reduction structurally avoids most exact
@@ -687,6 +687,10 @@
                 <div class="metric-row" style="border-color:color-mix(in srgb,var(--accent) 30%,transparent)">
                   <div class="metric-val" style="background:linear-gradient(90deg,var(--accent),var(--accent-3));-webkit-background-clip:text;background-clip:text">0.998</div>
                   <div class="metric-lbl">cosine similarity @ 90&nbsp;MHz<br><span style="font-size:11px;color:var(--ink-faint)">90-MHz surrogate retrained on 500k PubChem, pseudo-Voigt lineshape</span></div>
+                </div>
+                <div class="metric-row" style="border-color:color-mix(in srgb,var(--accent) 30%,transparent)">
+                  <div class="metric-val" style="background:linear-gradient(90deg,var(--accent),var(--accent-3));-webkit-background-clip:text;background-clip:text">0.993</div>
+                  <div class="metric-lbl">cosine similarity @ 600&nbsp;MHz<br><span style="font-size:11px;color:var(--ink-faint)">2¹⁶ 600-MHz renderer, 1M PubChem</span></div>
                 </div>
               </div>
             </div>
