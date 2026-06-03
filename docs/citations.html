@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Spinhance — citations &amp; credits</title>
+<meta name="description" content="Attribution for the Spinhance project: academic references, data sources, and software that the pipeline and website build on." />
+<link rel="icon" type="image/svg+xml" href="favicon.svg" />
+<style>
+  :root{
+    --mono:"SF Mono",ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace;
+    --bg:#fafafa; --bg-soft:#f0f1f3; --panel:#ffffff; --panel-2:#f5f6f8;
+    --ink:#15171c; --ink-soft:#4a4f5a; --ink-faint:#8a909c;
+    --line:#e3e6ea; --line-strong:#cdd2da;
+    --accent:#3b6ef5; --accent-2:#22c1a5; --accent-3:#9b5cf6;
+    --shadow:0 1px 2px rgba(16,24,40,.06),0 8px 28px rgba(16,24,40,.06);
+  }
+  [data-theme="dark"]{
+    --bg:#07090d; --bg-soft:#0c0f15; --panel:#0f131b; --panel-2:#121826;
+    --ink:#eef1f6; --ink-soft:#aab2c2; --ink-faint:#6a7385;
+    --line:#1c2330; --line-strong:#2a3344;
+    --accent:#5b8cff; --accent-2:#34e3c4; --accent-3:#b07bff;
+    --shadow:0 1px 2px rgba(0,0,0,.5),0 16px 48px rgba(0,0,0,.45);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;transition:background .4s ease,color .4s ease;}
+  a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
+  .wrap{max-width:920px;margin:0 auto;padding:0 24px}
+  h1,h2,h3{line-height:1.15;letter-spacing:-.02em;margin:0}
+  nav{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(12px);
+    background:color-mix(in srgb,var(--bg) 70%,transparent);
+    border-bottom:1px solid color-mix(in srgb,var(--line) 60%,transparent)}
+  .nav-in{display:flex;align-items:center;gap:18px;height:60px;max-width:920px;margin:0 auto;padding:0 24px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:-.02em;font-size:18px;color:var(--ink)}
+  .brand:hover{text-decoration:none}
+  .brand .dot{width:18px;height:18px;border-radius:50%;
+    background:radial-gradient(circle at 35% 30%,var(--accent-2),var(--accent));
+    box-shadow:0 0 8px color-mix(in srgb,var(--accent) 70%,transparent)}
+  .nav-links{display:flex;gap:22px;margin-left:auto;align-items:center}
+  .nav-links a{color:var(--ink-soft);font-size:14px;font-weight:500}
+  .nav-links a:hover{color:var(--ink);text-decoration:none}
+  .toggle{cursor:pointer;border:1px solid var(--line-strong);background:var(--panel);
+    color:var(--ink);width:40px;height:34px;border-radius:9px;display:grid;place-items:center;transition:.2s;font-size:16px}
+  .toggle:hover{border-color:var(--accent)}
+  .hero{padding:64px 0 26px}
+  .kicker{font:600 12px/1 var(--mono);letter-spacing:.2em;text-transform:uppercase;color:var(--accent-2);margin-bottom:14px}
+  .hero h1{font-size:clamp(30px,5vw,44px)}
+  .grad{background:linear-gradient(90deg,var(--accent),var(--accent-3));
+    -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
+  .hero p{color:var(--ink-soft);max-width:640px;margin-top:16px;font-size:17px}
+  .sec{padding:26px 0 6px}
+  .sec h2{font-size:22px;margin-bottom:4px}
+  .sec .eyebrow{font:600 12px var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--accent-3);margin-bottom:14px}
+  ol.cite{list-style:none;counter-reset:c;padding:0;margin:0 0 8px}
+  ol.cite li{counter-increment:c;position:relative;padding:12px 0 12px 40px;border-bottom:1px solid var(--line);color:var(--ink-soft);font-size:14.5px;line-height:1.55}
+  ol.cite li::before{content:"["counter(c)"]";position:absolute;left:0;top:12px;color:var(--accent);font:600 13px var(--mono)}
+  ol.cite li b{color:var(--ink);font-weight:600}
+  ol.cite li i{color:var(--ink)}
+  .tag{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:999px;font:600 10.5px var(--mono);
+    letter-spacing:.06em;color:var(--ink-faint);border:1px solid var(--line-strong);vertical-align:middle}
+  footer{padding:34px 0 64px;border-top:1px solid var(--line);margin-top:38px;color:var(--ink-faint);font-size:13px}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-in">
+    <a class="brand" href="index.html"><span class="dot"></span>Spinhance</a>
+    <div class="nav-links">
+      <a href="index.html">← Back to site</a>
+      <a href="dataset.html">Dataset</a>
+      <button class="toggle" id="themeBtn" title="Toggle light / dark" aria-label="Toggle theme">☀️</button>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="kicker">Attribution</div>
+    <h1>Citations &amp; <span class="grad">credits.</span></h1>
+    <p>Spinhance stands on a lot of prior work. This page tracks the academic references, public
+       data sources, and open-source software the pipeline and this site are built on, so credit is
+       attributed rigorously. Citations are in ACS style.</p>
+  </div>
+</header>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="eyebrow">Data sources</div>
+    <h2>Molecule databases</h2>
+    <ol class="cite" style="margin-top:14px">
+      <li>Kim, S.; Chen, J.; Cheng, T.; Gindulyte, A.; He, J.; He, S.; Li, Q.; Shoemaker, B. A.; Thiessen, P. A.; Yu, B.; Zaslavsky, L.; Zhang, J.; Bolton, E. E. <b>PubChem 2023 update.</b> <i>Nucleic Acids Res.</i> <b>2023</b>, <i>51</i> (D1), D1373–D1380. <span class="tag">8-spin molecule source</span></li>
+      <li>Zdrazil, B.; Felix, E.; Hunter, F.; Manners, E. J.; Blackshaw, J.; Corbett, S.; de Veij, M.; Ioannidis, H.; Lopez, D. M.; Mosquera, J. F.; et al. <b>The ChEMBL Database in 2023: a drug discovery platform spanning multiple bioactivity data types and time periods.</b> <i>Nucleic Acids Res.</i> <b>2024</b>, <i>52</i> (D1), D1180–D1192. <span class="tag">original screening set</span></li>
+    </ol>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="eyebrow">Methods &amp; academic references</div>
+    <h2>Spectral parameters &amp; model</h2>
+    <ol class="cite" style="margin-top:14px">
+      <li>Pretsch, E.; Bühlmann, P.; Badertscher, M. <i>Structure Determination of Organic Compounds: Tables of Spectral Data</i>, 4th rev. and enl. ed.; Springer-Verlag: Berlin, Heidelberg, 2009. <span class="tag">shift &amp; coupling constants</span></li>
+      <li>Vaswani, A.; Shazeer, N.; Parmar, N.; Uszkoreit, J.; Jones, L.; Gomez, A. N.; Kaiser, Ł.; Polosukhin, I. <b>Attention Is All You Need.</b> <i>Advances in Neural Information Processing Systems (NeurIPS)</i> <b>2017</b>, <i>30</i>, 5998–6008. <span class="tag">transformer encoder/decoder</span></li>
+      <li>Carion, N.; Massa, F.; Synnaeve, G.; Usunier, N.; Kirillov, A.; Zagoruyko, S. <b>End-to-End Object Detection with Transformers.</b> <i>European Conference on Computer Vision (ECCV)</i> <b>2020</b>, 213–229. <span class="tag">query decoder + set matching</span></li>
+      <li>He, K.; Zhang, X.; Ren, S.; Sun, J. <b>Deep Residual Learning for Image Recognition.</b> <i>IEEE Conference on Computer Vision and Pattern Recognition (CVPR)</i> <b>2016</b>, 770–778. <span class="tag">1-D residual encoder</span></li>
+      <li>Kuhn, H. W. <b>The Hungarian Method for the Assignment Problem.</b> <i>Naval Research Logistics Quarterly</i> <b>1955</b>, <i>2</i> (1–2), 83–97. <span class="tag">bipartite matching loss</span></li>
+    </ol>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
+    <div class="eyebrow">Software</div>
+    <h2>Open-source tools</h2>
+    <ol class="cite" style="margin-top:14px">
+      <li>Landrum, G.; et al. <b>RDKit: Open-source Cheminformatics.</b> <a href="https://www.rdkit.org" target="_blank" rel="noopener">https://www.rdkit.org</a>. <span class="tag">parsing · equivalence · 3D embedding</span></li>
+      <li>Paszke, A.; Gross, S.; Massa, F.; Lerer, A.; Bradbury, J.; Chanan, G.; Killeen, T.; Lin, Z.; et al. <b>PyTorch: An Imperative Style, High-Performance Deep Learning Library.</b> <i>Advances in Neural Information Processing Systems (NeurIPS)</i> <b>2019</b>, <i>32</i>, 8024–8035. <span class="tag">model training</span></li>
+      <li>Harris, C. R.; Millman, K. J.; van der Walt, S. J.; Gommers, R.; Virtanen, P.; Cournapeau, D.; et al. <b>Array Programming with NumPy.</b> <i>Nature</i> <b>2020</b>, <i>585</i>, 357–362. <span class="tag">numerics</span></li>
+      <li>Virtanen, P.; Gommers, R.; Oliphant, T. E.; Haberland, M.; Reddy, T.; Cournapeau, D.; et al. <b>SciPy 1.0: Fundamental Algorithms for Scientific Computing in Python.</b> <i>Nature Methods</i> <b>2020</b>, <i>17</i>, 261–272. <span class="tag">assignment · signal</span></li>
+      <li>McKinney, W. <b>Data Structures for Statistical Computing in Python.</b> <i>Proceedings of the 9th Python in Science Conference</i> <b>2010</b>, 56–61. <span class="tag">pandas</span></li>
+      <li>Streamlit Inc. <b>Streamlit: A faster way to build and share data apps.</b> <a href="https://streamlit.io" target="_blank" rel="noopener">https://streamlit.io</a>. <span class="tag">training dashboard</span></li>
+      <li>Rego, N.; Koes, D. <b>3Dmol.js: Molecular Visualization with WebGL.</b> <i>Bioinformatics</i> <b>2015</b>, <i>31</i> (8), 1322–1324. <span class="tag">3D viewer on this site</span></li>
+    </ol>
+  </div>
+</section>
+
+<footer><div class="wrap">Spinhance · low-field ¹H NMR → spin-system parameters. Citations are maintained as the project grows; corrections welcome on <a href="https://github.com/labounad/spinhance" target="_blank" rel="noopener">GitHub</a>.</div></footer>
+
+<script>
+  (function () {
+    var root = document.documentElement, btn = document.getElementById("themeBtn");
+    var saved = localStorage.getItem("spinhance-theme");
+    if (saved) root.setAttribute("data-theme", saved);
+    var sync = function () { btn.textContent = root.getAttribute("data-theme") === "dark" ? "☀️" : "🌙"; };
+    sync();
+    btn.addEventListener("click", function () {
+      var next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next); localStorage.setItem("spinhance-theme", next); sync();
+    });
+  })();
+</script>
+</body>
+</html>
