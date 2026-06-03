@@ -28,6 +28,16 @@ baseline** on clean data + clean augmentation._
 - **Deuterium molecules eliminated entirely** — the rebuild screen rejects any molecule containing explicit ²H/³H (stronger than fix #3, which only excluded D from counting).
 - **Pretsch enrichment:** surgical, prioritized. Tier 1 (heteroaromatic couplings, #8) folded into THIS rebuild. Tier 2 (substituent-dependent olefinic/vicinal) optional same-pass. Tier 3 (shift additivity Zα/Zβ) deferred — HOSE predictor already empirical. Extract specific table pages via image rendering + validated transcription (text extraction mangles the tables); not a full-book campaign.
 
+### Pretsch enrichment campaign (Tiers 1–3; Pretsch 2009 verbatim)
+PDF: `~/Downloads/1H - …Pretsch… (2009).pdf` (86 pp). Render pages with poppler
+(`pdftoppm -r 270`); text extraction mangles the tables. Validate every value
+against literature anchors. Convention: heteroatom = ring position 1.
+- **Tier 1 — ring-specific aromatic couplings** (`mol_to_spin_system/heteroaromatic.py`):
+  - DONE v1 (PR #79): pyridine, furan, thiophene, pyrrole (most common monocyclics).
+  - TODO: diazines (pyrimidine/pyrazine/pyridazine, book p185), azoles (imidazole/pyrazole/oxazole/isoxazole/thiazole/isothiazole + di/triazoles, p184), fused (indole/quinoline/benzofuran/…, p191-195).
+- **Tier 2 — substituent-dependent couplings:** olefinic gem/cis/trans vs substituent (p166-167) replacing flat 11/17; vicinal substituent table (p162-163) refining the rotatable model.
+- **Tier 3 — shift additivity tables (NEW, large):** aliphatic Shoolery Zα/Zβ increments (p160), aromatic substituent increments (benzene 7.26 + o/m/p per substituent), alkene increments, etc. **DECISION PENDING:** how to combine with the nmrshiftdb2 HOSE predictor — (R) replace, (E) ensemble/diversity [recommended; feeds #7 variability via HOSE-vs-Pretsch disagreement], (C) cross-check/gap-fill.
+
 ### Phase 1 audit — findings (complete)
 - **Grouping: sound.** styrene (vinyl NONE + ortho/meta SOFT pairs + para NONE = 8), p-/o-xylene (HARD methyls + AA′BB′), diastereotopic CH₂ (split, 3-D resolved), cyclopropane/acetylacetone all classify correctly after fixes #1–#3.
 - **Couplings: physically correct mechanisms, correctly targeted** (geminal CH₂-only after #2; vicinal Karplus-on-ring vs rotatable-empirical; aromatic ortho/meta/para; olefinic cis/trans; allylic/benzylic 4J). All **deterministic discrete values** → feed the reuse problem (#7).
