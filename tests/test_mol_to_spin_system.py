@@ -80,6 +80,10 @@ def test_heteroaromatic_ring_specific_couplings():
     # diazines (canonical IUPAC numbering): pyridazine J34=4.9/J45=8.4/J35=2.0/J36=3.5
     assert sorted(set(heteroaromatic_couplings(make_test_mol_3d("c1ccnnc1")).values())) == [2.0, 3.5, 4.9, 8.4]
     assert sorted(set(heteroaromatic_couplings(make_test_mol_3d("c1cncnc1")).values())) == [1.5, 2.5, 5.0]  # pyrimidine
+    # azoles
+    assert sorted(set(heteroaromatic_couplings(make_test_mol_3d("c1ccno1")).values())) == [0.3, 1.7, 1.8]  # isoxazole
+    assert sorted(set(heteroaromatic_couplings(make_test_mol_3d("c1cscn1")).values())) == [1.9, 3.2]        # thiazole
+    assert sorted(set(heteroaromatic_couplings(make_test_mol_3d("c1cc[nH]n1")).values())) == [2.1]          # pyrazole
     # the combined estimator overrides benzene values on the pyridine ring (no 7.5)
     assert 7.5 not in set(all_couplings(make_test_mol_3d("c1ccncc1")).values())
     # carbocyclic benzene is untouched (still 7.5/1.5/0.7)

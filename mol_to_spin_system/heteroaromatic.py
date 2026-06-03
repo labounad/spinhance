@@ -60,6 +60,21 @@ _RING_J: dict[str, dict[frozenset, float]] = {
     },
     # pyrazine (1,4-diazine): four equivalent H -> single magnetic-equivalence
     # group (no observable inter-proton coupling); handled by grouping, no table.
+    "oxazole": {                     # 1,3-oxazole: O1,C2,N3,C4,C5
+        frozenset({4, 5}): 0.8, frozenset({2, 5}): 0.5,   # J24 = 0 omitted
+    },
+    "isoxazole": {                   # 1,2-oxazole: O1,N2,C3,C4,C5
+        frozenset({3, 4}): 1.7, frozenset({4, 5}): 1.8, frozenset({3, 5}): 0.3,
+    },
+    "thiazole": {                    # 1,3-thiazole: S1,C2,N3,C4,C5
+        frozenset({4, 5}): 3.2, frozenset({2, 5}): 1.9,   # J24 = 0 omitted
+    },
+    "imidazole": {                   # 1,3-diazole: N1,C2,N3,C4,C5 (tautomer-averaged H4/H5)
+        frozenset({4, 5}): 1.5, frozenset({2, 4}): 1.0, frozenset({2, 5}): 1.0,
+    },
+    "pyrazole": {                    # 1,2-diazole: N1,N2,C3,C4,C5
+        frozenset({3, 4}): 2.1, frozenset({4, 5}): 2.1,   # J35 = 0 omitted
+    },
 }
 
 #: (ring size, sorted ((position, atomic-num), ...)) -> ring name, using the
@@ -72,6 +87,11 @@ _NAME: dict[tuple, str] = {
     (5, ((1, 8),)): "furan",
     (5, ((1, 16),)): "thiophene",
     (5, ((1, 7),)): "pyrrole",
+    (5, ((1, 8), (3, 7))): "oxazole",
+    (5, ((1, 8), (2, 7))): "isoxazole",
+    (5, ((1, 16), (3, 7))): "thiazole",
+    (5, ((1, 7), (3, 7))): "imidazole",
+    (5, ((1, 7), (2, 7))): "pyrazole",
 }
 
 
