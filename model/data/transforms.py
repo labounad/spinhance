@@ -43,14 +43,24 @@ def _renorm(spec, dx):
 
 
 def augment_spectrum(spec, ppm_from=0.0, ppm_to=12.0, rng=None,
-                     noise_sigma_frac=0.01, max_ref_shift_ppm=0.01,
-                     baseline_amp_frac=0.02, broaden_sigma_pts=0.0):
+                     noise_sigma_frac=0.005, broaden_sigma_pts=0.0):
     """Augmented copy of a normalized spectrum (unit integral).
 
-    noise_sigma_frac   Gaussian noise std as fraction of peak height
-    max_ref_shift_ppm  random global referencing shift (sub-pixel, interpolated)
-    baseline_amp_frac  low-frequency baseline drift amplitude (fraction of peak)
+    The model operates on **processed, referenced** spectra, so we only model
+    distortions that survive good processing:
+
+    noise_sigma_frac   Gaussian intensity-noise std as a fraction of peak height
+                       (peak = max intensity of this spectrum)
     broaden_sigma_pts  optional Gaussian broadening (points) ~ linewidth jitter
+
+    Deliberately NOT modeled:
+      * baseline drift — modern processing baseline-corrects accurately; the
+        input is already a clean baseline.
+      * global referencing shift — the spectrum is already referenced, so its
+        peak positions ARE the true shifts.  Sliding the spectrum without
+        moving the labels would inject pure label noise (~the magnitude of the
+        target shift error), teaching the model to predict a position other
+        than where the peak actually is.
     """
     rng = rng or np.random.default_rng()
     spec = np.asarray(spec, float).copy()
@@ -58,23 +68,12 @@ def augment_spectrum(spec, ppm_from=0.0, ppm_to=12.0, rng=None,
     dx = (ppm_to - ppm_from) / P
     peak = spec.max() if spec.max() > 0 else 1.0
 
-    if max_ref_shift_ppm > 0:
-        shift_ppm = rng.uniform(-max_ref_shift_ppm, max_ref_shift_ppm)
-        x = np.arange(P)
-        spec = np.interp(x - shift_ppm / dx, x, spec, left=0.0, right=0.0)
-
     if broaden_sigma_pts > 0:
         k = int(max(3, round(6 * broaden_sigma_pts)))
         t = np.arange(-k, k + 1)
         g = np.exp(-0.5 * (t / broaden_sigma_pts) ** 2)
         g /= g.sum()
         spec = np.convolve(spec, g, mode="same")
-
-    if baseline_amp_frac > 0:
-        phase = rng.uniform(0, 2 * np.pi)
-        freq = rng.uniform(0.5, 2.0)
-        base = baseline_amp_frac * peak * np.sin(np.linspace(0, freq * np.pi, P) + phase)
-        spec = spec + (base - base.min())
 
     if noise_sigma_frac > 0:
         spec = spec + rng.normal(0, noise_sigma_frac * peak, P)
