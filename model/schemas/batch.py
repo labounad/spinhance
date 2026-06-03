@@ -48,6 +48,11 @@ class SpinBatch:
     molecule_ids: list[str]
     smiles: list[str] | None = None
 
+    # (B, G, G) {0,1}: 1 where two DISTINCT groups share a canonical symmetry orbit
+    # (soft-equivalent — chemically equivalent, not hard-merged). Symmetry-derived,
+    # NOT shift proximity. None for legacy batches (the soft-equiv loss then no-ops).
+    soft_equiv_target: torch.Tensor | None = None
+
     region_tokens: RegionTokenBatch | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -94,6 +99,8 @@ class SpinBatch:
         assert self.coupling_mask.shape == (B, G, G), self.coupling_mask.shape
         assert self.degeneracy_classes.shape == (B, G), self.degeneracy_classes.shape
         assert self.degeneracy_values.shape == (B, G), self.degeneracy_values.shape
+        if self.soft_equiv_target is not None:
+            assert self.soft_equiv_target.shape == (B, G, G), self.soft_equiv_target.shape
         if self.spectrum_ref is not None:
             assert self.spectrum_ref.shape == (B, P), self.spectrum_ref.shape
         assert len(self.molecule_ids) == B, (len(self.molecule_ids), B)
