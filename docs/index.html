@@ -160,6 +160,10 @@
     flex:none;transition:.18s;line-height:1}
   .car-btn:hover{border-color:var(--accent);color:var(--accent)}
   .car-btn:disabled{opacity:.28;cursor:default}
+  /* CSS-drawn chevron (the ‹/› glyphs don't sit centered in the circle) */
+  .car-btn::before{content:"";width:9px;height:9px;border:2px solid currentColor;border-left-width:0;border-bottom-width:0}
+  .car-prev::before{transform:translateX(2px) rotate(-135deg)}
+  .car-next::before{transform:translateX(-2px) rotate(45deg)}
   .carousel-dots{display:flex;gap:7px;justify-content:center;margin-bottom:16px}
   .carousel-dots span{width:7px;height:7px;border-radius:50%;background:var(--line-strong);transition:.2s;cursor:pointer}
   .carousel-dots span.active{background:var(--accent);width:22px;border-radius:99px}
@@ -601,12 +605,12 @@
 
     <div class="carousel-wrap">
       <div class="carousel-nav">
-        <button class="car-btn" id="carPrev" aria-label="Previous stage">&#8249;</button>
+        <button class="car-btn car-prev" id="carPrev" aria-label="Previous stage"></button>
         <div style="flex:1;text-align:center">
           <div class="stage-label" id="carLabel">Stage 1 of 4</div>
           <div class="stage-name" id="carName">CNN Baseline</div>
         </div>
-        <button class="car-btn" id="carNext" aria-label="Next stage">&#8250;</button>
+        <button class="car-btn car-next" id="carNext" aria-label="Next stage"></button>
       </div>
       <div class="carousel-dots" id="carDots">
         <span class="active" data-i="0"></span>
@@ -847,9 +851,9 @@
           <label class="tx-modlabel">model <select id="txModel" class="tx-sel"></select></label>
           <label class="tx-filter"><input type="checkbox" id="txFilter"> only this model&rsquo;s test set</label>
           <span class="tx-navgrp">
-            <button class="car-btn" id="txPrev" aria-label="Previous molecule">&#8249;</button>
+            <button class="car-btn car-prev" id="txPrev" aria-label="Previous molecule"></button>
             <select id="txSel" class="tx-sel"></select>
-            <button class="car-btn" id="txNext" aria-label="Next molecule">&#8250;</button>
+            <button class="car-btn car-next" id="txNext" aria-label="Next molecule"></button>
           </span>
         </div></div>
       <div class="tx-status" id="txStatus"></div>
