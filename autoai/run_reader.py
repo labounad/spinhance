@@ -183,6 +183,7 @@ _FAILURE_HINTS: dict[str, str] = {
     "bad_j_magnitude":            "Increase j_mag loss weight; verify masked Huber covers true-present pairs",
     "wrong_degeneracy":           "Check degeneracy vocab; try integration-aware token features",
     "ok":                         "Metrics look healthy — consider Hungarian loss or spectral consistency",
+    "healthy":                    "No dominant failure — per-sample metrics within thresholds",
     "none":                       "No probe data yet",
 }
 

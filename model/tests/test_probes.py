@@ -59,6 +59,24 @@ def test_save_failure_cases_writes_tables(tmp_path):
     assert summary["n_molecules"] == 30
 
 
+def test_dominant_failure_excludes_ok(tmp_path):
+    # 8 healthy + 2 large-shift: "ok" is the plurality but must NOT be the
+    # dominant FAILURE — the leading actual failure mode wins.
+    results = [{"mol_id": f"ok{i}", "shift_mae_ppm": 0.1} for i in range(8)]
+    results += [{"mol_id": f"bad{i}", "shift_mae_ppm": 0.4} for i in range(2)]
+    s = save_failure_cases(results, tmp_path / "r", epoch=1)
+    assert s["dominant_failure"] == "large_shift_error"
+    assert s["dominant_failure_n"] == 2
+    assert s["n_ok"] == 8 and s["n_failing"] == 2
+
+
+def test_dominant_failure_healthy_when_none_fail(tmp_path):
+    results = [{"mol_id": f"ok{i}", "shift_mae_ppm": 0.05} for i in range(5)]
+    s = save_failure_cases(results, tmp_path / "r", epoch=1)
+    assert s["dominant_failure"] == "healthy"
+    assert s["n_failing"] == 0 and s["n_ok"] == 5
+
+
 # ── integration: trainer writes probe artifacts ───────────────────────────────
 
 def test_trainer_emits_probe_artifacts(tmp_path):
