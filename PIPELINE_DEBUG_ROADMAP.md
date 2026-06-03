@@ -12,6 +12,8 @@ baseline** on clean data + clean augmentation._
 > **Remaining = HPC execution only:** Phase 3 rebuild (re-screen → build → bake →
 > simulate → bundle, predictor-free) and Phase 4 retrain (all models beyond the
 > CNN baseline). No predictor needed anymore.
+> **REBUILD (500k) LAUNCHED 2026-06-02** — validated end-to-end on 2k sample first (predictor-free: screen→build→bake→simulate→stack all ran; value-reuse fixed: shift top-20 21%→10%, couplings 119→296 distinct). Full 500k running on HPC (job 42338007) → `bundle_500k_s0_v2`; ~95% keep rate (≈475k mols). Running jobs cancelled. Next: validate the bundle, then retrain.
+
 
 ## Bugs
 
