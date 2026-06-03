@@ -920,7 +920,6 @@
       <div class="vb-head"><h3>Held-out test-molecule explorer <span class="split-tag split-test">test</span></h3>
         <div class="tx-nav">
           <label class="tx-modlabel">model <select id="txModel" class="tx-sel"></select></label>
-          <label class="tx-filter"><input type="checkbox" id="txFilter"> only this model&rsquo;s test set</label>
           <span class="tx-navgrp">
             <button class="car-btn car-prev" id="txPrev" aria-label="Previous molecule"></button>
             <select id="txSel" class="tx-sel"></select>
@@ -930,8 +929,7 @@
       <div class="tx-status" id="txStatus"></div>
       <div class="tx-meta" id="txMeta"></div>
       <div class="tx-legend">
-        <span><i class="sw" style="background:var(--accent-2)"></i>target — held-out test</span>
-        <span><i class="sw" style="background:#f5a623"></i>target — out-of-distribution</span>
+        <span><i class="sw" style="background:var(--accent-2)"></i>target — held-out test spectrum</span>
         <span><i class="sw" style="background:var(--accent)"></i>rendered from prediction</span>
       </div>
       <canvas id="txSpec" class="vb-canvas"></canvas>
@@ -945,10 +943,10 @@
         </div>
       </div>
       <p class="muted" style="margin-top:12px;font-size:12.5px">Pick a <b>model</b> to see its predictions on a shared set of
-        <b>held-out PubChem test molecules</b> — never seen in training or model selection (and entirely unseen-distribution
-        for the ChEMBL-trained 025/026). The rendered trace re-simulates the model&rsquo;s predicted spin system through the
-        exact quantum simulator — a close overlay means the recovered parameters reproduce the input spectrum. Predicted
-        values &gt; 0.1&nbsp;ppm / 1.5&nbsp;Hz off ground truth are shown in red.</p>
+        <b>held-out PubChem test molecules</b> — the leakage-controlled global 10% split that no model trained on or selected
+        against (the CNN baseline was trained on ChEMBL, so PubChem is also out-of-distribution for it). The rendered trace
+        re-simulates the model&rsquo;s predicted spin system through the exact quantum simulator — a close overlay means the
+        recovered parameters reproduce the input spectrum. Predicted values &gt; 0.1&nbsp;ppm / 1.5&nbsp;Hz off ground truth are shown in red.</p>
     </div>
   </div>
 </section>
