@@ -34,8 +34,8 @@ PDF: `~/Downloads/1H - …Pretsch… (2009).pdf` (86 pp). Render pages with popp
 (`pdftoppm -r 270`); text extraction mangles the tables. Validate every value
 against literature anchors. Convention: heteroatom = ring position 1.
 - **Tier 1 — ring-specific aromatic couplings** (`mol_to_spin_system/heteroaromatic.py`):
-  - DONE v1 (PR #79): pyridine, furan, thiophene, pyrrole (most common monocyclics).
-  - TODO: diazines (pyrimidine/pyrazine/pyridazine, book p185), azoles (imidazole/pyrazole/oxazole/isoxazole/thiazole/isothiazole + di/triazoles, p184), fused (indole/quinoline/benzofuran/…, p191-195).
+  - DONE monocyclic (PRs #79/#83/#84): pyridine, pyridazine, pyrimidine (pyrazine = 1 equiv group), furan, thiophene, pyrrole, oxazole, isoxazole, thiazole, imidazole, pyrazole. Canonical IUPAC numbering (O<S<N), data-driven `_NAME`/`_RING_J`.
+  - TODO: isothiazole + exotic 5-rings (triazoles/oxadiazoles/thiadiazoles — many have ≤1 H so couplings moot); **fused** (indole/quinoline/benzofuran/benzimidazole…, book p191-195) — needs fused-ring position mapping (currently skipped → benzene fallback).
 - **Tier 2 — substituent-dependent couplings:** olefinic gem/cis/trans vs substituent (p166-167) replacing flat 11/17; vicinal substituent table (p162-163) refining the rotatable model.
 - **Tier 3 — shift additivity = full pure-Python REPLACEMENT of HOSE (decision: R, Lucas 2026-06-02).** Build `mol_to_spin_system/shifts_pretsch.py` from Pretsch increment tables: aliphatic Shoolery Zα/Zβ (p160), aromatic substituent o/m/p increments (benzene 7.26 base), alkene/vinyl increments, special environments. Removes the Java/nmrshiftdb2 dependency entirely (de-risks the HPC rebuild). Hard part = substituent recognition (RDKit substituent → Pretsch category) + α/β or o/m/p increment summation + fallbacks. **Mandatory validation gate:** compare additivity vs current HOSE shifts + known textbook compounds on a sample (coverage + accuracy) BEFORE committing to the rebuild. **#7 σ source changes:** was HOSE `shift_range`; now a per-method/per-environment uncertainty floor.
 
