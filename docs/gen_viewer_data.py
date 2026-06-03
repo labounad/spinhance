@@ -1,6 +1,6 @@
 """Generate docs/data/{learning_curves,test_eval}.json from the v2 fleet run dirs.
 Reads metrics.jsonl (val rows) + heldout_eval.json via autoai.run_reader."""
-import glob, json, os, re
+import glob, json, os, re, time
 from autoai import run_reader as rr
 
 RUNS = "model/runs"
@@ -31,6 +31,18 @@ def model_size(d):
     except Exception:
         return ""
 
+def is_current(d):
+    """Chart only runs that are finished or actively training. Excludes cancelled
+    /dead runs whose status.json is frozen at 'running' (scancel never updates it)
+    but whose metrics stopped advancing — those are the stale curves."""
+    st = rr.read_status(d).get("state", "")
+    if st in ("finished", "completed"):
+        return True
+    if st == "cancelled":
+        return False
+    mp = os.path.join(d, "metrics.jsonl")          # live if metrics updated recently
+    return os.path.exists(mp) and (time.time() - os.path.getmtime(mp)) < 720
+
 # ---- learning_curves.json : v2 runs with >=1 val epoch.  For 500k/3M only the
 #      current (xl) models count — the cancelled medium runs must not show. ----
 lc = {}
@@ -39,6 +51,8 @@ for tier in TIERS:
         d = latest_run(cfg, tier)
         if not d: continue
         if tier != "64k" and model_size(d) != "xl":   # skip stale medium 500k/3M dirs
+            continue
+        if not is_current(d):                          # skip cancelled / dead-frozen runs
             continue
         s = val_series(d)
         if not s: continue
