@@ -81,10 +81,23 @@
       // session legend toggles
       const leg = $("#lcLegend", host);
       leg.innerHTML = Object.keys(data).map(k =>
-        `<button data-k="${k}" class="on" style="--c:${colOf(k)}"><i></i>${data[k].label}</button>`).join("");
+        `<button data-k="${k}" class="on" title="click: show only this · double-click: pin/unpin" style="--c:${colOf(k)}"><i></i>${data[k].label}</button>`).join("");
+      const syncLegend = () => leg.querySelectorAll("button").forEach(b => b.classList.toggle("on", active.has(b.dataset.k)));
+      // single click -> solo that model; double click -> pin/unpin (build a multi-selection)
+      let pend = null;
       leg.querySelectorAll("button").forEach(b => b.onclick = () => {
-        const k = b.dataset.k; active.has(k) ? active.delete(k) : active.add(k);
-        b.classList.toggle("on", active.has(k)); draw();
+        const k = b.dataset.k;
+        if (pend && pend.k === k) {                       // 2nd click on same button = double
+          clearTimeout(pend.timer); pend = null;
+          active.has(k) ? active.delete(k) : active.add(k);   // pin / unpin
+          if (active.size === 0) active.add(k);               // never leave the plot empty
+          syncLegend(); draw();
+        } else {
+          if (pend) clearTimeout(pend.timer);
+          pend = { k, timer: setTimeout(() => {            // single click = show only this
+            pend = null; active.clear(); active.add(k); syncLegend(); draw();
+          }, 220) };
+        }
       });
       draw(); window.addEventListener("resize", draw);
       host._draw = draw;
