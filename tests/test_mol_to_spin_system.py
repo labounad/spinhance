@@ -52,7 +52,7 @@ def test_karplus_extremes():
 
 def test_vicinal_rotatable():
     assert set(vicinal_couplings(make_test_mol_3d("CC")).values()) == {7.3}   # ethane
-    assert set(vicinal_couplings(make_test_mol_3d("CCO")).values()) == {6.8}  # ethanol
+    assert set(vicinal_couplings(make_test_mol_3d("CCO")).values()) == {6.9}  # ethanol (Pretsch p.162)
 
 
 def test_vicinal_ring_karplus_range():
@@ -61,7 +61,41 @@ def test_vicinal_ring_karplus_range():
 
 
 def test_olefinic_cis_trans():
-    assert sorted(set(olefinic_couplings(make_test_mol_3d("C=C")).values())) == [11.0, 17.0]
+    # Unsubstituted ethylene: cis 11.6, trans 19.1 (Pretsch p.166).
+    assert sorted(set(olefinic_couplings(make_test_mol_3d("C=C")).values())) == [11.6, 19.1]
+
+
+def test_vicinal_substituent_anchors():
+    # Pretsch vicinal substituent table (Tables of Spectral Data, 2009, p.162).
+    def jset(smi):
+        return set(vicinal_couplings(make_test_mol_3d(smi)).values())
+
+    assert jset("CC") == {7.3}            # ethane (base)
+    assert jset("CCF") == {6.9}           # CH3CH2F   6.9
+    assert jset("CC(F)F") == {4.5}        # CH3CHF2   4.5
+    assert jset("CCCl") == {7.2}          # CH3CH2Cl  7.2
+    assert jset("CC(Cl)Cl") == {6.1}      # CH3CHCl2  6.1
+    assert jset("CCO") == {6.9}           # CH3CH2OH  6.9
+
+
+def test_olefinic_substituent_dependent():
+    # Pretsch monosubstituted-ethylene couplings (p.166-167); cis from dihedral.
+    def jset(smi):
+        return sorted(set(olefinic_couplings(make_test_mol_3d(smi)).values()))
+
+    assert jset("C=CC") == [10.0, 16.8]    # propene: alkyl
+    assert jset("C=CF") == [4.7, 12.8]     # vinyl fluoride
+    assert jset("C=CCl") == [7.5, 14.5]    # vinyl chloride
+    assert jset("C=CBr") == [7.1, 14.9]    # vinyl bromide
+    assert jset("C=CO") == [6.4, 14.0]     # vinyl alcohol (O)
+    assert jset("C=CC=O") == [10.7, 17.6]  # acrolein (carbonyl C)
+    assert jset("C=CC#N") == [11.3, 17.8]  # acrylonitrile (nitrile)
+
+
+def test_couplings_skip_deuterium():
+    # Only protium is emitted; deuterated positions produce no coupling entries.
+    assert vicinal_couplings(make_test_mol_3d("[2H]C([2H])([2H])C([2H])([2H])[2H]")) == {}  # ethane-d6
+    assert olefinic_couplings(make_test_mol_3d("[2H]C([2H])=C([2H])[2H]")) == {}            # ethylene-d4
 
 
 def test_aromatic_ortho_meta_para():

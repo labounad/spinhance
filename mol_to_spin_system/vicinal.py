@@ -15,16 +15,49 @@ from rdkit.Chem import rdMolTransforms
 #  * freely rotating C-C bond (acyclic single bond): the conformer dihedral is
 #    meaningless and the two-parameter Karplus undershoots the rotational
 #    average, so use the empirical freely-rotating value instead. Base ~7.3 Hz
-#    (ethane), decreasing ~0.5 Hz per electronegative substituent on the
-#    coupling carbons (Pretsch p.162 substituent table).
+#    (ethane), decreasing with electronegative substituents on the coupling
+#    carbons, by a substituent-specific decrement read from the Pretsch vicinal
+#    substituent table (Tables of Spectral Data, 2009, p.162):
+#
+#        CH3CHF2  4.5   CH3CH2OH         6.9   CH3CH2CN     7.6
+#        CH3CHCl2 6.1   (CH3CH2)3O+BF4-  7.2   (CH3CH2)2S   7.4
+#        CH3CH2F  6.9   (CH3CH2)3N       7.1   (CH3CH2)4Si  8.0
+#        CH3CH2Cl 7.2   (CH3CH2)4N+I-    7.3   CH3CH2Li     8.4
+#
+#    The book gives no closed-form rule, only that J drops with substituent
+#    electronegativity and number. We reproduce the mono-substituted anchors
+#    exactly with a per-element decrement, and add an extra geminal term so the
+#    geminal di-halides (CHF2, CHCl2) also match. Electropositive substituents
+#    (Si, Li) raise J above ethane; that nuance is left out (no such acyclic
+#    H-C-C-H probe is common in the dataset) and falls back to the 7.3 base.
 KARPLUS_J0 = 8.5
 KARPLUS_J180 = 9.5
 KARPLUS_OFFSET = -0.3
 
 ROTATABLE_BASE = 7.3   # ethane-like, freely rotating
-EN_REDUCTION = 0.5     # per O/N/halogen on either coupling carbon
 
-_ELECTRONEGATIVE = {7, 8, 9, 17, 35, 53}  # N, O, F, Cl, Br, I
+# Decrement (Hz) per electronegative substituent bonded to a coupling carbon,
+# keyed by atomic number. Tuned to the mono-substituted Pretsch anchors:
+#   CH3CH2F 6.9 (-0.4), CH3CH2Cl 7.2 (-0.1), CH3CH2OH 6.9 (-0.4),
+#   (CH3CH2)3N 7.1 (-0.2 per ethyl carbon, one N each).
+EN_DECREMENT = {
+    9: 0.4,   # F
+    17: 0.1,  # Cl
+    35: 0.2,  # Br  (no direct anchor; between Cl and the trend)
+    53: 0.1,  # I   (no direct anchor; ~Cl)
+    8: 0.4,   # O
+    7: 0.2,   # N
+}
+# Extra decrement for the 2nd (and each further) electronegative atom on the
+# SAME carbon, capturing the strongly nonlinear geminal di-halide drop:
+#   CH3CHF2 4.5  -> 2 F need a 2.8 total drop (0.4 + 0.4 + 2.0 extra)
+#   CH3CHCl2 6.1 -> 2 Cl need a 1.2 total drop (0.1 + 0.1 + 1.0 extra)
+EN_GEMINAL_EXTRA = {
+    9: 2.0,   # F
+    17: 1.0,  # Cl
+}
+
+_ELECTRONEGATIVE = set(EN_DECREMENT)
 
 
 def karplus(phi_deg: float) -> float:
@@ -40,14 +73,20 @@ def _heavy_neighbor(mol: Chem.Mol, h_idx: int) -> int | None:
     return nbrs[0].GetIdx() if nbrs else None
 
 
-def _en_substituent_count(mol: Chem.Mol, ca: int, cb: int) -> int:
-    """Electronegative atoms (O/N/halogen) bonded to either coupling carbon."""
-    count = 0
+def _rotatable_j(mol: Chem.Mol, ca: int, cb: int) -> float:
+    """Freely-rotating vicinal 3J with substituent-specific decrements."""
+    j = ROTATABLE_BASE
     for c in (ca, cb):
+        per_carbon: dict[int, int] = {}
         for nbr in mol.GetAtomWithIdx(c).GetNeighbors():
-            if nbr.GetAtomicNum() in _ELECTRONEGATIVE:
-                count += 1
-    return count
+            z = nbr.GetAtomicNum()
+            if z in _ELECTRONEGATIVE:
+                per_carbon[z] = per_carbon.get(z, 0) + 1
+        for z, n in per_carbon.items():
+            j -= EN_DECREMENT[z] * n
+            if n >= 2:
+                j -= EN_GEMINAL_EXTRA.get(z, 0.0) * (n - 1)
+    return j
 
 
 def vicinal_couplings(mol: Chem.Mol) -> dict[tuple[int, int], float]:
@@ -56,13 +95,18 @@ def vicinal_couplings(mol: Chem.Mol) -> dict[tuple[int, int], float]:
     Ring bonds use Karplus on the 3D dihedral; freely rotating bonds use the
     substituent-adjusted empirical value. Returns {(atom_i, atom_j): J_Hz} with
     i < j, keyed by RDKit atom indices. Olefinic (C=C) and aromatic vicinal
-    couplings are left to dedicated handlers.
+    couplings are left to dedicated handlers. Only protium is emitted (D/T are
+    skipped).
     """
     if mol.GetNumConformers() == 0 or not mol.GetConformer().Is3D():
         raise ValueError("mol needs a 3D conformer; embed it first (see make_test_mol_3d).")
     conf = mol.GetConformer()
 
-    hs = [a.GetIdx() for a in mol.GetAtoms() if a.GetAtomicNum() == 1]
+    hs = [
+        a.GetIdx()
+        for a in mol.GetAtoms()
+        if a.GetAtomicNum() == 1 and a.GetIsotope() in (0, 1)
+    ]
     couplings: dict[tuple[int, int], float] = {}
     for a in range(len(hs)):
         for b in range(a + 1, len(hs)):
@@ -81,8 +125,7 @@ def vicinal_couplings(mol: Chem.Mol) -> dict[tuple[int, int], float]:
                 phi = rdMolTransforms.GetDihedralDeg(conf, i, ci, cj, j)
                 j_hz = karplus(phi)
             else:
-                n_en = _en_substituent_count(mol, ci, cj)
-                j_hz = ROTATABLE_BASE - EN_REDUCTION * n_en
+                j_hz = _rotatable_j(mol, ci, cj)
             couplings[(i, j)] = round(j_hz, 1)
     return couplings
 
@@ -90,7 +133,15 @@ def vicinal_couplings(mol: Chem.Mol) -> dict[tuple[int, int], float]:
 if __name__ == "__main__":
     from mol_to_spin_system.shifts import make_test_mol_3d
 
-    for smi, name in [("CC", "ethane"), ("CCO", "ethanol"), ("FCCF", "1,2-difluoroethane")]:
+    probes = [
+        ("CC", "ethane"),
+        ("CCO", "ethanol"),
+        ("CCF", "fluoroethane"),
+        ("CC(F)F", "1,1-difluoroethane"),
+        ("CC(Cl)Cl", "1,1-dichloroethane"),
+        ("CCC#N", "propionitrile"),
+    ]
+    for smi, name in probes:
         mol = make_test_mol_3d(smi)
         js = sorted(set(vicinal_couplings(mol).values()))
         print(f"{name:>20} (rotatable): {js} Hz")
