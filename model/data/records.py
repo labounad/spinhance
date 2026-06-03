@@ -90,9 +90,14 @@ def load_pubchem_records(spin_systems_json, max_mol=0, allowed_degeneracy=None,
         if any(int(d) not in allowed for d in degeneracy):
             skipped += 1
             continue
+        # ``row`` indexes the stacked spectra. Default to the file position, but
+        # honor an explicit ``row`` field when present — this lets a filtered
+        # subset file (e.g. a train-only split, with the held-out test removed)
+        # still index into the FULL stacked parts without re-materializing them.
+        row = int(rec.get("row", idx))
         r = {
-            "mol_id": f"mol_{idx:06d}",
-            "row": idx,
+            "mol_id": f"mol_{row:06d}",
+            "row": row,
             "shifts": np.asarray(shifts, dtype=float),
             "couplings": np.asarray(couplings, dtype=float),
             "degeneracy": np.asarray(degeneracy, dtype=int),
