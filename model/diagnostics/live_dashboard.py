@@ -255,7 +255,7 @@ def _curves(runs):
         if not any_data:
             continue
         fig.update_layout(title=title)
-        grid[i % 2].plotly_chart(themed(fig), use_container_width=True)
+        grid[i % 2].plotly_chart(themed(fig), width="stretch")
 
 
 def _detail(d):
@@ -277,11 +277,11 @@ def _detail(d):
     if lx:
         cols = st.columns(2)
         f = go.Figure(go.Scatter(x=lx, y=ly, mode="lines", line=dict(color=ACCENT, width=1.6)))
-        f.update_layout(title="Training loss"); cols[0].plotly_chart(themed(f, 240), use_container_width=True)
+        f.update_layout(title="Training loss"); cols[0].plotly_chart(themed(f, 240), width="stretch")
         rx, ry = _train_series(d, "lr")
         if rx:
             g = go.Figure(go.Scatter(x=rx, y=ry, mode="lines", line=dict(color=ACCENT3, width=1.6)))
-            g.update_layout(title="Learning rate"); cols[1].plotly_chart(themed(g, 240), use_container_width=True)
+            g.update_layout(title="Learning rate"); cols[1].plotly_chart(themed(g, 240), width="stretch")
     else:
         st.info("Waiting for training metrics… (run may still be loading/preloading).")
 
@@ -309,7 +309,7 @@ def _detail(d):
             f = go.Figure(go.Bar(x=list(fd.keys()), y=list(fd.values()),
                           marker_color=ACCENT))
             f.update_layout(title="Failure modes (excl. healthy)")
-            st.plotly_chart(themed(f, 240), use_container_width=True)
+            st.plotly_chart(themed(f, 240), width="stretch")
 
 
 def _dashboard():
