@@ -6,7 +6,7 @@ import pytest
 from mol_to_spin_system import shifts as shifts_mod
 from mol_to_spin_system.aromatic import aromatic_couplings
 from mol_to_spin_system.coupling import all_couplings
-from mol_to_spin_system.geminal import geminal_couplings
+from mol_to_spin_system.geminal import _geminal_2j, geminal_couplings
 from mol_to_spin_system.groups import degeneracies, proton_groups
 from mol_to_spin_system.long_range import long_range_couplings
 from mol_to_spin_system.olefinic import olefinic_couplings
@@ -16,10 +16,32 @@ from mol_to_spin_system.vicinal import karplus, vicinal_couplings
 
 # --- couplings (no Java needed) ---------------------------------------------
 
-def test_geminal_reference_values():
-    assert -14.3 in set(geminal_couplings(make_test_mol_3d("Cc1ccccc1")).values())  # toluene
-    assert -14.9 in set(geminal_couplings(make_test_mol_3d("CC(C)=O")).values())   # acetone
-    assert -16.9 in set(geminal_couplings(make_test_mol_3d("CC#N")).values())      # CH3CN
+def _first_multi_h_carbon(smi):
+    mol = make_test_mol_3d(smi)
+    return next(
+        a for a in mol.GetAtoms()
+        if a.GetAtomicNum() == 6
+        and sum(n.GetAtomicNum() == 1 for n in a.GetNeighbors()) >= 2
+    )
+
+
+def test_geminal_model_reference_values():
+    # The additive 2J model reproduces Pretsch literature values (validated on
+    # the canonical methyl probes).  These are intrinsic geminal 2J — used by
+    # geminal_couplings only for true methylenes, never emitted for methyls.
+    assert round(_geminal_2j(_first_multi_h_carbon("Cc1ccccc1")), 1) == -14.3  # toluene
+    assert round(_geminal_2j(_first_multi_h_carbon("CC(C)=O")), 1) == -14.9    # acetone
+    assert round(_geminal_2j(_first_multi_h_carbon("CC#N")), 1) == -16.9       # CH3CN
+
+
+def test_geminal_only_methylenes():
+    # Methyl protons are magnetically equivalent (free rotation) → no
+    # observable mutual coupling; geminal_couplings must skip CH3 (3 H).
+    assert geminal_couplings(make_test_mol_3d("Cc1ccccc1")) == {}  # toluene CH3
+    assert geminal_couplings(make_test_mol_3d("CC#N")) == {}       # CH3CN
+    # True methylenes (2 H) still get exactly one geminal pair.
+    assert set(geminal_couplings(make_test_mol_3d("ClCCl")).values())   # CH2Cl2
+    assert len(geminal_couplings(make_test_mol_3d("N#CCC#N"))) == 1     # malononitrile CH2
 
 
 def test_karplus_extremes():

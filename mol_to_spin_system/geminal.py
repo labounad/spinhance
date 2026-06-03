@@ -63,7 +63,11 @@ def geminal_couplings(mol: Chem.Mol) -> dict[tuple[int, int], float]:
         if atom.GetAtomicNum() != 6:
             continue
         hs = [n.GetIdx() for n in atom.GetNeighbors() if n.GetAtomicNum() == 1]
-        if len(hs) < 2:
+        # Only true methylenes (exactly 2 H on the carbon) have an observable
+        # geminal 2J.  A methyl's three protons are magnetically equivalent
+        # (rapid C-C rotation) and show no mutual splitting, so a CH3 (3 H)
+        # must NOT be assigned intra-group geminal couplings.
+        if len(hs) != 2:
             continue
         j = round(_geminal_2j(atom), 1)
         for a in range(len(hs)):
@@ -75,7 +79,10 @@ def geminal_couplings(mol: Chem.Mol) -> dict[tuple[int, int], float]:
 if __name__ == "__main__":
     from mol_to_spin_system.shifts import make_test_mol_3d
 
-    # (SMILES, the carbon's geminal partner, Pretsch reference 2J)
+    # The additive 2J model is validated against Pretsch reference values on
+    # methyl probes, but geminal_couplings only EMITS couplings for true
+    # methylenes (2 H) — a methyl's 3 protons are magnetically equivalent.
+    # (SMILES, name, model 2J on a CH3 probe carbon, emitted? )
     cases = [
         ("ClCCl", "CH2Cl2", -7.5),
         ("Cc1ccccc1", "toluene", -14.3),
@@ -85,5 +92,11 @@ if __name__ == "__main__":
     ]
     for smi, name, ref in cases:
         mol = make_test_mol_3d(smi)
-        js = set(geminal_couplings(mol).values())
-        print(f"{name:>10}: predicted {sorted(js)}  (Pretsch {ref})")
+        model = {
+            round(_geminal_2j(a), 1)
+            for a in mol.GetAtoms()
+            if a.GetAtomicNum() == 6
+            and sum(n.GetAtomicNum() == 1 for n in a.GetNeighbors()) >= 2
+        }
+        emitted = sorted(set(geminal_couplings(mol).values()))
+        print(f"{name:>10}: model 2J {sorted(model)}  emitted {emitted}  (Pretsch {ref})")

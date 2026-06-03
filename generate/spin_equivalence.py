@@ -523,13 +523,30 @@ def _classify_equivalence_classes(
     result: list[tuple[str, list[int]]] = []
     for cls in classes:
         if len(cls) == 1:
-            tier = "NONE"
+            result.append(("NONE", cls))
         elif _is_magnetically_equivalent(cls, fwd, mol_h, candidate_atoms):
-            tier = "HARD"
+            result.append(("HARD", cls))
+        elif _is_rotationally_hard_hydrogen_class(cls, mol_h):
+            # Molecular symmetry merged two (or more) *remote* methyl rotors
+            # into one homotopic class.  As a whole the class is not
+            # magnetically equivalent (the methyls see other protons at
+            # different bond-path distances), but each complete methyl is
+            # still a single HARD spin group — rapid C-C rotation averages
+            # its three protons.  Split by parent carbon so every rotor
+            # counts as one group, not three.
+            by_parent: dict[int, list[int]] = {}
+            for h in cls:
+                parent = mol_h.GetAtomWithIdx(h).GetNeighbors()[0].GetIdx()
+                by_parent.setdefault(parent, []).append(h)
+            for hs in by_parent.values():
+                result.append(("HARD", sorted(hs)))
         else:
-            tier = "SOFT"
-        result.append((tier, cls))
+            result.append(("SOFT", cls))
 
+    # Re-sort by smallest atom index so split subclasses keep stable label
+    # order (non-split classes are already index-ordered, so this is a no-op
+    # for them).
+    result.sort(key=lambda tc: tc[1][0])
     return result
 
 
