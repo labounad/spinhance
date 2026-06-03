@@ -105,6 +105,9 @@ def load_pubchem_records(spin_systems_json, max_mol=0, allowed_degeneracy=None,
             "chembl_id": rec.get("chembl_id"),
             "inchikey": rec.get("inchikey"),
             "n_spins": int(sum(degeneracy)),
+            # per-group canonical symmetry-orbit id (parallel to labels/shifts);
+            # the dataset derives the soft-equivalence label from orbit equality.
+            "equiv_orbit": rec.get("equiv_orbit"),
         }
         if sample_n > 0:                       # reservoir sampling (uniform, seeded)
             kept += 1

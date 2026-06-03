@@ -96,6 +96,19 @@ class SpectrumMatrixDataset(Dataset):
         c_mat, c_mask = _pairs_to_matrix(t["j_mag"], t["j_presence"], G)
         deg_values = self.vocab.from_index(t["deg_class"]).astype(np.int64)
 
+        # Soft-equivalence target (G,G): two DISTINCT groups are soft-equivalent iff
+        # they share a canonical symmetry orbit (chemically equivalent, not hard-
+        # merged) — purely structural, NOT shift proximity. Built in the model's
+        # canonical group order (same `order` as the shifts above). Zeros when the
+        # record carries no equiv_orbit (legacy); the loss no-ops in that case.
+        se_mat = np.zeros((G, G), dtype=np.float32)
+        orb = r.get("equiv_orbit")
+        if orb is not None and len(orb) == G:
+            oc = np.asarray(orb, dtype=np.int64)[self._orders[i]]
+            eq = oc[:, None] == oc[None, :]
+            np.fill_diagonal(eq, False)
+            se_mat = eq.astype(np.float32)
+
         item = {
             "spectrum":           torch.as_tensor(inp),                  # (P,)
             "spectrum_ref":       torch.as_tensor(clean),                # (P,)
@@ -104,6 +117,7 @@ class SpectrumMatrixDataset(Dataset):
             "coupling_mask":      torch.from_numpy(c_mask),              # (G,G) {0,1}
             "degeneracy_classes": torch.from_numpy(t["deg_class"]),      # (G,) long
             "degeneracy_values":  torch.from_numpy(deg_values),          # (G,) long
+            "soft_equiv_target":  torch.from_numpy(se_mat),              # (G,G) {0,1}
             "mol_id":             r["mol_id"],
             "smiles":             r.get("smiles"),
             "bucket_key":         self.bucket_keys[i],

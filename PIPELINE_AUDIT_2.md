@@ -95,13 +95,16 @@ Each workstream → a severity-ranked findings list (file:line, repro, recommend
     (`CanonicalRankAtoms` orbit). Drives **shift sharing in generation** — same orbit
     ⇒ exact same drawn shift; different orbit ⇒ **independent Gaussian** (even if the
     Pretsch base shifts coincide). This is the `augment` fix.
-  - **Accidental equivalence (`|δ_i−δ_j| ≤ tol`):** coincidental/unresolvable; ANY two
-    groups whose shifts land within the line width. Drives the **soft-equiv head**
-    (collapse unresolvable pairs so the decoder doesn't emit a spurious split). The
-    `soft_equiv_loss` `|Δδ|≤tol` label is **correct and UNCHANGED** — symmetry pairs are
-    a subset (Δδ=0), plus genuine chance coincidences. The bug was never that accidental
-    equivalence exists; it's that the old `(shift,range)` sharing FORCED it far above its
-    natural rate. Independent Gaussians restore the natural (rare) rate.
+  - **Soft-equivalence FLAG (the graph edge label):** = chemically equivalent (same
+    orbit) AND not hard-equivalent (not rotor-merged). PURELY symmetry-determined.
+    `soft_equiv_target[i,j] = (equiv_orbit[i]==equiv_orbit[j])` for distinct groups,
+    built in the dataset and consumed by `soft_equiv_loss` (the old `|Δδ|≤tol`
+    derivation is REMOVED — it conflated symmetry with coincidence).
+  - **Accidental equivalence:** a *phenomenon*, not a label — distinct protons whose
+    shifts merely overlap. The model must know nothing about it as a concept. Such
+    cases SHOULD exist in the data (close shifts, different orbits, flag=0) so the model
+    learns "close ≠ soft-equivalent"; they were only ever *over-represented* by the old
+    forced sharing, and independent Gaussians restore their natural (rare) rate.
 - **Convention:** degeneracy (one HARD node) = a freely-rotating rotor's magnetically-
   equivalent protons (CH₃→3, tBu→9; may span carbons). Everything else (CH₂, aromatic,
   cross-atom symmetry) = separate nodes; co-orbit → shared shift, else independent.

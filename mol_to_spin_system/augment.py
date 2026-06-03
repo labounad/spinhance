@@ -174,12 +174,17 @@ def sample_record(
     return out
 
 
-#: fields of the original (pre-augmentation) spin-system schema
-OLD_FIELDS = ("chembl_id", "smiles", "inchikey", "labels", "spin_groups", "couplings")
+#: fields carried into the baked dataset. ``equiv_orbit`` (per-group canonical
+#: symmetry-orbit id) is kept because the model derives the soft-equivalence label
+#: from it (same orbit ⇒ soft-equivalent); ``shift_range``/``coupling_types`` are
+#: bake-only and dropped.
+OLD_FIELDS = ("chembl_id", "smiles", "inchikey", "labels", "spin_groups",
+              "couplings", "equiv_orbit")
 
 
 def to_old_format(record: dict) -> dict:
-    """Strip augmentation fields (shift_range, coupling_types) -> legacy schema."""
+    """Keep the dataset schema (incl. equiv_orbit); drop bake-only fields
+    (shift_range, coupling_types)."""
     return {k: record[k] for k in OLD_FIELDS if k in record}
 
 

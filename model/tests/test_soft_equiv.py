@@ -37,7 +37,7 @@ def _spec():
     return s / (s.sum(-1, keepdim=True) * (12.0 / P))     # unit integral
 
 
-def _batch(shifts=None):
+def _batch(shifts=None, se_target=None):
     if shifts is None:
         shifts = torch.randn(B, G)
     spec = _spec()
@@ -46,7 +46,17 @@ def _batch(shifts=None):
                      coupling_mask=torch.zeros(B, G, G),
                      degeneracy_classes=torch.zeros(B, G, dtype=torch.long),
                      degeneracy_values=torch.ones(B, G),
+                     soft_equiv_target=se_target,
                      molecule_ids=[f"m{i}" for i in range(B)])
+
+
+def _se_target(pairs_per_sample):
+    """(B,G,G) symmetric 0/1 target flagging the given (i,j) edges per sample."""
+    m = torch.zeros(B, G, G)
+    for b, pairs in enumerate(pairs_per_sample):
+        for i, j in pairs:
+            m[b, i, j] = m[b, j, i] = 1.0
+    return m
 
 
 def _output(requires_grad=True, with_aux=True):
@@ -87,30 +97,40 @@ def test_peak_channel_off_is_single_channel():
 
 # ── soft-equiv loss ─────────────────────────────────────────────────────────────
 
-def test_label_marks_equal_shift_pairs():
-    # groups 0 and 1 share the same shift in sample 0 -> that edge is soft-equivalent
-    shifts = torch.arange(G, dtype=torch.float32).repeat(B, 1)
-    shifts[0, 1] = shifts[0, 0]
-    loss = SoftEquivLoss(tol_ppm=0.03, shift_std=1.0)
-    lo = loss(_output(with_aux=True), _batch(shifts=shifts)).validate()
-    assert lo.metrics["se_frac"] > 0
-    assert torch.isfinite(lo.total)
+def test_label_is_symmetry_not_shift_proximity():
+    # ALL shifts identical (max accidental overlap) but NO symmetry edges -> the
+    # label must be 0 (accidental degeneracy is deliberately unlabelled).
+    shifts = torch.zeros(B, G)
+    loss = SoftEquivLoss()
+    lo = loss(_output(with_aux=True), _batch(shifts=shifts, se_target=torch.zeros(B, G, G))).validate()
+    assert lo.metrics["se_frac"] == 0.0   # shift proximity is ignored
+    # flag (0,1) by SYMMETRY -> now counted, regardless of shift values
+    se = _se_target([[(0, 1)], [(0, 1)]])
+    lo2 = loss(_output(with_aux=True), _batch(shifts=torch.randn(B, G), se_target=se)).validate()
+    assert lo2.metrics["se_frac"] > 0 and torch.isfinite(lo2.total)
+
+
+def test_no_target_is_noop():
+    lo = SoftEquivLoss()(_output(with_aux=True), _batch())   # se_target=None
+    assert float(lo.total) == 0.0 and lo.diagnostics.get("skipped")
 
 
 def test_grad_flows_to_shifts_and_flag():
-    shifts = torch.zeros(B, G)            # all-equal -> many soft-equiv pairs
+    shifts = torch.zeros(B, G)
+    se = _se_target([[(0, 1), (2, 3)], [(0, 1)]])   # symmetry-flagged pairs
     out = _output(with_aux=True)
-    SoftEquivLoss(shift_std=1.0)(out, _batch(shifts=shifts)).total.backward()
+    SoftEquivLoss()(out, _batch(shifts=shifts, se_target=se)).total.backward()
     assert out.shifts.grad is not None and torch.isfinite(out.shifts.grad).all()
-    se = out.auxiliary["soft_equiv_logits"]
-    assert se.grad is not None and float(se.grad.abs().sum()) > 0
+    se_l = out.auxiliary["soft_equiv_logits"]
+    assert se_l.grad is not None and float(se_l.grad.abs().sum()) > 0
 
 
 def test_consistency_penalizes_split_shifts():
-    """Two GT-equal groups with predicted shifts pulled apart cost more than together."""
+    """Two GT-soft-equiv groups with predicted shifts pulled apart cost more than together."""
     shifts = torch.zeros(B, G)
+    se = _se_target([[(0, 1)], [(0, 1)]])           # (0,1) is a symmetry orbit
     base = _output(with_aux=True, requires_grad=False)
-    loss = SoftEquivLoss(consistency_weight=1.0, shift_std=1.0)
+    loss = SoftEquivLoss(consistency_weight=1.0)
     split = ModelOutput(shifts=base.shifts.clone(), coupling_values=base.coupling_values,
                         coupling_presence_logits=base.coupling_presence_logits,
                         degeneracy_logits=base.degeneracy_logits, auxiliary=base.auxiliary)
@@ -118,8 +138,8 @@ def test_consistency_penalizes_split_shifts():
     together = ModelOutput(shifts=torch.zeros(B, G), coupling_values=base.coupling_values,
                            coupling_presence_logits=base.coupling_presence_logits,
                            degeneracy_logits=base.degeneracy_logits, auxiliary=base.auxiliary)
-    assert loss(split, _batch(shifts=shifts)).metrics["consistency"] > \
-           loss(together, _batch(shifts=shifts)).metrics["consistency"]
+    assert loss(split, _batch(shifts=shifts, se_target=se)).metrics["consistency"] > \
+           loss(together, _batch(shifts=shifts, se_target=se)).metrics["consistency"]
 
 
 def test_no_aux_is_noop():
@@ -131,7 +151,7 @@ def test_composite_with_matrix_and_soft_equiv():
     terms = [{"name": "matrix", "weight": 1.0},
              {"name": "soft_equiv", "weight": 0.5, "tol_ppm": 0.03}]
     comp = build_composite(terms, shift_mean=5.0, shift_std=2.0, j_mean=7.0, j_std=4.0)
-    lo = comp(_output(with_aux=True), _batch())
+    lo = comp(_output(with_aux=True), _batch(se_target=_se_target([[(0, 1)], [(0, 1)]])))
     assert torch.isfinite(lo.total)
     assert "soft_equiv/bce" in lo.metrics
 
