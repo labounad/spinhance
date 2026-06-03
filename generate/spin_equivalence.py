@@ -639,6 +639,7 @@ def analyze_spin_systems(mol: Chem.Mol) -> tuple[int, list[int]]:
     candidate_h = [
         a.GetIdx() for a in mol_h.GetAtoms()
         if a.GetAtomicNum() == 1
+        and a.GetIsotope() in (0, 1)   # protium only; D/T are NMR-invisible in 1H
         and a.GetNeighbors()[0].GetAtomicNum() not in _EXCHANGEABLE_PARENTS
     ]
 
@@ -739,6 +740,7 @@ def classify_spin_groups(mol: Chem.Mol) -> tuple[Chem.Mol, list[SpinGroup]]:
     candidate_h = [
         a.GetIdx() for a in mol_h.GetAtoms()
         if a.GetAtomicNum() == 1
+        and a.GetIsotope() in (0, 1)   # protium only; D/T are NMR-invisible in 1H
         and a.GetNeighbors()[0].GetAtomicNum() not in _EXCHANGEABLE_PARENTS
     ]
 

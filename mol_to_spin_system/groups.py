@@ -28,6 +28,8 @@ def proton_groups(
     for atom in mol.GetAtoms():
         if atom.GetAtomicNum() != 1:
             continue
+        if atom.GetIsotope() not in (0, 1):  # protium only; D/T are NMR-invisible
+            continue
         nbrs = atom.GetNeighbors()
         if not nbrs or nbrs[0].GetAtomicNum() not in bound_to:
             continue
