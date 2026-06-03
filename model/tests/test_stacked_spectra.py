@@ -87,6 +87,25 @@ def test_parts_sorted_numerically_not_lexically(tmp_path):
         assert ss[i][0] == i
 
 
+def test_preload_sparse_and_dense_paths(tmp_path):
+    # 4 shards x 50 rows; row 0 of each tagged with its global index
+    _write_parts(tmp_path, sizes=[50] * 4)
+    # SPARSE: a few scattered rows -> per-shard mmap-only-needed path, correct values
+    ss = StackedSpectra(tmp_path)
+    want = [0, 50, 100, 150, 199]
+    ss.preload(want)
+    for r in want:
+        assert ss[r][0] == r
+    # DENSE: all of shard 2 (rows 100..149) -> whole-shard read path, still correct
+    ss2 = StackedSpectra(tmp_path)
+    ss2.preload(list(range(100, 150)))
+    for r in (100, 125, 149):
+        assert ss2[r][0] == r
+    # non-preloaded row served via the mmap fallback
+    ss3 = StackedSpectra(tmp_path)
+    assert ss3[177][0] == 177
+
+
 def test_records_gzip_jsonl_and_max_mol(tmp_path):
     rp = tmp_path / "spin_systems_pubchem.json.gz"
     _write_records(rp, 10)
