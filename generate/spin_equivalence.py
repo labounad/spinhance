@@ -127,6 +127,18 @@ def passes_heuristic(
     return (n_c <= max_carbons) and (n_h >= min_protons), n_c, n_h
 
 
+def contains_nonprotium_isotope(mol: Chem.Mol) -> bool:
+    """True if *mol* has any explicitly isotope-labelled hydrogen (²H/³H).
+
+    Deuterated/tritiated compounds are isotopically-labelled artifacts, not part
+    of the natural ¹H chemical space we sample, and D/T are NMR-invisible in ¹H
+    (so a labelled molecule's spectrum is not that of its all-protium parent).
+    The screen rejects such molecules outright.
+    """
+    return any(a.GetAtomicNum() == 1 and a.GetIsotope() in (2, 3)
+               for a in mol.GetAtoms())
+
+
 # ── 3-D conformer generation ──────────────────────────────────────────────────
 
 def embed_3d(mol: Chem.Mol) -> tuple[Chem.Mol, bool]:

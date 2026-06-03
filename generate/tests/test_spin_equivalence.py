@@ -23,6 +23,7 @@ from generate.spin_equivalence import (
     passes_heuristic,
     analyze_spin_systems,
     classify_spin_groups,
+    contains_nonprotium_isotope,
     embed_3d,
     strip_exchangeable_protons,
     substitution_signature,
@@ -290,3 +291,16 @@ class TestPassesHeuristic:
         ok, _, n_h = passes_heuristic(_mol("FC(F)(F)F"))
         assert not ok
         assert n_h == 0
+
+
+def test_contains_nonprotium_isotope():
+    from rdkit import Chem
+    # deuterated / tritiated -> True (rejected by the screen)
+    assert contains_nonprotium_isotope(Chem.MolFromSmiles("[2H]c1ccccc1"))
+    assert contains_nonprotium_isotope(Chem.MolFromSmiles("[3H]C"))
+    assert contains_nonprotium_isotope(Chem.MolFromSmiles("CC1=C(C=C(C=C1)C)[2H]"))
+    # ordinary protium molecules -> False
+    assert not contains_nonprotium_isotope(Chem.MolFromSmiles("c1ccccc1"))
+    assert not contains_nonprotium_isotope(Chem.MolFromSmiles("CCO"))
+    # 13C (heavy carbon, not hydrogen) must NOT trigger it
+    assert not contains_nonprotium_isotope(Chem.MolFromSmiles("[13CH3]CO"))
