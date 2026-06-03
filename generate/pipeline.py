@@ -121,7 +121,9 @@ def _screen_chunk(
     # Deferred imports — safe across fork and spawn.
     from rdkit import Chem, RDLogger  # noqa: PLC0415
     RDLogger.DisableLog("rdApp.*")
-    from generate.spin_equivalence import classify_spin_groups  # noqa: PLC0415
+    from generate.spin_equivalence import (  # noqa: PLC0415
+        classify_spin_groups, contains_nonprotium_isotope,
+    )
     if want_xyz:
         from generate.xyz_writer import build_xyz_block  # noqa: PLC0415
 
@@ -130,6 +132,11 @@ def _screen_chunk(
     for source_id, smiles, inchikey in chunk:
         mol = Chem.MolFromSmiles(smiles)
         if mol is None:
+            continue
+
+        # Reject isotopically-labelled (D/T) molecules entirely — they are not
+        # part of the natural 1H chemical space and D/T are NMR-invisible.
+        if contains_nonprotium_isotope(mol):
             continue
 
         try:

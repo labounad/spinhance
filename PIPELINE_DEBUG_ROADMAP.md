@@ -26,7 +26,7 @@ baseline** on clean data + clean augmentation._
 
 ### Decisions locked
 - **#7 variability = ONE realization per molecule, baked as ground truth.** It is *not* instrument/physical variability — purely to sample chemical space — so it's drawn once and never resampled per epoch (detector-noise augmentation stays separate). Sample shifts+couplings (class-aware) → simulate the spectrum from the sampled values → that matrix IS the molecule's spin system.
-- **Deuterium molecules eliminated entirely** — the rebuild screen rejects any molecule containing explicit ²H/³H (stronger than fix #3, which only excluded D from counting).
+- **Deuterium molecules eliminated entirely** — the rebuild screen rejects any molecule containing explicit ²H/³H (stronger than fix #3, which only excluded D from counting). DONE: `generate.spin_equivalence.contains_nonprotium_isotope` + reject in `generate/pipeline.py::_screen_chunk`.
 - **Pretsch enrichment:** surgical, prioritized. Tier 1 (heteroaromatic couplings, #8) folded into THIS rebuild. Tier 2 (substituent-dependent olefinic/vicinal) optional same-pass. Tier 3 (shift additivity Zα/Zβ) deferred — HOSE predictor already empirical. Extract specific table pages via image rendering + validated transcription (text extraction mangles the tables); not a full-book campaign.
 
 ### Pretsch enrichment campaign (Tiers 1–3; Pretsch 2009 verbatim)
