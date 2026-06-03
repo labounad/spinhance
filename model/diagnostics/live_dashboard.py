@@ -113,9 +113,10 @@ def _train_series(run_dir, key):
 
 
 def _label(run_id: str) -> str:
-    """Strip the timestamp prefix + hash suffix → e.g. v2_026_500k."""
-    m = re.search(r"(v2_\d+_\w+|[a-z]+_\d+(?:_\w+)?)", run_id)
-    return m.group(1) if m else run_id
+    """Strip the timestamp prefix + 6-hex hash suffix → e.g. v2_026_500k."""
+    s = re.sub(r"^\d+_(?:\d+_)?", "", run_id)     # drop leading timestamp(s)
+    s = re.sub(r"_[0-9a-f]{6}$", "", s)           # drop trailing run hash
+    return s or run_id
 
 
 # ── sidebar ─────────────────────────────────────────────────────────────────────
@@ -129,6 +130,18 @@ with st.sidebar:
     flt = st.text_input("Filter", "v2_", help="Substring match on run id (blank = all).")
     if flt.strip():
         runs = [d for d in runs if flt.strip() in d.name]
+    collapse = st.toggle("Latest run per config", value=True,
+                         help="Show only the most recent run dir for each config·tier "
+                              "(hides superseded / cancelled re-runs).")
+    if collapse:
+        # keep the lexically-greatest dir name per label = the newest timestamp;
+        # robust to filesystem mtime (rsync'd copies) since the name carries the stamp.
+        best = {}
+        for d in runs:
+            lab = _label(d.name)
+            if lab not in best or d.name > best[lab].name:
+                best[lab] = d
+        runs = sorted(best.values(), key=lambda d: d.name, reverse=True)
     labels = {str(d): _label(d.name) for d in runs}
     st.caption(f"{len(runs)} run(s)")
     live = st.toggle("Auto-refresh (10 s)", value=True)
