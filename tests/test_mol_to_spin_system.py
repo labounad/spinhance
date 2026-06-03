@@ -88,6 +88,13 @@ def test_heteroaromatic_ring_specific_couplings():
     assert 7.5 not in set(all_couplings(make_test_mol_3d("c1ccncc1")).values())
     # carbocyclic benzene is untouched (still 7.5/1.5/0.7)
     assert heteroaromatic_couplings(make_test_mol_3d("c1ccccc1")) == {}
+    # benzo-fused 5-ring H2-H3: indole 3.1, benzofuran 2.5, benzothiophene 5.5
+    assert 3.1 in set(heteroaromatic_couplings(make_test_mol_3d("c1ccc2[nH]ccc2c1")).values())
+    assert 2.5 in set(heteroaromatic_couplings(make_test_mol_3d("c1ccc2occc2c1")).values())
+    assert 5.5 in set(heteroaromatic_couplings(make_test_mol_3d("c1ccc2sccc2c1")).values())
+    # benzimidazole (no intra-5-ring H pair) and naphthalene (carbocyclic) get nothing here
+    assert heteroaromatic_couplings(make_test_mol_3d("c1ccc2[nH]cnc2c1")) == {}
+    assert heteroaromatic_couplings(make_test_mol_3d("c1ccc2ccccc2c1")) == {}
 
 
 def test_long_range_allylic():

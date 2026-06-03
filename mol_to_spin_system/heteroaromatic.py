@@ -77,6 +77,14 @@ _RING_J: dict[str, dict[frozenset, float]] = {
     },
 }
 
+#: Benzo-fused 5-membered heteroaromatics — the H2-H3 coupling across the
+#: hetero ring, keyed by the ring's single heteroatom (Pretsch §5.6.2):
+#: indole (N) 3.1, benzofuran (O) 2.5, benzothiophene (S) 5.5. The benzo ring's
+#: ortho/meta couplings (~7.9/1.2) stay on the benzene fallback (close enough);
+#: small cross-ring/peri couplings are not modeled (v1).
+_FUSED5_J23 = {7: 3.1, 8: 2.5, 16: 5.5}
+
+
 #: (ring size, sorted ((position, atomic-num), ...)) -> ring name, using the
 #: canonical numbering from ``_canonical_positions`` (heteroatoms at lowest
 #: locants; O<S<N seniority breaks ties, matching IUPAC).
@@ -162,14 +170,53 @@ def _classified_rings(mol: Chem.Mol):
             yield ring, name, pos
 
 
+def _fused5_couplings(mol: Chem.Mol) -> dict[tuple[int, int], float]:
+    """H2-H3 coupling across a benzo-fused 5-membered hetero ring (indole,
+    benzofuran, benzothiophene). Couples adjacent protium-bearing carbons in a
+    fused, single-heteroatom 5-ring (the fusion carbons bear no H, so this is
+    the 2,3-pair). 2-heteroatom fused 5-rings (benzimidazole/indazole) have no
+    such pair and are skipped."""
+    out: dict[tuple[int, int], float] = {}
+    ri = mol.GetRingInfo()
+    for ring in ri.AtomRings():
+        if len(ring) != 5 or not all(mol.GetAtomWithIdx(i).GetIsAromatic() for i in ring):
+            continue
+        if not any(ri.NumAtomRings(i) > 1 for i in ring):     # must be fused
+            continue
+        het = [mol.GetAtomWithIdx(i).GetAtomicNum() for i in ring
+               if mol.GetAtomWithIdx(i).GetAtomicNum() != 6]
+        if len(het) != 1 or het[0] not in _FUSED5_J23:
+            continue
+        jval = _FUSED5_J23[het[0]]
+        rs = set(ring)
+        h_of: dict[int, int] = {}
+        for c in ring:
+            a = mol.GetAtomWithIdx(c)
+            if a.GetAtomicNum() != 6:
+                continue
+            hs = [n.GetIdx() for n in a.GetNeighbors()
+                  if n.GetAtomicNum() == 1 and n.GetIsotope() in (0, 1)]
+            if len(hs) == 1:
+                h_of[c] = hs[0]
+        for c in h_of:
+            for nb in mol.GetAtomWithIdx(c).GetNeighbors():
+                d = nb.GetIdx()
+                if d in rs and d > c and d in h_of:
+                    i, j = h_of[c], h_of[d]
+                    out[(min(i, j), max(i, j))] = jval
+    return out
+
+
 def heteroaromatic_couplings(mol: Chem.Mol) -> dict[tuple[int, int], float]:
     """Position-specific ring couplings for supported heteroaromatic rings.
 
     Returns {(atom_i, atom_j): J_Hz} with i < j. Overrides the benzene
     fallback for the rings it covers (it is merged AFTER ``aromatic_couplings``
     in ``coupling.all_couplings_typed``). Only protium C-H are coupled.
+    Covers monocyclic rings (`_RING_J`) plus the H2-H3 coupling of benzo-fused
+    5-membered hetero rings.
     """
-    out: dict[tuple[int, int], float] = {}
+    out: dict[tuple[int, int], float] = dict(_fused5_couplings(mol))
     for ring, name, pos in _classified_rings(mol):
         table = _RING_J[name]
         ch: dict[int, int] = {}                # ring carbon -> its protium H
