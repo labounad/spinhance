@@ -130,6 +130,11 @@ with st.sidebar:
     flt = st.text_input("Filter", "v2_", help="Substring match on run id (blank = all).")
     if flt.strip():
         runs = [d for d in runs if flt.strip() in d.name]
+    hide_cancelled = st.toggle("Hide cancelled", value=True,
+                               help="Drop runs whose status is cancelled (superseded / "
+                                    "scancel'd re-runs whose frozen curves would otherwise show).")
+    if hide_cancelled:   # filter BEFORE collapse so a cancelled 'latest' falls back to a live run
+        runs = [d for d in runs if rr.read_status(d).get("state") != "cancelled"]
     collapse = st.toggle("Latest run per config", value=True,
                          help="Show only the most recent run dir for each config·tier "
                               "(hides superseded / cancelled re-runs).")
