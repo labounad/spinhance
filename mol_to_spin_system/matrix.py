@@ -9,7 +9,8 @@ from rdkit import Chem
 
 from mol_to_spin_system.coupling import all_couplings
 from mol_to_spin_system.groups import degeneracies, proton_groups
-from mol_to_spin_system.shifts import DEFAULT_SOLVENT, predict_shifts
+from mol_to_spin_system.shifts import DEFAULT_SOLVENT
+from mol_to_spin_system.shifts_pretsch import predict_shifts_pretsch
 
 
 @dataclass
@@ -46,14 +47,14 @@ def build_spin_system(mol: Chem.Mol, solvent: str = DEFAULT_SOLVENT) -> SpinSyst
     groups, group_of_atom = proton_groups(mol)
     n = len(groups)
 
-    shifts = predict_shifts(mol, nucleus="H", solvent=solvent)
+    shifts = predict_shifts_pretsch(mol)        # pure-Python Pretsch (replaces HOSE)
     coups = all_couplings(mol)
 
     matrix = np.zeros((n, n))
 
     # diagonal: group-averaged chemical shift
     for gi, atoms in enumerate(groups):
-        vals = [shifts[a]["mean"] for a in atoms if a in shifts]
+        vals = [shifts[a] for a in atoms if a in shifts]
         matrix[gi, gi] = round(float(np.mean(vals)), 2) if vals else 0.0
 
     # off-diagonal: inter-group coupling, averaged over contributing atom pairs

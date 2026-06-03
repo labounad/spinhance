@@ -12,7 +12,8 @@ from rdkit import Chem
 from rdkit.Geometry import Point3D
 
 from mol_to_spin_system.coupling import all_couplings_typed
-from mol_to_spin_system.shifts import DEFAULT_SOLVENT, predict_shifts
+from mol_to_spin_system.shifts import DEFAULT_SOLVENT
+from mol_to_spin_system.shifts_pretsch import predict_shifts_pretsch
 
 # atom record from a parsed XYZ block: (symbol, x, y, z, group_label, tier_class)
 Atom = tuple[str, float, float, float, "str | None", "str | None"]
@@ -133,15 +134,14 @@ def entry_to_spin_system(
     """
     mol = _build_mol(comment, atoms)
 
-    # The predictor's 3D stereo-aware HOSE path can crash on some stereocentres
-    # (needs 2D coords); fall back to the non-3D prediction in that case.
-    try:
-        raw_shifts = predict_shifts(mol, "H", solvent, use_3d=True)
-    except RuntimeError:
-        raw_shifts = predict_shifts(mol, "H", solvent, use_3d=False)
-    # keep the predictor's empirical spread (min/max), not just the mean, so a
-    # randomized shift can be sampled downstream (mol_to_spin_system.augment).
-    per_atom = {i: (v["mean"], v["min"], v["max"]) for i, v in raw_shifts.items()}
+    # Chemical shifts from the pure-Python Pretsch additivity engine — replaces
+    # the nmrshiftdb2/HOSE Java predictor (removes that dependency, unblocking
+    # the predictor-free rebuild). It is a point estimate per proton; the
+    # per-group variability ("over-dispersion") is injected downstream by the
+    # bake (mol_to_spin_system.augment), so min == max == mean here and the
+    # bake's sigma floor supplies the spread.
+    raw_shifts = predict_shifts_pretsch(mol)
+    per_atom = {i: (d, d, d) for i, d in raw_shifts.items()}
     couplings = all_couplings_typed(mol)  # {(i,j): (J, type)}
 
     # labelled (non-exchangeable) protons only

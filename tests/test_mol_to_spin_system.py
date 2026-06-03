@@ -182,15 +182,16 @@ requires_predictor = pytest.mark.skipif(
 )
 
 
-@requires_predictor
 def test_matrix_ethanol():
+    # build_spin_system is now Java-free (Pretsch shift engine), so this runs
+    # without the nmrshiftdb predictor.
     from mol_to_spin_system.matrix import build_spin_system
 
     system = build_spin_system(make_test_mol_3d("CCO"))
     assert system.n_groups == 2
     assert system.degeneracy.tolist() == [3, 2]
     assert system.matrix[0, 1] == system.matrix[1, 0]  # symmetric
-    assert system.matrix[0, 1] > 5.0                    # ~6.8 Hz CH3-CH2
+    assert system.matrix[0, 1] > 5.0                    # ~6.9 Hz CH3-CH2 (vicinal)
     assert 0.0 < system.matrix[0, 0] < 10.0             # plausible 1H shift
     assert system.pack().shape == (8, 9)
 
