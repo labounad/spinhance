@@ -168,6 +168,26 @@ class TestAnalyzeSpinSystems:
             f"Expected 1 HARD aromatic pair, got {hard_aromatic}"
         )
 
+    def test_symmetric_remote_methyls_each_hard(self):
+        """Two symmetry-equivalent *remote* methyl rotors must each be one HARD
+        group, not split into individual protons.
+
+        In this symmetric bis(2-methyl-3,4,5-trihydroxyphenyl) sulfoxide the
+        D-substitution test merges all six methyl protons into one homotopic
+        class.  That class is not magnetically equivalent as a whole (the two
+        methyls see the aromatic H at different bond-path distances), but each
+        complete methyl is still a single HARD spin group.  Regression test for
+        the symmetric-rotor over-count bug: the molecule has 4 groups
+        ([3, 3, 1, 1]), not 8.
+        """
+        smi = "CC1=C(C=C(C(=C1O)O)O)S(=O)C2=C(C(=C(C(=C2)O)O)O)C"
+        n, sizes = analyze_spin_systems(_mol(smi))
+        assert n == 4
+        assert sizes == [3, 3, 1, 1]
+        _, groups = classify_spin_groups(_mol(smi))
+        hard_methyls = [g for g in groups if g.tier == "HARD" and len(g.h_indices) == 3]
+        assert len(hard_methyls) == 2
+
     # ── enantiotopic cases ───────────────────────────────────────────────────
     def test_enantiotopic_ch2_counts_separately(self):
         """CH₂ in fluorochloromethane: two enantiotopic H → 2 groups."""
