@@ -800,7 +800,7 @@
                   the model learns the chemistry, not a lookup table.
                   <a class="grad-link" href="dataset.html">Explore the dataset &rarr;</a></p>
                 <div class="stage-detail">
-                  <div class="detail-row"><span class="dl">Shifts:</span><span class="dv">Pure-Python Pretsch additivity &mdash; aromatic base + ortho/meta/para increments, Shoolery aliphatic rules, alkene gem/cis/trans, per-ring heteroaromatic bases</span></div>
+                  <div class="detail-row"><span class="dl">Shifts:</span><span class="dv">Experimentally-derived additivity constants &mdash; aromatic base + ortho/meta/para increments, Shoolery aliphatic rules, alkene gem/cis/trans, per-ring heteroaromatic bases</span></div>
                   <div class="detail-row"><span class="dl">Couplings:</span><span class="dv">Mechanism-specific J &mdash; geminal ²J, vicinal ³J, aromatic ring-position-aware ³/⁴J, olefinic cis/trans/gem, long-range / benzylic ⁴J</span></div>
                   <div class="detail-row"><span class="dl">Dispersion:</span><span class="dv">Class-aware Gaussian jitter (shift σ floor 0.15 ppm; sign-preserving ±25 Hz clamp) so values sample the real chemical space instead of fixed table constants</span></div>
                   <div class="detail-row"><span class="dl">Held-out split:</span><span class="dv">A leakage-controlled global 10% test set &mdash; union-find clustering on matrix fingerprint + InChIKey keeps near-duplicate molecules on the same side of the split</span></div>
