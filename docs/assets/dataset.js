@@ -46,28 +46,40 @@
       return padL + (span * i) / n;
     }
 
+    // value -> plot transform (linear, or log10(1+v) for skewed counts)
+    const T = opt.logY ? (v) => Math.log10(v + 1) : (v) => v;
+    const yMax = T(maxC) || 1;
+    const fmtV = (v) => v >= 1000 ? (v / 1000).toFixed(v >= 10000 ? 0 : 1) + "k" : v.toFixed(0);
+
     function draw() {
       const P = PAL();
       const { ctx, W, H } = geom();
       const padL = 44, padR = 10, padT = 12, padB = 26;
+      const plotH = H - padT - padB;
       ctx.clearRect(0, 0, W, H);
       // y gridlines + labels
       ctx.font = "11px ui-monospace, Menlo, monospace";
       ctx.textBaseline = "middle"; ctx.fillStyle = P.inkFaint; ctx.strokeStyle = P.line;
-      const ticks = 4;
-      for (let t = 0; t <= ticks; t++) {
-        const v = (maxC * t) / ticks;
-        const y = H - padB - ((H - padT - padB) * t) / ticks;
+      let tickVals;
+      if (opt.logY) {                          // decade ticks: 0,1,10,100,...
+        tickVals = [0];
+        for (let d = 1; d <= maxC; d *= 10) tickVals.push(d);
+      } else {
+        tickVals = []; const nt = 4;
+        for (let t = 0; t <= nt; t++) tickVals.push((maxC * t) / nt);
+      }
+      for (const v of tickVals) {
+        const y = H - padB - (plotH * T(v)) / yMax;
         ctx.globalAlpha = 0.5; ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
         ctx.globalAlpha = 1; ctx.textAlign = "right";
-        ctx.fillText(v >= 1000 ? (v / 1000).toFixed(0) + "k" : v.toFixed(0), padL - 6, y);
+        ctx.fillText(fmtV(v), padL - 6, y);
       }
       // bars
       const barGap = n > 40 ? 0.5 : 1.5;
       for (let i = 0; i < n; i++) {
         const x0 = xOf(i, W, padL, padR), x1 = xOf(i + 1, W, padL, padR);
         const bw = Math.max(1, x1 - x0 - barGap);
-        const bh = ((H - padT - padB) * h.counts[i]) / maxC;
+        const bh = h.counts[i] > 0 ? (plotH * T(h.counts[i])) / yMax : 0;
         const y = H - padB - bh;
         const grad = ctx.createLinearGradient(0, H - padB, 0, padT);
         grad.addColorStop(0, opt.c0 || P.accent);
@@ -129,8 +141,8 @@
       note: "Biggest set of groups all coupled to each other — strongly-overlapping multiplets." },
     { key: "n_cliques", title: "Maximal cliques", sub: "per molecule", unit: "",
       note: "Count of maximal mutually-coupled groups — a proxy for spectral complexity." },
-    { key: "degeneracy", title: "Group degeneracy", sub: "equivalent ¹H per group", unit: "H",
-      note: "Magnetically-equivalent protons per group — 1 (CH), 2 (CH₂), 3 (CH₃), 6/9 (equivalent methyls)." },
+    { key: "degeneracy", title: "Group degeneracy", sub: "equivalent ¹H per group · log scale", unit: "H", logY: true,
+      note: "Magnetically-equivalent protons per group — 1 (CH), 2 (CH₂), 3 (CH₃), 6/9 (equivalent methyls). Log y-axis: singlets dominate by orders of magnitude." },
     { key: "n_spins", title: "Protons per molecule", sub: "Σ degeneracy", unit: "H",
       note: "Total ¹H the 8 groups represent — the integrated proton count of the spectrum." },
     { key: "shift_spread", title: "Shift spread", sub: "δ(max) − δ(min) · ppm", unit: "ppm", dec: 1,
@@ -157,7 +169,7 @@
         <div class="hnote">${card.note}</div>`;
       grid.appendChild(el);
       const cv = el.querySelector("canvas"), tip = el.querySelector(".htip");
-      const draw = makeHist(cv, tip, h, { unit: card.unit, dec: card.dec });
+      const draw = makeHist(cv, tip, h, { unit: card.unit, dec: card.dec, logY: card.logY });
       redraws.push(draw); requestAnimationFrame(draw);
     });
     let t; window.addEventListener("resize", () => {
