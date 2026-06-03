@@ -25,12 +25,21 @@ def val_series(d):
                     "deg": round(m.get("deg_acc_balanced", 0), 4)})
     return out
 
-# ---- learning_curves.json : every v2 run that has >=1 val epoch ----
+def model_size(d):
+    try:
+        return json.load(open(os.path.join(d, "config.json")))["model"].get("size", "")
+    except Exception:
+        return ""
+
+# ---- learning_curves.json : v2 runs with >=1 val epoch.  For 500k/3M only the
+#      current (xl) models count — the cancelled medium runs must not show. ----
 lc = {}
 for tier in TIERS:
     for cfg in CFGS:
         d = latest_run(cfg, tier)
         if not d: continue
+        if tier != "64k" and model_size(d) != "xl":   # skip stale medium 500k/3M dirs
+            continue
         s = val_series(d)
         if not s: continue
         state = rr.read_status(d).get("state", "")

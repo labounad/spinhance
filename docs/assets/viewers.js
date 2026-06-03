@@ -126,7 +126,7 @@
   // Held-out (leakage-controlled global 10% PubChem) metrics. 64k tier trained;
   // 500k/3M training (numbers fill in once their checkpoints land).
   const RUNS = [
-    { m: "CNN baseline", arch: "ResNet-1D + typed heads", data: "64k", p: "5.0M", shift: "0.279", j: "1.80", f1: "0.807", deg: "0.732", st: "floor" },
+    { m: "CNN baseline", arch: "ResNet-1D + typed heads", data: "64k ChEMBL", p: "5.0M", shift: "0.78", j: "4.35", f1: "0.591", deg: "0.338", st: "floor" },
     { m: "64k·025", arch: "spingraph_decoder", data: "64k PubChem", p: "10M", shift: "0.083", j: "1.80", f1: "0.849", deg: "0.825", st: "trained" },
     { m: "64k·026", arch: "spingraph_decoder", data: "64k PubChem", p: "10M", shift: "0.079", j: "1.69", f1: "0.869", deg: "0.866", st: "trained" },
     { m: "64k·027", arch: "spingraph_decoder · best", data: "64k PubChem", p: "10M", shift: "0.047", j: "1.49", f1: "0.890", deg: "0.867", st: "production" },
@@ -175,22 +175,21 @@
       const ppm = data.ppm, mols = data.molecules; let idx = 0;
       // per-model predictions + per-model test-split membership
       const models = data.models || [{ key: "_", label: "model" }];
-      let mkey = (models.find(x => x.key === "light025") || models[0]).key;
-      let filterTest = false;
+      let mkey = (models.find(x => x.key === "027") || models[0]).key;   // default: best 64k model
       const labelOf = (k) => (models.find(x => x.key === k) || {}).label || k;
-      const inTest = (m) => (m.test_of || []).includes(mkey);          // is mol in the SELECTED model's test split?
+      const inTest = () => true;   // every molecule is in the shared global held-out set
       const predOf = (m) => (m.preds ? m.preds[mkey] : m);
       const spec = $("#txSpec", host), sel = $("#txSel", host), meta = $("#txMeta", host), mat = $("#txMatrix", host);
-      const modSel = $("#txModel", host), filterCb = $("#txFilter", host), statusEl = $("#txStatus", host);
+      const modSel = $("#txModel", host), statusEl = $("#txStatus", host);
       const el3d = $("#tx3d", host), load3d = $("#tx3dLoad", host), spinCb = $("#txSpin", host); let v3d = null;
       function applySpin() { if (v3d) v3d.spin(spinCb && spinCb.checked ? "y" : false, 0.6); }
       if (spinCb) spinCb.addEventListener("change", applySpin);
       if (modSel) { modSel.innerHTML = models.map(mm => `<option value="${mm.key}">${mm.label}</option>`).join(""); modSel.value = mkey; }
-      const visibleIdx = () => mols.map((m, i) => i).filter(i => !filterTest || inTest(mols[i]));
+      const visibleIdx = () => mols.map((m, i) => i);
       function rebuildMolOptions() {
         const vis = visibleIdx();
         sel.innerHTML = vis.map(i => { const m = mols[i];
-          return `<option value="${i}">${inTest(m) ? "● " : ""}${m.id} · ${m.n_spins}H</option>`; }).join("");
+          return `<option value="${i}">${m.id} · ${m.n_spins}H</option>`; }).join("");
         if (!vis.includes(idx)) idx = vis.length ? vis[0] : 0;
         sel.value = idx;
       }
@@ -242,12 +241,10 @@
            <div class="jwrap"><div><div class="jlbl">J — target</div>${grid(m.true_J)}</div><div><div class="jlbl">J — predicted</div>${grid(P.pred_J)}</div></div>`;
       }
       function show() {
-        const m = mols[idx], P = predOf(m), held = inTest(m); sel.value = idx;
+        const m = mols[idx], P = predOf(m); sel.value = idx;
         if (statusEl) {
-          statusEl.className = "tx-status " + (held ? "is-test" : "is-ood");
-          statusEl.innerHTML = held
-            ? `● held-out test molecule for <b>${labelOf(mkey)}</b>`
-            : `● not in <b>${labelOf(mkey)}</b>'s test split — out-of-distribution`;
+          statusEl.className = "tx-status is-test";
+          statusEl.innerHTML = `● held-out test molecule — no model trained on it · predictions from <b>${labelOf(mkey)}</b>`;
         }
         meta.innerHTML = `<span class="mono">${m.smiles || m.id}</span> · ${m.n_spins} protons ·
           shift MAE <b>${P.shift_mae.toFixed(3)}</b> ppm · J MAE <b>${P.j_mae.toFixed(2)}</b> Hz`;
@@ -257,10 +254,9 @@
         p = (p + d + vis.length) % vis.length; idx = vis[p]; show(); }
       sel.onchange = () => { idx = +sel.value; show(); };
       if (modSel) modSel.onchange = () => { mkey = modSel.value; rebuildMolOptions(); show(); };
-      if (filterCb) filterCb.onchange = () => { filterTest = filterCb.checked; rebuildMolOptions(); show(); };
       $("#txPrev", host).onclick = () => step(-1);
       $("#txNext", host).onclick = () => step(1);
-      idx = Math.max(0, mols.findIndex(inTest));   // open on a genuine held-out example for the default model
+      idx = 0;
       rebuildMolOptions(); show(); window.addEventListener("resize", drawSpec);
     }).catch(e => { host.innerHTML = "<p class='muted'>test explorer data unavailable</p>"; console.error(e); });
   }
