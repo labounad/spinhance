@@ -1,289 +1,262 @@
 """
 model.diagnostics.live_dashboard
 ================================
-Streamlit live dashboard for monitoring active or completed training runs from
-S3 (s3://spinhance-data/training/<session>/). Auto-refreshes every 5 s when live.
+Streamlit dashboard for monitoring the SpinHance training fleet. Reads the
+canonical run layout (status.json / metrics.jsonl / summary.json / probes/)
+directly from a **runs directory** (default ``model/runs/``) via
+``autoai.run_reader`` — so it works on the HPC's GPFS runs (rsync them locally
+or run with an SSH port-forward) as well as S3 sessions.
 
-Reads the canonical diagnostics contract (status.json / metrics.jsonl /
-summary.json / probes/) that both the rebuilt trainer and the legacy trainer
-emit, resolving two on-disk layouts automatically:
-  * legacy (flat):   <session>/status.json
-  * rebuilt (nested):<session>/runs/<run_id>/status.json   (synced by launch_ec2.sh)
+Multi-run by design: a fleet comparison table + overlaid learning curves across
+every matching run, plus a per-run detail view. Styled to match the project
+website (dark palette, accent gradient, mono numerals).
 
 Usage:
     streamlit run model/diagnostics/live_dashboard.py
+    SPINHANCE_RUNS=/path/to/runs streamlit run model/diagnostics/live_dashboard.py
 """
 from __future__ import annotations
 
-import json
+import os
+import re
 import sys
 from pathlib import Path
 
-import pandas as pd
 import streamlit as st
 
-# Streamlit executes this file directly, so the repo root isn't on sys.path.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from autoai import run_reader as rr  # noqa: E402
 
-from model import s3io  # noqa: E402
+st.set_page_config(page_title="SpinHance · training fleet", layout="wide",
+                   initial_sidebar_state="expanded")
 
-S3_TRAINING = "s3://spinhance-data/training"
+# ── Website palette (dark theme) ────────────────────────────────────────────────
+BG, PANEL, PANEL2 = "#07090d", "#0f131b", "#121826"
+INK, INK_SOFT, INK_FAINT = "#eef1f6", "#aab2c2", "#6a7385"
+LINE, LINE_STRONG = "#1c2330", "#2a3344"
+ACCENT, ACCENT2, ACCENT3 = "#5b8cff", "#34e3c4", "#b07bff"
+# categorical run colors (mirror the website's learning-curve series)
+PALETTE = [ACCENT, ACCENT3, ACCENT2, "#e0a44d", "#7ee06b", "#e06b6b",
+           "#6bd0e0", "#c46be0", "#f5a623", "#9aa0a6"]
+MONO = '"SF Mono","JetBrains Mono",ui-monospace,Menlo,Consolas,monospace'
 
-st.set_page_config(page_title="SpinHance Training", layout="wide")
-
-
-# ── S3 I/O helpers ─────────────────────────────────────────────────────────────
-
-def _creds_error(exc: Exception) -> None:
-    msg = str(exc)
-    if any(kw in msg for kw in ("Token has expired", "Unable to locate credentials",
-                                "ExpiredToken", "NoCredentialsError")):
-        st.error(
-            "**AWS credentials expired or missing.**  \n"
-            "Run: `aws sso login --profile hack-scripps`  \n"
-            "Then restart Streamlit (or set `AWS_PROFILE=hack-scripps` in your shell)."
-        )
-
-
-def _s3_read_json(uri: str, default=None):
-    try:
-        return s3io.get_json(uri, default)
-    except Exception as e:
-        _creds_error(e)
-        return default
-
-
-def _s3_read_jsonl(uri: str) -> pd.DataFrame:
-    try:
-        text = s3io.get_text(uri, "") or ""
-        rows = []
-        for line in text.splitlines():
-            try:
-                rows.append(json.loads(line))
-            except json.JSONDecodeError:
-                pass
-        return pd.json_normalize(rows) if rows else pd.DataFrame()
-    except Exception as e:
-        _creds_error(e)
-        return pd.DataFrame()
-
-
-def _list_sessions() -> list[str]:
-    try:
-        return sorted(s3io.list_prefixes(S3_TRAINING), reverse=True)
-    except Exception as e:
-        _creds_error(e)
-        return []
+st.markdown(f"""
+<style>
+  .stApp {{ background:{BG}; }}
+  /* gradient page title */
+  .sh-title {{ font:700 26px/1.1 {MONO}; letter-spacing:-.01em;
+    background:linear-gradient(90deg,{ACCENT},{ACCENT3});
+    -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent; }}
+  .sh-eyebrow {{ font:600 12px {MONO}; letter-spacing:.18em; text-transform:uppercase; color:{ACCENT2}; }}
+  .sh-sub {{ color:{INK_FAINT}; font:13px {MONO}; }}
+  h1,h2,h3 {{ font-family:{MONO}; color:{INK}; }}
+  /* metric cards */
+  [data-testid="stMetric"] {{ background:{PANEL}; border:1px solid {LINE}; border-radius:12px;
+    padding:10px 14px; }}
+  [data-testid="stMetricValue"] {{ font-family:{MONO}; color:{INK}; }}
+  [data-testid="stMetricLabel"] {{ color:{INK_FAINT}; }}
+  /* fleet comparison table (mirrors the website .cmp) */
+  table.cmp {{ width:100%; border-collapse:collapse; font:13px {MONO}; }}
+  table.cmp th {{ text-align:left; padding:7px 10px; border-bottom:2px solid {LINE_STRONG};
+    color:{INK_SOFT}; font-weight:700; white-space:nowrap; }}
+  table.cmp td {{ padding:7px 10px; border-bottom:1px solid {LINE}; color:{INK_SOFT}; }}
+  table.cmp td.num {{ text-align:right; font-variant-numeric:tabular-nums; }}
+  table.cmp td.best {{ font-weight:800; background:linear-gradient(90deg,{ACCENT},{ACCENT3});
+    -webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent; }}
+  table.cmp td.run {{ color:{INK}; }}
+  .chip {{ display:inline-block; padding:1px 8px; border-radius:999px; font:600 11px {MONO}; }}
+  .chip.running {{ color:{ACCENT2}; border:1px solid {ACCENT2}55; background:{ACCENT2}14; }}
+  .chip.finished {{ color:{ACCENT}; border:1px solid {ACCENT}55; background:{ACCENT}14; }}
+  .chip.failed,.chip.unknown {{ color:#e06b6b; border:1px solid #e06b6b55; background:#e06b6b14; }}
+</style>
+""", unsafe_allow_html=True)
 
 
-def _resolve_run_uri(session_uri: str) -> str:
-    """Find where the run artifacts actually live under a session.
-
-    Flat legacy sessions have status.json directly; rebuilt-trainer sessions nest
-    them under runs/<run_id>/. Returns the newest run dir for the nested case.
-    """
-    if _s3_read_json(f"{session_uri}/status.json") is not None:
-        return session_uri
-    try:
-        runs = sorted(s3io.list_prefixes(f"{session_uri}/runs"))
-        if runs:
-            return f"{session_uri}/runs/{runs[-1]}"
-    except Exception:
-        pass
-    return session_uri
+def themed(fig, height=300):
+    fig.update_layout(
+        height=height, paper_bgcolor=PANEL, plot_bgcolor=PANEL,
+        font=dict(color=INK_SOFT, family="SF Mono, monospace", size=12),
+        margin=dict(t=42, b=28, l=48, r=14), hovermode="x unified",
+        legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(size=10), orientation="h",
+                    y=1.12, x=0),
+        title=dict(font=dict(color=INK, size=13)))
+    fig.update_xaxes(gridcolor=LINE, zerolinecolor=LINE, linecolor=LINE_STRONG)
+    fig.update_yaxes(gridcolor=LINE, zerolinecolor=LINE, linecolor=LINE_STRONG)
+    return fig
 
 
-# ── Sidebar ───────────────────────────────────────────────────────────────────
+# ── run helpers ─────────────────────────────────────────────────────────────────
+
+def _val_series(run_dir, key):
+    """(epochs, values) for a val metric across a run's metrics.jsonl."""
+    xs, ys = [], []
+    for r in rr.read_metrics(run_dir):
+        if r.get("split") != "val":
+            continue
+        m = r.get("metrics", {})
+        if key in m and m[key] is not None:
+            xs.append(r.get("epoch", len(xs)))
+            ys.append(m[key])
+    return xs, ys
+
+
+def _train_series(run_dir, key):
+    xs, ys = [], []
+    for r in rr.read_metrics(run_dir):
+        if r.get("split") != "train_step":
+            continue
+        m = r.get("metrics", {})
+        if key in m and m[key] is not None:
+            xs.append(r.get("step", len(xs)))
+            ys.append(m[key])
+    return xs, ys
+
+
+def _label(run_id: str) -> str:
+    """Strip the timestamp prefix + hash suffix → e.g. v2_026_500k."""
+    m = re.search(r"(v2_\d+_\w+|[a-z]+_\d+(?:_\w+)?)", run_id)
+    return m.group(1) if m else run_id
+
+
+# ── sidebar ─────────────────────────────────────────────────────────────────────
 
 with st.sidebar:
-    st.title("SpinHance Training")
-    session_options = _list_sessions()
-    manual = st.text_input("Paste URI (overrides dropdown)", placeholder=f"{S3_TRAINING}/…")
-    if manual.strip():
-        raw = manual.strip().rstrip("/")
-        run_uri = _resolve_run_uri(raw)
-        session_name = raw.rsplit("/", 1)[-1]
-    elif session_options:
-        session_name = st.selectbox("Session", session_options)
-        run_uri = _resolve_run_uri(f"{S3_TRAINING}/{session_name}")
+    st.markdown('<div class="sh-eyebrow">SpinHance</div>', unsafe_allow_html=True)
+    default_root = os.environ.get("SPINHANCE_RUNS", str(rr.RUNS_ROOT))
+    runs_root = st.text_input("Runs directory", default_root,
+                              help="Local path to the runs/ dir (rsync from HPC, or an s3:// session).")
+    runs = rr.list_runs(runs_root)
+    flt = st.text_input("Filter", "v2_", help="Substring match on run id (blank = all).")
+    if flt.strip():
+        runs = [d for d in runs if flt.strip() in d.name]
+    labels = {str(d): _label(d.name) for d in runs}
+    st.caption(f"{len(runs)} run(s)")
+    live = st.toggle("Auto-refresh (10 s)", value=True)
+    interval = "10s" if live else None
+
+
+# ── dashboard ───────────────────────────────────────────────────────────────────
+
+VAL_METRICS = [
+    ("shift_mae_ppm", "Shift MAE (ppm)", True),
+    ("j_mae_hz", "J MAE (Hz)", True),
+    ("presence_f1", "Presence F1", False),
+    ("deg_acc_balanced", "Degeneracy acc (bal.)", False),
+]
+
+
+def _fleet_table(runs):
+    rows = []
+    for d in runs:
+        a = rr.analyze_run(d)
+        bm = a.get("best_metrics", {}) or {}
+        rows.append({
+            "run": labels[str(d)], "state": a.get("state", "unknown"),
+            "epoch": rr.read_status(d).get("epoch", "—"),
+            "shift": bm.get("shift_mae_ppm"), "j": bm.get("j_mae_hz"),
+            "f1": bm.get("presence_f1"), "deg": bm.get("deg_acc_balanced"),
+        })
+    if not rows:
+        st.info("No runs found. Point the sidebar at a runs directory (rsync the HPC's model/runs/).")
+        return
+    # best per metric column
+    def _best(k, lower):
+        vals = [r[k] for r in rows if isinstance(r[k], (int, float))]
+        return (min if lower else max)(vals) if vals else None
+    best = {"shift": _best("shift", True), "j": _best("j", True),
+            "f1": _best("f1", False), "deg": _best("deg", False)}
+    hdr = "<tr><th>run</th><th>state</th><th>epoch</th><th>shift MAE</th><th>J MAE</th><th>F1</th><th>deg-bal</th></tr>"
+    body = ""
+    for r in rows:
+        def cell(k, fmt):
+            v = r[k]
+            if not isinstance(v, (int, float)):
+                return '<td class="num">—</td>'
+            cls = "num best" if best[k] is not None and abs(v - best[k]) < 1e-9 else "num"
+            return f'<td class="{cls}">{fmt.format(v)}</td>'
+        body += (f'<tr><td class="run">{r["run"]}</td>'
+                 f'<td><span class="chip {r["state"]}">{r["state"]}</span></td>'
+                 f'<td class="num">{r["epoch"]}</td>'
+                 f'{cell("shift","{:.3f}")}{cell("j","{:.2f}")}'
+                 f'{cell("f1","{:.3f}")}{cell("deg","{:.3f}")}</tr>')
+    st.markdown(f'<table class="cmp">{hdr}{body}</table>', unsafe_allow_html=True)
+
+
+def _curves(runs):
+    import plotly.graph_objects as go
+    color = {str(d): PALETTE[i % len(PALETTE)] for i, d in enumerate(runs)}
+    grid = st.columns(2)
+    for i, (key, title, _lower) in enumerate(VAL_METRICS):
+        fig = go.Figure()
+        any_data = False
+        for d in runs:
+            xs, ys = _val_series(d, key)
+            if xs:
+                any_data = True
+                fig.add_trace(go.Scatter(x=xs, y=ys, mode="lines+markers",
+                              name=labels[str(d)], line=dict(color=color[str(d)], width=2),
+                              marker=dict(size=4)))
+        if not any_data:
+            continue
+        fig.update_layout(title=title)
+        grid[i % 2].plotly_chart(themed(fig), use_container_width=True)
+
+
+def _detail(d):
+    import plotly.graph_objects as go
+    status = rr.read_status(d)
+    st.markdown(f"#### {labels[str(d)]}  ·  <span class='sh-sub'>{Path(d).name}</span>",
+                unsafe_allow_html=True)
+    c = st.columns(6)
+    c[0].metric("State", status.get("state", "—"))
+    c[1].metric("Epoch", f"{status.get('epoch','?')} / {status.get('epochs','?')}")
+    c[2].metric("Stage", status.get("stage", "?"))
+    bs = status.get("best_score")
+    c[3].metric("Best score", f"{bs:.4f}" if isinstance(bs, (int, float)) else "—")
+    c[4].metric("Step", f"{status.get('global_step','?')}")
+    c[5].metric("Device", status.get("device", "?"))
+
+    # training loss + LR
+    lx, ly = _train_series(d, "loss_total")
+    if lx:
+        cols = st.columns(2)
+        f = go.Figure(go.Scatter(x=lx, y=ly, mode="lines", line=dict(color=ACCENT, width=1.6)))
+        f.update_layout(title="Training loss"); cols[0].plotly_chart(themed(f, 240), use_container_width=True)
+        rx, ry = _train_series(d, "lr")
+        if rx:
+            g = go.Figure(go.Scatter(x=rx, y=ry, mode="lines", line=dict(color=ACCENT3, width=1.6)))
+            g.update_layout(title="Learning rate"); cols[1].plotly_chart(themed(g, 240), use_container_width=True)
     else:
-        raw = st.text_input("Session URI", f"{S3_TRAINING}/latest")
-        run_uri = _resolve_run_uri(raw.rstrip("/"))
-        session_name = raw.rstrip("/").rsplit("/", 1)[-1]
-    live = st.toggle("Auto-refresh (5 s)", value=True)
-    interval = "5s" if live else None
-    st.caption(f"`{run_uri.replace(S3_TRAINING + '/', '')}`")
+        st.info("Waiting for training metrics… (run may still be loading/preloading).")
 
+    # failure analysis (latest probe epoch)
+    fs = rr.read_failure_summary(d)
+    if fs:
+        st.markdown("###### Failure analysis")
+        cc = st.columns(2)
+        cc[0].metric("Dominant failure", fs.get("dominant_failure", "—"))
+        cc[1].metric("OK molecules", fs.get("n_ok", "?"))
+        fd = fs.get("failure_distribution", {})
+        if fd:
+            f = go.Figure(go.Bar(x=list(fd.keys()), y=list(fd.values()),
+                          marker_color=ACCENT))
+            st.plotly_chart(themed(f, 240), use_container_width=True)
 
-# ── Plot helper ────────────────────────────────────────────────────────────────
-
-def _line(df: pd.DataFrame, x: str, y: str, title: str):
-    # Skip silently if the column isn't present — trainers log different metric
-    # sets (matrix vs surrogate), so a panel should never crash on a missing key.
-    if df.empty or y not in df.columns or x not in df.columns:
-        return
-    sub = df[[x, y]].dropna()
-    if sub.empty:
-        return
-    try:
-        import plotly.express as px
-        fig = px.line(sub, x=x, y=y, title=title, markers=True)
-        fig.update_layout(height=260, margin=dict(t=40, b=10, l=10, r=10))
-        st.plotly_chart(fig, use_container_width=True)
-    except ImportError:
-        st.line_chart(sub.set_index(x)[[y]])
-
-
-# ── Main dashboard ────────────────────────────────────────────────────────────
 
 def _dashboard():
-    status = _s3_read_json(f"{run_uri}/status.json", {})
-    metrics_df = _s3_read_jsonl(f"{run_uri}/metrics.jsonl")
-
-    state = status.get("state", "—")
-    icon = {"running": "🟢", "finished": "🔵"}.get(state, "🔴")
-    st.subheader(f"{icon}  {session_name}")
-
-    c = st.columns(6)
-    c[0].metric("State", state)
-    c[1].metric("Epoch", f"{status.get('epoch', '?')} / {status.get('epochs', '?')}")
-    c[2].metric("Stage", status.get("stage", "?"))
-    best = status.get("best_score")
-    c[3].metric("Best", f"{best:.4f}" if isinstance(best, (int, float)) else "—")
-    c[4].metric("Device", status.get("device", "?"))
-    c[5].metric("Step", status.get("global_step", "?"))
-
-    if metrics_df.empty:
-        st.info("Waiting for training metrics…")
+    st.markdown('<div class="sh-eyebrow">training fleet</div>'
+                '<div class="sh-title">SpinHance · run monitor</div>', unsafe_allow_html=True)
+    if not runs:
+        st.info("No runs match. Set the runs directory + filter in the sidebar.")
         return
+    st.markdown("### Fleet")
+    _fleet_table(runs)
+    st.markdown("### Learning curves")
+    _curves(runs)
+    st.markdown("### Run detail")
+    sel = st.selectbox("Run", [str(d) for d in runs], format_func=lambda s: labels[s])
+    _detail(Path(sel) if not str(sel).startswith("s3://") else sel)
 
-    def _split(name):
-        if "split" not in metrics_df.columns:
-            return pd.DataFrame()
-        return metrics_df[metrics_df["split"] == name].copy()
-
-    val_df = _split("val")
-    train_df = _split("train_step")
-
-    if not val_df.empty:
-        st.subheader("Validation")
-        key_metrics = [
-            # matrix model
-            ("metrics.shift_mae_ppm", "Shift MAE (ppm)"),
-            ("metrics.j_mae_hz", "J MAE (Hz)"),
-            ("metrics.presence_f1", "Presence F1"),
-            ("metrics.deg_acc_balanced", "Degeneracy acc (balanced)"),
-            # surrogate renderer (matrix -> spectrum)
-            ("metrics.w1", "Spectral W1 (mean field)"),
-            ("metrics.w1_90", "W1 @ 90 MHz"),
-            ("metrics.w1_600", "W1 @ 600 MHz"),
-            ("metrics.cosine_90", "Cosine @ 90 MHz"),
-            ("metrics.cosine_600", "Cosine @ 600 MHz"),
-        ]
-        available = [(col, lbl) for col, lbl in key_metrics if col in val_df.columns]
-        cols = st.columns(min(3, max(1, len(available))))
-        for i, (col, lbl) in enumerate(available):
-            with cols[i % len(cols)]:
-                _line(val_df, "epoch", col, lbl)
-
-    if not train_df.empty and "metrics.loss_total" in train_df.columns:
-        st.subheader("Training loss")
-        col_a, col_b = st.columns(2)
-        with col_a:
-            _line(train_df, "step", "metrics.loss_total", "Total loss")
-        if "metrics.lr" in train_df.columns:
-            with col_b:
-                _line(train_df, "step", "metrics.lr", "Learning rate")
-
-    if "metrics.w_spec" in train_df.columns:
-        st.subheader("Curriculum weights")
-        col_a, col_b = st.columns(2)
-        with col_a:
-            _line(train_df, "step", "metrics.w_mat", "w_mat (matrix anchor)")
-        with col_b:
-            _line(train_df, "step", "metrics.w_spec", "w_spec (spectral loss)")
-
-    if {"metrics.cuda_allocated_gb", "metrics.cuda_reserved_gb"} & set(train_df.columns):
-        st.subheader("GPU memory")
-        cols = st.columns(2)
-        with cols[0]:
-            _line(train_df, "step", "metrics.cuda_allocated_gb", "Allocated (GB)")
-        with cols[1]:
-            _line(train_df, "step", "metrics.cuda_reserved_gb", "Reserved (GB)")
-
-    summary = _s3_read_json(f"{run_uri}/summary.json")
-    if summary and "best_metrics" in summary:
-        st.subheader("Best metrics")
-        bm = summary["best_metrics"]
-        st.dataframe(
-            pd.DataFrame([{"metric": k, "value": f"{v:.4f}" if isinstance(v, float) else str(v)}
-                          for k, v in bm.items()]),
-            use_container_width=True, hide_index=True,
-        )
-        if summary.get("failure_summary", {}).get("dominant_failure"):
-            st.info(f"Dominant failure: **{summary['failure_summary']['dominant_failure']}**  "
-                    f"— {summary.get('recommendation', '')}")
-
-    # Probe inspector (populated once the probe/failure evaluators are wired into
-    # the rebuilt trainer; harmlessly empty until then).
-    try:
-        probes_prefix = f"{run_uri}/probes"
-        epoch_names = sorted(s3io.list_prefixes(probes_prefix), reverse=True)
-    except Exception:
-        epoch_names = []
-
-    if epoch_names:
-        st.subheader("Probe diagnostics")
-        sel = st.selectbox("Probe epoch", epoch_names)
-        ep_prefix = f"{run_uri}/probes/{sel}"
-
-        pm = _s3_read_json(f"{ep_prefix}/probe_metrics.json", {})
-        if pm:
-            pc = st.columns(len(pm))
-            for i, (k, v) in enumerate(pm.items()):
-                pc[i].metric(k.replace("_", " "), f"{v:.3f}")
-
-        worst = _s3_read_json(f"{ep_prefix}/worst_cases.json", [])
-        if worst:
-            st.write("Worst probe cases (by shift MAE)")
-            wdf = pd.DataFrame([{
-                "mol_id": m["mol_id"],
-                "shift_mae": f"{m.get('shift_mae_ppm', 0):.3f}",
-                "j_mae": f"{m.get('j_mae_hz', 0):.2f}",
-                "pres_f1": f"{m.get('presence_f1', 0):.2f}",
-                "deg_acc": f"{m.get('deg_acc', 0):.2f}",
-            } for m in worst[:8]])
-            st.dataframe(wdf, use_container_width=True, hide_index=True)
-
-        try:
-            img_keys = sorted(k for k in s3io.list_keys(f"{ep_prefix}/")
-                              if k.endswith(".png") and "matrix_" in k)
-        except Exception:
-            img_keys = []
-        if img_keys:
-            n_show = min(6, len(img_keys))
-            st.write(f"Matrix plots ({len(img_keys)} probes, showing {n_show})")
-            img_cols = st.columns(3)
-            for i, key in enumerate(img_keys[:n_show]):
-                try:
-                    img_bytes = s3io.get_bytes(f"{ep_prefix}/{key}")
-                    if img_bytes:
-                        img_cols[i % 3].image(img_bytes)
-                except Exception:
-                    pass
-
-        fsummary = _s3_read_json(f"{ep_prefix}/failure_summary.json")
-        if fsummary:
-            st.subheader("Failure analysis")
-            col_a, col_b = st.columns(2)
-            col_a.metric("Dominant failure", fsummary.get("dominant_failure", "—"))
-            col_b.metric("OK molecules", fsummary.get("n_ok", "?"))
-            fd = fsummary.get("failure_distribution", {})
-            if fd:
-                st.bar_chart(pd.Series(fd, name="count"))
-
-
-# ── Fragment (auto-refresh if supported) ──────────────────────────────────────
 
 try:
     @st.fragment(run_every=interval)  # type: ignore[call-arg]
@@ -293,4 +266,4 @@ try:
 except TypeError:
     _dashboard()
     if live:
-        st.caption("⚠ Auto-refresh requires Streamlit ≥ 1.33 — showing static view.")
+        st.caption("⚠ Auto-refresh needs Streamlit ≥ 1.33 — static view.")

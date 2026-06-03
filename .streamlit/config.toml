@@ -1,0 +1,12 @@
+# SpinHance monitoring — theme matched to the project website (dark palette).
+[theme]
+base = "dark"
+primaryColor = "#5b8cff"             # --accent (blue)
+backgroundColor = "#07090d"          # --bg
+secondaryBackgroundColor = "#0f131b" # --panel
+textColor = "#eef1f6"                # --ink
+font = "monospace"
+
+[server]
+runOnSave = true
+headless = true
