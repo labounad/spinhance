@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Spinhance — explore the 8-spin dataset</title>
+<meta name="description" content="Interactive explorer for the Spinhance 8-spin ¹H NMR dataset: distributions of chemical shifts, J-couplings, spin-graph connectivity, cliques and degeneracy, plus the heuristics that build it." />
+<link rel="icon" type="image/svg+xml" href="favicon.svg" />
+<style>
+  :root{
+    --mono:"SF Mono",ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace;
+    --bg:#fafafa; --bg-soft:#f0f1f3; --panel:#ffffff; --panel-2:#f5f6f8;
+    --ink:#15171c; --ink-soft:#4a4f5a; --ink-faint:#8a909c;
+    --line:#e3e6ea; --line-strong:#cdd2da;
+    --accent:#3b6ef5; --accent-2:#22c1a5; --accent-3:#9b5cf6;
+    --shadow:0 1px 2px rgba(16,24,40,.06),0 8px 28px rgba(16,24,40,.06);
+  }
+  [data-theme="dark"]{
+    --bg:#07090d; --bg-soft:#0c0f15; --panel:#0f131b; --panel-2:#121826;
+    --ink:#eef1f6; --ink-soft:#aab2c2; --ink-faint:#6a7385;
+    --line:#1c2330; --line-strong:#2a3344;
+    --accent:#5b8cff; --accent-2:#34e3c4; --accent-3:#b07bff;
+    --shadow:0 1px 2px rgba(0,0,0,.5),0 16px 48px rgba(0,0,0,.45);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0; background:var(--bg); color:var(--ink);
+    font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; transition:background .4s ease,color .4s ease;}
+  a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+  h1,h2,h3{line-height:1.15;letter-spacing:-.02em;margin:0}
+  .mono{font-family:"SF Mono",ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace}
+
+  /* nav */
+  nav{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(12px);
+    background:color-mix(in srgb,var(--bg) 70%,transparent);
+    border-bottom:1px solid color-mix(in srgb,var(--line) 60%,transparent)}
+  .nav-in{display:flex;align-items:center;gap:18px;height:60px;max-width:1080px;margin:0 auto;padding:0 24px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:-.02em;font-size:18px;color:var(--ink)}
+  .brand:hover{text-decoration:none}
+  .brand .dot{width:18px;height:18px;border-radius:50%;
+    background:radial-gradient(circle at 35% 30%,var(--accent-2),var(--accent));
+    box-shadow:0 0 8px color-mix(in srgb,var(--accent) 70%,transparent)}
+  .nav-links{display:flex;gap:22px;margin-left:auto;align-items:center}
+  .nav-links a{color:var(--ink-soft);font-size:14px;font-weight:500}
+  .nav-links a:hover{color:var(--ink);text-decoration:none}
+  .toggle{cursor:pointer;border:1px solid var(--line-strong);background:var(--panel);
+    color:var(--ink);width:40px;height:34px;border-radius:9px;display:grid;place-items:center;transition:.2s;font-size:16px}
+  .toggle:hover{border-color:var(--accent)}
+
+  /* hero */
+  .hero{padding:64px 0 30px}
+  .kicker{font:600 12px/1 var(--mono,"SF Mono",ui-monospace,monospace);letter-spacing:.2em;
+    text-transform:uppercase;color:var(--accent-2);margin-bottom:14px}
+  .hero h1{font-size:clamp(30px,5vw,46px)}
+  .grad{background:linear-gradient(90deg,var(--accent),var(--accent-3));
+    -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
+  .hero p{color:var(--ink-soft);max-width:640px;margin-top:16px;font-size:17px}
+  .pill{display:inline-flex;gap:7px;align-items:center;margin-top:18px;padding:7px 13px;border-radius:999px;
+    border:1px solid var(--line-strong);background:var(--panel);font-size:13px;color:var(--ink-soft)}
+  .pill b{color:var(--ink)} .pill .mono{font-size:13px}
+
+  .sec{padding:30px 0 10px}
+  .sec h2{font-size:24px;margin-bottom:6px}
+  .sec .lead{color:var(--ink-faint);font-size:14px;margin-bottom:20px}
+
+  /* heuristics cards */
+  .rules{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+  .rule{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow)}
+  .rule .n{font:700 12px var(--mono,monospace);color:var(--accent);letter-spacing:.12em}
+  .rule h3{font-size:16px;margin:6px 0 6px}
+  .rule p{color:var(--ink-soft);font-size:14px;margin:0}
+
+  /* histogram grid */
+  #histGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:16px}
+  .hcard{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 14px 12px;box-shadow:var(--shadow)}
+  .hhead{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px}
+  .htitle{font-weight:700;font-size:15px}
+  .hsub{color:var(--ink-faint);font-size:12px;margin-top:2px}
+  .hstat{text-align:right;color:var(--ink-faint);font:11px var(--mono,monospace);line-height:1.4}
+  .hstat b{color:var(--accent-2);font-size:15px}
+  .hcanvas-wrap{position:relative}
+  .hcanvas{width:100%;height:172px;display:block}
+  .htip{position:absolute;pointer-events:none;opacity:0;transition:opacity .1s;z-index:5;
+    background:var(--panel-2);border:1px solid var(--line-strong);border-radius:8px;
+    padding:6px 9px;font:12px var(--mono,monospace);color:var(--ink);white-space:nowrap;
+    box-shadow:var(--shadow);transform:translateY(-100%)}
+  .htip b{color:var(--accent-2)} .htip .tdim{color:var(--ink-faint)}
+  .hnote{color:var(--ink-faint);font-size:12.5px;margin-top:9px;line-height:1.5}
+
+  footer{padding:40px 0 60px;color:var(--ink-faint);font-size:13px;border-top:1px solid var(--line);margin-top:40px}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-in">
+    <a class="brand" href="index.html"><span class="dot"></span>Spinhance</a>
+    <div class="nav-links">
+      <a href="index.html">← Back to site</a>
+      <a href="index.html#pipeline">Pipeline</a>
+      <a href="index.html#results">Results</a>
+      <button class="toggle" id="themeBtn" title="Toggle light / dark" aria-label="Toggle theme">☀️</button>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="kicker">The dataset</div>
+    <h1>Explore the <span class="grad">8-spin dataset.</span></h1>
+    <p>Every molecule is reduced to exactly eight magnetically-distinct ¹H spin groups, then turned
+       into a chemical-shift / J-coupling spin graph and a simulated 90 MHz spectrum. Below: how that
+       dataset is built, and the distributions it produces — hover any bar for counts.</p>
+    <span class="pill">computed over a <b class="mono" data-n>—</b>-molecule sample of the rebuilt PubChem 8-spin set (≈3.16M total)</span>
+  </div>
+</header>
+
+<section class="sec">
+  <div class="wrap">
+    <h2>How the dataset is built</h2>
+    <div class="lead">The heuristics behind every molecule — screening, shifts, couplings, equivalence and sampling.</div>
+    <div class="rules">
+      <div class="rule"><div class="n">01 · SCREEN</div><h3>Exactly eight groups</h3>
+        <p>RDKit filters ChEMBL / PubChem and assigns <b>hard-equivalent</b> proton groups (chemically <i>and</i> magnetically equivalent, via a deuterium-substitution test). Only molecules with exactly 8 distinct groups are kept.</p></div>
+      <div class="rule"><div class="n">02 · DEGENERACY</div><h3>Equivalent protons collapse</h3>
+        <p>Each group carries a degeneracy — its number of equivalent ¹H (1 for CH, 2 for CH₂, 3 for CH₃, 6 or 9 for symmetry-equivalent methyls). Out-of-vocabulary degeneracies are filtered out.</p></div>
+      <div class="rule"><div class="n">03 · SHIFTS</div><h3>Pretsch additivity</h3>
+        <p>Chemical shifts come from a pure-Python Pretsch engine: aromatic base 7.34 ppm + ortho/meta/para substituent increments, Shoolery aliphatic rules, alkene (5.25 + gem/cis/trans) and per-ring heteroaromatic base shifts.</p></div>
+      <div class="rule"><div class="n">04 · COUPLINGS</div><h3>Mechanism-specific J</h3>
+        <p>Scalar couplings are assigned by mechanism: geminal ²J, vicinal ³J, aromatic ring-position-aware ³/⁴J, olefinic cis/trans/geminal, and long-range / benzylic ⁴J — building the spin graph's edges.</p></div>
+      <div class="rule"><div class="n">05 · DISPERSION</div><h3>Sampled, not reused</h3>
+        <p>Rather than reusing fixed table constants, each molecule's shifts and couplings get a class-aware Gaussian jitter (shift σ floor 0.15 ppm; sign-preserving ±25 Hz coupling clamp), so values sample the real chemical space and the model can't memorize them.</p></div>
+      <div class="rule"><div class="n">06 · SIMULATE</div><h3>Second-order 90 MHz spectra</h3>
+        <p>The sampled spin graph is simulated into a full second-order 90 MHz ¹H spectrum — spectrum and label stay consistent. That low-field spectrum is the sole input to the inverse model.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="wrap">
+    <h2>Distributions</h2>
+    <div class="lead">Across a <span data-n>—</span>-molecule sample. Hover a bar for its range, count and share.</div>
+    <div id="histGrid"></div>
+  </div>
+</section>
+
+<footer><div class="wrap">Spinhance · 8-spin ¹H NMR dataset explorer. Statistics computed from the rebuilt PubChem training split.</div></footer>
+
+<script>
+  // theme toggle — shares the site's localStorage key
+  (function () {
+    var root = document.documentElement, btn = document.getElementById("themeBtn");
+    var saved = localStorage.getItem("spinhance-theme");
+    if (saved) root.setAttribute("data-theme", saved);
+    var sync = function () { btn.textContent = root.getAttribute("data-theme") === "dark" ? "☀️" : "🌙"; };
+    sync();
+    btn.addEventListener("click", function () {
+      var next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next); localStorage.setItem("spinhance-theme", next); sync();
+      window.dispatchEvent(new Event("resize")); // force histogram recolor/redraw
+    });
+  })();
+</script>
+<script src="assets/dataset.js"></script>
+</body>
+</html>
