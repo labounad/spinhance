@@ -245,6 +245,15 @@ warranted (not a full rewrite — the dataset path's core is sound).
 ---
 
 ## 6. Status log
+- 2026-06-03: **Validation PASSED at scale** (3000-mol sample, fixed pipeline):
+  co-orbit groups always share (0 violations); **0 FORCED cross-orbit duplicates**
+  (seed-persistence test over 5 seeds) — the old forced-duplication (~24% of groups)
+  is eliminated; accidental overlaps survive at their natural rate (unflagged);
+  soft-equiv = orbit. Pre-flight: `sim_to_part.py` preserves `equiv_orbit` into
+  `recs_K.json` → training. **Full 3M regeneration LAUNCHED** (job 42344849, array
+  0-1604%100) on the fixed code; old buggy parts/recs renamed to
+  `rebuild3M/{parts,recs}_audit1_buggy`. Next: merge → re-split → retrain → website.
+
 - 2026-06-03: audit opened; root-cause equivalence-keying bug confirmed (mol_3078877);
   3 audit agents dispatched (A/B/C).
 - 2026-06-03: Workstream A COMPLETE (findings A1–A6 logged). Root cause precisely
