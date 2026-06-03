@@ -34,6 +34,20 @@ def test_geminal_model_reference_values():
     assert round(_geminal_2j(_first_multi_h_carbon("CC#N")), 1) == -16.9       # CH3CN
 
 
+def test_geminal_multi_substituent_saturation():
+    # B6: two electronegative / two pi substituents on the same carbon undershoot
+    # under a purely linear additive model.  The saturating correction lands them
+    # on the Pretsch anchors (CH2Cl2 -7.5, malononitrile -20.3) without disturbing
+    # the single-substituent / single-pi cases above.
+    assert round(_geminal_2j(_first_multi_h_carbon("ClCCl")), 1) == -7.5     # CH2Cl2
+    assert round(_geminal_2j(_first_multi_h_carbon("N#CCC#N")), 1) == -20.3  # malononitrile
+
+
+def test_geminal_olefinic_base():
+    # B10: terminal =CH2 geminal 2J is +2.5 Hz (ethylene, Pretsch p.165), not +2.0.
+    assert sorted(set(geminal_couplings(make_test_mol_3d("C=C")).values())) == [2.5]
+
+
 def test_geminal_only_methylenes():
     # Methyl protons are magnetically equivalent (free rotation) → no
     # observable mutual coupling; geminal_couplings must skip CH3 (3 H).
@@ -53,6 +67,16 @@ def test_karplus_extremes():
 def test_vicinal_rotatable():
     assert set(vicinal_couplings(make_test_mol_3d("CC")).values()) == {7.3}   # ethane
     assert set(vicinal_couplings(make_test_mol_3d("CCO")).values()) == {6.9}  # ethanol (Pretsch p.162)
+
+
+def test_vicinal_sp2_sp2_diene():
+    # B5: the =CH-CH= single bond between two olefinic sp2 carbons (1,3-butadiene
+    # C2-C3) is NOT a freely-rotating sp3-sp3 bond; it takes the s-trans diene
+    # 3J (~10.4 Hz, Pretsch p.166), not the ethane base (7.3 Hz).
+    assert sorted(set(vicinal_couplings(make_test_mol_3d("C=CC=C")).values())) == [10.4]
+    # sp3-sp3 vicinal couplings remain unchanged by the hybridization gate.
+    assert set(vicinal_couplings(make_test_mol_3d("CC")).values()) == {7.3}   # ethane
+    assert set(vicinal_couplings(make_test_mol_3d("CCC")).values()) == {7.3}  # propane
 
 
 def test_vicinal_ring_karplus_range():

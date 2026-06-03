@@ -6,8 +6,19 @@ from rdkit import Chem
 # for Structure Determination of Organic Compounds (2009), section 5.1.2:
 #   2J = base + electronegative-substituent terms + adjacent-pi terms
 BASE_SP3 = -12.4   # CH4
-BASE_SP2 = 2.0     # terminal =CH2 (ethylene +2.5)
+BASE_SP2 = 2.5     # terminal =CH2 (ethylene +2.5, Pretsch p.165)
 EN_CORRECTION = 1.6  # per O/N/halogen on the CH2 carbon (drives 2J toward 0)
+# The linear EN_CORRECTION reproduces the single-substituent anchor (e.g.
+# CH2 alpha to one halogen) but overshoots when two electronegative atoms sit
+# on the SAME carbon: the second substituent's deshielding effect saturates.
+# Extra (diminishing-returns) per-substituent correction applied to the 2nd
+# and each further EN atom on the carbon, tuned to the geminal di-substituted
+# anchors:
+#   CH2Cl2       Pretsch -7.5: base -12.4 + 2x1.6 = -9.2, need +1.7 from 1 extra
+#   CH2(CN)2     Pretsch -20.3: 2 nitriles, base -12.4 + 2x(-4.5) = -21.4,
+#                               need +1.1 from 1 extra pi (less saturating)
+EN_GEMINAL_EXTRA = 1.7   # Hz toward 0, per EN substituent beyond the first
+PI_GEMINAL_EXTRA = 1.1   # Hz toward 0, per adjacent-pi substituent beyond the first
 
 PI_CORRECTION = {    # per adjacent pi system (drives 2J more negative)
     "aromatic": -1.9,  # toluene -14.3
@@ -41,15 +52,27 @@ def _geminal_2j(carbon: Chem.Atom) -> float:
     if carbon.GetHybridization().name == "SP2":
         return BASE_SP2
     j = BASE_SP3
+    n_en = 0          # count of electronegative substituents on this carbon
+    n_pi = 0          # count of adjacent-pi substituents on this carbon
     for nbr in carbon.GetNeighbors():
         if nbr.GetAtomicNum() == 1:
             continue
         if nbr.GetAtomicNum() in _ELECTRONEGATIVE:
             j += EN_CORRECTION
+            n_en += 1
             continue
         kind = _adjacent_pi(nbr)
         if kind:
             j += PI_CORRECTION[kind]
+            n_pi += 1
+    # Nonlinear/saturating correction: the linear per-substituent terms above
+    # undershoot (too negative) when >=2 electronegative or >=2 pi substituents
+    # sit on the same carbon.  Add a diminishing-returns term (toward 0) for the
+    # 2nd and each further substituent of each kind.  (B6.)
+    if n_en >= 2:
+        j += EN_GEMINAL_EXTRA * (n_en - 1)
+    if n_pi >= 2:
+        j += PI_GEMINAL_EXTRA * (n_pi - 1)
     return j
 
 

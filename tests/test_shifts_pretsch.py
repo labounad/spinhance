@@ -14,6 +14,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from mol_to_spin_system.shifts_pretsch import (
+    AROM_INCR,
     predict_shifts_pretsch,
     predict_shifts_pretsch_verbose,
 )
@@ -153,3 +154,75 @@ def test_aromatic_increment_additivity():
     assert max(arom) > 7.7, f"expected a downfield NO2-ortho H, got {sorted(arom)}"
     # CH3-ortho / NO2-meta H: 7.34 - 0.17 (CH3 ortho) + 0.26 (NO2 meta) = 7.43
     assert min(arom) < 7.5, f"expected an upfield CH3-ortho H, got {sorted(arom)}"
+
+
+# ─── audit PIPELINE_AUDIT_2 §5-B regression guards ──────────────────────────
+
+def test_pyrazine_base_shift_b2():
+    """B2: pyrazine's 8.63 base must be reachable (the `_NAME` key
+    `(6,((1,7),(4,7)))` was missing → it fell to the 7.30 aromatic default)."""
+    mol = _embed("c1cnccn1")
+    verbose = predict_shifts_pretsch_verbose(mol)
+    arom = [(d, p) for _h, (d, p) in verbose.items()
+            if mol.GetAtomWithIdx(_h).GetNeighbors()[0].GetIsAromatic()]
+    assert arom, "no aromatic protons found for pyrazine"
+    # all four equivalent ring H -> ~8.63, on the (unflagged) hetero path
+    for d, p in arom:
+        assert abs(d - 8.63) <= 0.1, f"pyrazine H predicted {d}, expected ~8.63"
+        assert p == "hetero", f"pyrazine should hit the hetero path, got {p!r}"
+
+
+def test_furfural_not_equal_2_methylfuran_b1():
+    """B1: a substituent anywhere on a hetero ring (furfural 2-CHO) must change
+    the predicted ring shifts — previously the substituent-blind flag returned
+    the bare furan-parent shifts identical to 2-methylfuran."""
+    def arom_shifts(smi):
+        mol = _embed(smi)
+        v = predict_shifts_pretsch_verbose(mol)
+        return sorted(round(d, 3) for _h, (d, p) in v.items()
+                      if mol.GetAtomWithIdx(_h).GetNeighbors()[0].GetIsAromatic())
+
+    furfural = arom_shifts("O=Cc1ccco1")
+    methylfuran = arom_shifts("Cc1ccco1")
+    assert furfural != methylfuran, (
+        f"furfural {furfural} must differ from 2-methylfuran {methylfuran}")
+    # CHO is strongly deshielding; furfural's most-downfield ring H must exceed
+    # the parent furan H2 (7.42) and 2-methylfuran's most-downfield ring H.
+    assert max(furfural) > max(methylfuran)
+
+
+def test_substituted_hetero_ring_is_flagged_b1():
+    """B1: any substituted supported hetero ring is flagged `hetero?`, while the
+    bare parent stays the confident `hetero` path."""
+    mol = _embed("O=Cc1ccco1")  # furfural
+    v = predict_shifts_pretsch_verbose(mol)
+    ring_paths = [p for _h, (d, p) in v.items()
+                  if mol.GetAtomWithIdx(_h).GetNeighbors()[0].GetIsAromatic()]
+    assert ring_paths and all(p == "hetero?" for p in ring_paths), ring_paths
+
+    bare = _embed("c1ccoc1")  # furan
+    vb = predict_shifts_pretsch_verbose(bare)
+    bare_paths = [p for _h, (d, p) in vb.items()
+                  if bare.GetAtomWithIdx(_h).GetNeighbors()[0].GetIsAromatic()]
+    assert bare_paths and all(p == "hetero" for p in bare_paths), bare_paths
+
+
+def test_corrected_arom_incr_rows_b8():
+    """B8: the placeholder AROM_INCR rows for vinyl and nitrile must hold the
+    real Pretsch increments, not copies of CH2Cl / NCS."""
+    assert AROM_INCR["CH=CH2"] == (0.06, -0.03, -0.10)
+    assert AROM_INCR["C#N"] == (0.36, 0.18, 0.28)
+    # and they must no longer equal the rows they were copied from
+    assert AROM_INCR["CH=CH2"] != AROM_INCR["CH2Cl"]
+    assert AROM_INCR["C#N"] != AROM_INCR["NCS"]
+
+
+def test_benzonitrile_uses_nitrile_increment_b8():
+    """B8: benzonitrile ortho H uses the corrected C#N ortho increment (+0.36),
+    so ortho H ≈ 7.34 + 0.36 = 7.70 (not the old NCS-copy 7.66)."""
+    mol = _embed("N#Cc1ccccc1")
+    preds = predict_shifts_pretsch(mol)
+    arom = sorted(v for i, v in preds.items()
+                  if mol.GetAtomWithIdx(i).GetNeighbors()[0].GetIsAromatic())
+    # ortho pair is the most downfield: 7.34 + 0.36 = 7.70
+    assert abs(max(arom) - 7.70) <= 0.02, f"benzonitrile ortho H {arom}"

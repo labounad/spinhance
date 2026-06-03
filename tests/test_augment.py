@@ -10,6 +10,7 @@ _REC = {
     "labels": ["A", "B", "C"],
     "spin_groups": [[7.50, 1], [7.50, 1], [2.30, 3]],   # A,B equivalent aromatic + C methyl
     "shift_range": [[7.50, 7.50], [7.50, 7.50], [2.30, 2.30]],  # Pretsch point estimate (degenerate)
+    "equiv_orbit": [0, 0, 1],   # A,B are one symmetry orbit (AA'BB' siblings); C distinct
     "couplings": [["A", "B", 7.5], ["A", "C", -0.7]],   # aromatic (+) and long-range (-)
     "coupling_types": ["aromatic", "long_range"],
 }
@@ -28,12 +29,38 @@ def test_shift_overdispersion_spread():
     assert 0.10 < float(np.std(a)) < 0.22   # ~0.15
 
 
-def test_class_aware_equivalent_groups_share_draw():
-    # equivalent groups (same mean+range) must get ONE shared shift each draw,
-    # else an AA'BB' system would degrade to ABCD.
+def test_orbit_equivalent_groups_share_draw():
+    # groups in the SAME symmetry orbit (A,B) must get ONE shared shift each draw,
+    # or an AA'BB' system would degrade to ABCD.
     for k in range(50):
         d = sample_record(_REC, rng=np.random.default_rng(k))
         assert d["spin_groups"][0][0] == d["spin_groups"][1][0]
+
+
+def test_coincidental_collision_sampled_independently():
+    # Audit-2 A1: two groups with the SAME base shift+range but DIFFERENT orbits
+    # are NOT equivalent (their Pretsch values merely coincide) -> independent
+    # draws. The old (mean,range) key wrongly locked them together; the orbit key
+    # must not.
+    rec = dict(_REC)
+    rec["equiv_orbit"] = [0, 1, 2]   # all distinct orbits despite A,B sharing a base shift
+    distinct = sum(
+        sample_record(rec, rng=np.random.default_rng(k))["spin_groups"][0][0]
+        != sample_record(rec, rng=np.random.default_rng(k))["spin_groups"][1][0]
+        for k in range(50)
+    )
+    assert distinct >= 45   # independent Gaussians -> almost always differ
+
+
+def test_missing_orbit_falls_back_to_independent():
+    # legacy records without equiv_orbit -> every group sampled independently
+    rec = {k: v for k, v in _REC.items() if k != "equiv_orbit"}
+    distinct = sum(
+        sample_record(rec, rng=np.random.default_rng(k))["spin_groups"][0][0]
+        != sample_record(rec, rng=np.random.default_rng(k))["spin_groups"][1][0]
+        for k in range(50)
+    )
+    assert distinct >= 45
 
 
 def test_coupling_sign_preserved_and_bounded():

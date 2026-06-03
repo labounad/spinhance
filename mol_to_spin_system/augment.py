@@ -141,16 +141,24 @@ def sample_record(
     sg = record["spin_groups"]
     means = [g[0] for g in sg]
     ranges = record.get("shift_range") or [[m, m] for m in means]
-    # Class-aware: groups that are chemically equivalent — identical shift AND
-    # stored range, i.e. the same tier class (e.g. SOFT AA'BB' siblings) — MUST
-    # share ONE randomized shift, or the equivalence is broken (an AA'BB'
-    # system would degrade to ABCD). Sample once per class, broadcast to members.
-    classes: dict[tuple, list[int]] = defaultdict(list)
-    for i, (m, r) in enumerate(zip(means, ranges)):
-        classes[(m, tuple(r))].append(i)
+    # Share a randomized shift ONLY within a true symmetry orbit (``equiv_orbit``):
+    # homotopic/enantiotopic groups are isochronous and MUST coincide exactly (an
+    # AA'BB' or two symmetry-equivalent OMe), but every other group — INCLUDING
+    # ones whose Pretsch base shift merely collides by coincidence — is sampled
+    # INDEPENDENTLY, so accidental degeneracies arise only at their natural rate
+    # instead of being forced. (The old key was ``(shift, range)``, which equated
+    # coincidental Pretsch collisions with real equivalence — Audit-2 A1.) Falls
+    # back to all-independent for legacy records lacking ``equiv_orbit``.
+    orbits = record.get("equiv_orbit")
+    if not orbits or len(orbits) != len(means):
+        orbits = list(range(len(means)))
+    classes: dict[object, list[int]] = defaultdict(list)
+    for i, o in enumerate(orbits):
+        classes[o].append(i)
     shifts = [0.0] * len(means)
-    for (m, r), idxs in classes.items():
-        draw = float(sample_shifts([m], [list(r)], rng=rng, **(shift_kw or {}))[0])
+    for _o, idxs in classes.items():
+        m0, r0 = means[idxs[0]], ranges[idxs[0]]   # co-orbit members share base (m, range)
+        draw = float(sample_shifts([m0], [list(r0)], rng=rng, **(shift_kw or {}))[0])
         for i in idxs:
             shifts[i] = draw
     out["spin_groups"] = [[round(shifts[i], 3), int(sg[i][1])]

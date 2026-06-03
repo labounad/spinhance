@@ -92,6 +92,7 @@ _NAME: dict[tuple, str] = {
     (6, ((1, 7),)): "pyridine",
     (6, ((1, 7), (2, 7))): "pyridazine",
     (6, ((1, 7), (3, 7))): "pyrimidine",
+    (6, ((1, 7), (4, 7))): "pyrazine",
     (5, ((1, 8),)): "furan",
     (5, ((1, 16),)): "thiophene",
     (5, ((1, 7),)): "pyrrole",

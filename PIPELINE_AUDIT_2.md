@@ -89,11 +89,24 @@ Each workstream → a severity-ranked findings list (file:line, repro, recommend
 
 ---
 
-## 4. Decisions / conventions
-- "Must share a jittered shift" ⇔ **SOFT-equivalent siblings** (genuine AA′BB′), as
-  determined by `spin_equivalence`. HARD-equivalent protons are already one group.
-  Everything else (incl. coincidentally-equal Pretsch shifts) → **independent draw**.
-- Independent draw = base shift + Gaussian(σ from range, floor as today) per group.
+## 4. Decisions / conventions (LOCKED)
+- **Two distinct concepts — do not conflate:**
+  - **Symmetry equivalence (orbit):** structural; homotopic/enantiotopic protons
+    (`CanonicalRankAtoms` orbit). Drives **shift sharing in generation** — same orbit
+    ⇒ exact same drawn shift; different orbit ⇒ **independent Gaussian** (even if the
+    Pretsch base shifts coincide). This is the `augment` fix.
+  - **Accidental equivalence (`|δ_i−δ_j| ≤ tol`):** coincidental/unresolvable; ANY two
+    groups whose shifts land within the line width. Drives the **soft-equiv head**
+    (collapse unresolvable pairs so the decoder doesn't emit a spurious split). The
+    `soft_equiv_loss` `|Δδ|≤tol` label is **correct and UNCHANGED** — symmetry pairs are
+    a subset (Δδ=0), plus genuine chance coincidences. The bug was never that accidental
+    equivalence exists; it's that the old `(shift,range)` sharing FORCED it far above its
+    natural rate. Independent Gaussians restore the natural (rare) rate.
+- **Convention:** degeneracy (one HARD node) = a freely-rotating rotor's magnetically-
+  equivalent protons (CH₃→3, tBu→9; may span carbons). Everything else (CH₂, aromatic,
+  cross-atom symmetry) = separate nodes; co-orbit → shared shift, else independent.
+  No grouping change needed (matches `classify_spin_groups`); fix is sharing-only.
+- **Conformers:** fixed seed + pinned RDKit (no consensus, no dropping); skip embed-fail.
 
 ---
 
@@ -107,11 +120,17 @@ re-guesses from `(shift,range)`.
 
 - **A1 — CRITICAL.** `augment.py:148` keys shift-sharing on `(shift, range)`; `range`
   is always degenerate (`min==max==mean`, `xyz.py:144`) so it collapses to shift alone
-  → distinct positions with colliding Pretsch shifts get locked to one draw. Repro
-  (mol_3078877, seed 0): classifier says B,C,D,G,H = NONE (distinct), E,F = SOFT (OCH₂);
-  yet C==D and G==H get the same draw (artifacts). **Fix:** thread a per-group
-  `equiv_class` id into the record (data already in `class_of`), key `sample_record`'s
-  `classes` dict on it, independent-draw fallback. Only genuine SOFT/HARD siblings share.
+  → distinct positions with colliding Pretsch shifts get locked to one draw.
+  **REFINED FIX (verified on COC1=CC(C)=CC(OC)=C1 & COC1=CC=C(OC)C=C1):** the correct
+  "must-share-a-shift" key is the **canonical symmetry orbit** of the group's parent
+  atom (`Chem.CanonicalRankAtoms(mol, breakTies=False)`), NOT the SOFT tier and NOT
+  `(shift,range)`. The orbit is BROADER than the classifier's group/class: e.g. two
+  symmetry-equivalent OMe are *separate HARD groups* but the same orbit and MUST share a
+  shift — a SOFT-tier key would wrongly let them drift apart. Rule: **sample one shift
+  per symmetry orbit, broadcast to its groups; independent Gaussian across orbits**
+  (even when Pretsch base shifts coincide). Thread a per-group `equiv_orbit` id (from
+  canonical rank, computed where the mol is in hand — `entry_to_spin_system`) into the
+  record and key `sample_record` on it.
 - **A2 — HIGH.** Per-group equivalence-class id never persisted: `xyz.py::to_dict`
   (42–61) emits labels/spin_groups/couplings/shift_range/coupling_types but not class
   membership, though `entry_to_spin_system` holds `class_of` (line 149). Root enabler of A1.
@@ -233,3 +252,11 @@ warranted (not a full rewrite — the dataset path's core is sound).
 - 2026-06-03: (parallel track) test-time spectral refinement validated on 64k held-out
   — shift MAE 0.073→0.049 ppm (−34%), cos 0.38→0.95, 28/30 improved. Re-validate after
   regeneration (current "true" shifts still carry the artifact).
+- 2026-06-03: **Phase-2 code rework COMPLETE** (all findings fixed; 196 tests pass, 1
+  skipped). A1/A2: `xyz.py` computes/persists per-group `equiv_orbit` (canonical symmetry
+  orbit); `augment.sample_record` keys shift-sharing on it (independent Gaussian off-orbit).
+  A6 NaN guard. B1/B2/B8 (shifts), B5/B6/B10 (couplings), C3/C4/C5 (determinism) landed via
+  agents with regression tests. `soft_equiv_loss` deliberately UNCHANGED. Verified
+  end-to-end on mol_3078877 (cross-orbit Pretsch collision now independent; OCH₂ shares),
+  3,5-(MeO)₂-toluene and 1,4-(MeO)₂-benzene (orbit sharing exactly as intended). Next:
+  regenerate the 3M dataset on the fixed pipeline → retrain → propagate to the website.

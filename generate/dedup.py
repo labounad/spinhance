@@ -75,28 +75,36 @@ def dedup_dataset(
     (kept, dropped, xyz_written)
     """
     in_csv, out_csv = Path(in_csv), Path(out_csv)
-    seen: set[str] = set()
-    kept_ids: set[str] = set()
-    kept = dropped = 0
+    seen: dict[str, list[str]] = {}
+    dropped = 0
 
-    with (
-        open(in_csv, newline="") as f,
-        open(out_csv, "w", newline="") as out,
-    ):
+    with open(in_csv, newline="") as f:
         reader = csv.reader(f)
-        writer = csv.writer(out)
         header = next(reader, None)
-        if header is not None:
-            writer.writerow(header)
         for row in reader:
             key = row[key_col]
             if key in seen:
+                # Deterministic survivor: keep the row that sorts smallest for
+                # this key (by full row tuple), independent of input order.  A
+                # plain "first occurrence" would make the surviving
+                # representative depend on the upstream write order.
+                if tuple(row) < tuple(seen[key]):
+                    seen[key] = row
                 dropped += 1
                 continue
-            seen.add(key)
-            kept_ids.add(row[ID_COL])
-            writer.writerow(row)
-            kept += 1
+            seen[key] = row
+
+    # Emit in a stable order (sorted by dedup key, then full row) so the
+    # output CSV is byte-reproducible regardless of input ordering.
+    kept_rows = sorted(seen.values(), key=lambda r: (r[key_col], tuple(r)))
+    kept_ids: set[str] = {r[ID_COL] for r in kept_rows}
+    kept = len(kept_rows)
+
+    with open(out_csv, "w", newline="") as out:
+        writer = csv.writer(out)
+        if header is not None:
+            writer.writerow(header)
+        writer.writerows(kept_rows)
 
     xyz_written = 0
     if in_xyz and out_xyz:

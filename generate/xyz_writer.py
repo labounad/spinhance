@@ -182,9 +182,11 @@ def build_xyz_block(
             counter += 1
 
     # ── InChI ─────────────────────────────────────────────────────────────────
+    # MolToInchi can fail for some structures; catch only the RDKit-relevant
+    # errors so an unrelated bug (e.g. a NameError) is not silently swallowed.
     try:
-        inchi = MolToInchi(mol) or ""
-    except Exception:
+        inchi = MolToInchi(mol_h) or ""
+    except (ValueError, RuntimeError):
         inchi = ""
 
     # ── Build block ───────────────────────────────────────────────────────────
