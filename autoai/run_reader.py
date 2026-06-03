@@ -98,6 +98,13 @@ def read_config(run_dir) -> dict:
     return _json(Path(run_dir) / "config.json", {})
 
 
+def read_heldout_eval(run_dir) -> dict:
+    """Standardized held-out eval result (model/experiments/eval_heldout.py)."""
+    if _is_s3(run_dir):
+        return _json_s3(_run_uri(run_dir, "heldout_eval.json"), {})
+    return _json(Path(run_dir) / "heldout_eval.json", {})
+
+
 def read_metrics(run_dir) -> list[dict]:
     if _is_s3(run_dir):
         return _jsonl_s3(_run_uri(run_dir, "metrics.jsonl"))

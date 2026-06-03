@@ -182,6 +182,49 @@ def _fleet_table(runs):
     st.markdown(f'<table class="cmp">{hdr}{body}</table>', unsafe_allow_html=True)
 
 
+def _heldout_table(runs):
+    """Standardized eval: every model scored on the SAME global held-out test pool
+    (eval_heldout.py → <run>/heldout_eval.json). Directly comparable across tiers."""
+    rows = []
+    for d in runs:
+        h = rr.read_heldout_eval(d)
+        if h and h.get("metrics"):
+            m = h["metrics"]
+            rows.append({"run": labels[str(d)], "n": h.get("n_test", "—"),
+                         "shift": m.get("shift_mae_ppm"), "j": m.get("j_mae_hz"),
+                         "f1": m.get("presence_f1"), "deg": m.get("deg_acc_balanced")})
+    if not rows:
+        st.markdown(
+            f'<span class="sh-sub">No held-out eval yet. After a model finishes, score it on the '
+            f'shared 315k test pool:</span>', unsafe_allow_html=True)
+        st.code("python -m model.experiments.eval_heldout --run-dir model/runs/<id> \\\n"
+                "  --test-records $REBUILD/records_3M_test.json.gz --parts $REBUILD/parts --device cuda",
+                language="bash")
+        return
+    sizes = {r["n"] for r in rows if isinstance(r["n"], int)}
+    note = f"all scored on the shared held-out test pool" + (f" (n={max(sizes)})" if sizes else "")
+    st.markdown(f'<span class="sh-sub">{note}</span>', unsafe_allow_html=True)
+
+    def _best(k, lower):
+        vals = [r[k] for r in rows if isinstance(r[k], (int, float))]
+        return (min if lower else max)(vals) if vals else None
+    best = {"shift": _best("shift", True), "j": _best("j", True),
+            "f1": _best("f1", False), "deg": _best("deg", False)}
+    hdr = "<tr><th>run</th><th>n</th><th>shift MAE</th><th>J MAE</th><th>F1</th><th>deg-bal</th></tr>"
+    body = ""
+    for r in rows:
+        def cell(k, fmt):
+            v = r[k]
+            if not isinstance(v, (int, float)):
+                return '<td class="num">—</td>'
+            cls = "num best" if best[k] is not None and abs(v - best[k]) < 1e-9 else "num"
+            return f'<td class="{cls}">{fmt.format(v)}</td>'
+        body += (f'<tr><td class="run">{r["run"]}</td><td class="num">{r["n"]}</td>'
+                 f'{cell("shift","{:.3f}")}{cell("j","{:.2f}")}'
+                 f'{cell("f1","{:.3f}")}{cell("deg","{:.3f}")}</tr>')
+    st.markdown(f'<table class="cmp">{hdr}{body}</table>', unsafe_allow_html=True)
+
+
 def _curves(runs):
     import plotly.graph_objects as go
     color = {str(d): PALETTE[i % len(PALETTE)] for i, d in enumerate(runs)}
@@ -251,6 +294,8 @@ def _dashboard():
         return
     st.markdown("### Fleet")
     _fleet_table(runs)
+    st.markdown("### Standardized held-out eval")
+    _heldout_table(runs)
     st.markdown("### Learning curves")
     _curves(runs)
     st.markdown("### Run detail")
