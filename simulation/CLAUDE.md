@@ -65,7 +65,7 @@ The XML format (`simulation/examples/reference_15group.xml`) encodes this as `<m
 ## The Four Tasks
 
 ### Task 1 — GENERATE (`generate/`)
-Screen SMILES from USPTO/PubChem, filter to exactly 8 hard-equivalent (chemically + magnetically equivalent) spin groups using RDKit. Output: `data/raw/smiles_8group.csv`.
+Screen SMILES from ChEMBL/PubChem, filter to exactly 8 hard-equivalent (chemically + magnetically equivalent) spin groups using RDKit. Output: `data/raw/smiles_8group.csv`.
 
 ### Task 2 — MOL → MATRIX (`mol_to_spin_system/`)
 3D embed with ETKDG + MMFF94 (RDKit), assign shifts via heuristic tables, compute *J* couplings via Karplus equations and geminal/aryl/vinyl/benzylic tables. Assemble the 8×8 J-matrix + degeneracy vector. Output: `data/processed/matrices/*.npy`.
