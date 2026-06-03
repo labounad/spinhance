@@ -606,10 +606,11 @@
 <section class="block" id="results">
   <div class="wrap">
     <div class="kicker">Where we are</div>
-    <h2>See the development of the model architecture.</h2>
-    <p class="lead">Each stage introduced a different architectural or loss innovation. Metrics are on
-      held-out molecules the model never saw. <a href="#explore">Explore the learning curves, a full
-      run comparison, and per-molecule test predictions ↓</a></p>
+    <h2>How the model came together — architecture, data, and scale.</h2>
+    <p class="lead">Each stage introduced a different innovation — first in architecture and loss, then in
+      the dataset itself, and finally in scaling data and model capacity together. Metrics are on a
+      leakage-controlled held-out test set the model never saw. <a href="#explore">Explore the learning
+      curves, a full run comparison, and per-molecule test predictions ↓</a></p>
 
     <div class="carousel-wrap">
       <div class="carousel-nav">
@@ -625,6 +626,8 @@
         <span data-i="1"></span>
         <span data-i="2"></span>
         <span data-i="3"></span>
+        <span data-i="4"></span>
+        <span data-i="5"></span>
       </div>
 
       <div class="stage-slides">
@@ -714,7 +717,7 @@
           <div class="stage-body">
             <div class="stage-grid">
               <div>
-                <span class="stage-chip chip-graph">Architecture &middot; sessions 021&ndash;025</span>
+                <span class="stage-chip chip-graph">Architecture &middot; the graph-output model</span>
                 <h3 class="stage-h3">Spin graph decoder</h3>
                 <p class="stage-desc">The spin system is an unordered graph of 8 groups &mdash; so the model
                   should output a graph. We replaced the dense CNN heads with a Transformer encoder&ndash;decoder:
@@ -727,17 +730,17 @@
                   <div class="detail-row"><span class="dl">What didn&rsquo;t work:</span><span class="dv">Support-region tokenization (no gain, 2.5&times; slower); Hungarian loss; integration-aware aux loss (architecture solved degeneracy imbalance on its own)</span></div>
                 </div>
                 <div class="insight-box">
-                  <b>Key finding:</b> the structured decoder is the dominant win &mdash; 7.5&times; shift improvement
-                  over the CNN baseline. Canonical ordering is <i>unambiguous</i> for NMR data (distinct
-                  chemical shifts make the sort stable), so Hungarian&rsquo;s extra freedom only hurts by
-                  scrambling the relational coupling structure across assignments.
+                  <b>Key finding:</b> the structured decoder is the dominant win &mdash; a ~6&times; shift
+                  improvement over the CNN baseline. Canonical ordering is <i>unambiguous</i> for NMR data
+                  (distinct chemical shifts make the sort stable), so Hungarian&rsquo;s extra freedom only hurts
+                  by scrambling the relational coupling structure across assignments.
                 </div>
               </div>
               <div class="metrics-stack">
-                <div class="metric-row"><div class="metric-val">0.037</div><div class="metric-lbl">ppm shift MAE<br><span style="font-size:11px;color:var(--ink-faint)">session025 production recipe</span></div><div class="metric-delta">7.5&times; CNN</div></div>
-                <div class="metric-row"><div class="metric-val">0.59</div><div class="metric-lbl">Hz coupling J MAE</div><div class="metric-delta">3.1&times; CNN</div></div>
-                <div class="metric-row"><div class="metric-val">0.94</div><div class="metric-lbl">coupling presence F1</div><div class="metric-delta">+0.13</div></div>
-                <div class="metric-row"><div class="metric-val">0.945</div><div class="metric-lbl">degeneracy balanced accuracy<br><span style="font-size:11px;color:var(--ink-faint)">rare-class problem solved by architecture</span></div><div class="metric-delta">+0.21</div></div>
+                <div class="metric-row"><div class="metric-val">0.047</div><div class="metric-lbl">ppm shift MAE<br><span style="font-size:11px;color:var(--ink-faint)">64k &middot; held-out split</span></div><div class="metric-delta">~6&times; CNN</div></div>
+                <div class="metric-row"><div class="metric-val">1.49</div><div class="metric-lbl">Hz coupling J MAE</div></div>
+                <div class="metric-row"><div class="metric-val">0.89</div><div class="metric-lbl">coupling presence F1</div><div class="metric-delta">+0.08</div></div>
+                <div class="metric-row"><div class="metric-val">0.87</div><div class="metric-lbl">degeneracy balanced accuracy<br><span style="font-size:11px;color:var(--ink-faint)">rare-class problem solved by architecture</span></div><div class="metric-delta">+0.14</div></div>
               </div>
             </div>
           </div>
@@ -748,7 +751,7 @@
           <div class="stage-body">
             <div class="stage-grid">
               <div>
-                <span class="stage-chip chip-026">Done &middot; session 026</span>
+                <span class="stage-chip chip-026">Refinement &middot; standard in every model</span>
                 <h3 class="stage-h3">Peak channel &amp; soft equivalence</h3>
                 <p class="stage-desc">Two targeted innovations addressing the remaining qualitative failure
                   modes: imprecise shift localization and accidentally degenerate groups rendering as spurious
@@ -757,32 +760,92 @@
                   <div class="detail-row"><span class="dl">Peak channel:</span><span class="dv">A 2nd conv input channel computed inside <code>forward()</code> &mdash; local maxima above a per-sample threshold, Gaussian-smoothed &mdash; as a shift-localization prior. Zero train/serve skew</span></div>
                   <div class="detail-row"><span class="dl">Soft equivalence:</span><span class="dv">A 3rd <code>PairwiseEdgeHead</code> logit flags accidentally-degenerate pairs (same &delta;, different J). BCE vs |&delta;<sub>i</sub>&minus;&delta;<sub>j</sub>|&le;tol + consistency penalty pulling flagged shifts together; hard-averaged at decode</span></div>
                   <div class="detail-row"><span class="dl">Why it matters:</span><span class="dv">Without the flag, degenerate pairs drift to e.g. 3.59/3.61&nbsp;ppm and render a spurious split doublet &mdash; a qualitative failure that mean shift-MAE hides</span></div>
-                  <div class="detail-row"><span class="dl">Now training:</span><span class="dv">Scaling to 3.2M PubChem spectra &mdash; a medium model on a random 500k subset and an XL model (~57M params, 5.6&times; medium) on the full set, on the Scripps HPC GPU queue</span></div>
+                  <div class="detail-row"><span class="dl">In production:</span><span class="dv">Both are default-on in every model in the current fleet (64k &rarr; 3M) and compose on any checkpoint without changing the output schema</span></div>
                 </div>
                 <div class="insight-box">
-                  <b>Verdict at 64k:</b> 026 matches the production 025 on aggregate metrics (shift 0.037, J 0.65) &mdash;
-                  the soft-equivalence flag reaches 99% accuracy/recall on the ~8.5% of edges that are degenerate, and its
-                  win is <i>qualitative</i> (correct peak multiplicity, which mean shift-MAE can&rsquo;t capture). Both ideas
-                  are default-off in inference and compose on the 025 checkpoint without changing the output schema.
+                  <b>Why it matters:</b> these refinements target <i>qualitative</i> correctness &mdash; precise
+                  shift localization and correct peak multiplicity &mdash; which a mean shift-MAE can&rsquo;t capture.
+                  The soft-equivalence flag pulls accidentally-degenerate groups onto a single shift so they
+                  render as one peak instead of a spurious split doublet.
                 </div>
               </div>
               <div class="metrics-stack">
                 <div class="metric-row" style="border-color:color-mix(in srgb,var(--accent-3) 35%,transparent)">
-                  <div class="metric-val" style="background:linear-gradient(90deg,var(--accent-3),var(--accent));-webkit-background-clip:text;background-clip:text">0.037</div>
-                  <div class="metric-lbl">ppm shift MAE &mdash; final<br><span style="font-size:11px;color:var(--ink-faint)">matches production 025</span></div>
+                  <div class="metric-val" style="background:linear-gradient(90deg,var(--accent-3),var(--accent));-webkit-background-clip:text;background-clip:text">0.047</div>
+                  <div class="metric-lbl">ppm shift MAE<br><span style="font-size:11px;color:var(--ink-faint)">localization &mdash; peak channel</span></div>
                 </div>
                 <div class="metric-row" style="border-color:color-mix(in srgb,var(--accent-3) 35%,transparent)">
-                  <div class="metric-val" style="background:linear-gradient(90deg,var(--accent-3),var(--accent));-webkit-background-clip:text;background-clip:text">0.65</div>
-                  <div class="metric-lbl">Hz coupling J MAE &mdash; final</div>
+                  <div class="metric-val" style="background:linear-gradient(90deg,var(--accent-3),var(--accent));-webkit-background-clip:text;background-clip:text">0.87</div>
+                  <div class="metric-lbl">degeneracy balanced acc<br><span style="font-size:11px;color:var(--ink-faint)">multiplicity &mdash; soft equivalence</span></div>
                 </div>
                 <div class="metric-row" style="border-color:color-mix(in srgb,var(--accent-3) 35%,transparent)">
-                  <div class="metric-val" style="background:linear-gradient(90deg,var(--accent-3),var(--accent));-webkit-background-clip:text;background-clip:text">99%</div>
-                  <div class="metric-lbl">soft-equiv flag accuracy<br><span style="font-size:11px;color:var(--ink-faint)">on ~8.5% of edges that are degenerate</span></div>
+                  <div class="metric-val" style="background:linear-gradient(90deg,var(--accent-3),var(--accent));-webkit-background-clip:text;background-clip:text">on</div>
+                  <div class="metric-lbl">default in every model<br><span style="font-size:11px;color:var(--ink-faint)">64k &rarr; 3M fleet</span></div>
                 </div>
-                <div class="metric-row" style="border-color:color-mix(in srgb,var(--accent-3) 35%,transparent)">
-                  <div class="metric-val" style="background:linear-gradient(90deg,var(--accent-3),var(--accent));-webkit-background-clip:text;background-clip:text">57M</div>
-                  <div class="metric-lbl">params in XL model<br><span style="font-size:11px;color:var(--ink-faint)">training now on the HPC GPU queue</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Stage 5: Clean data at scale -->
+        <div class="stage-slide" data-i="4">
+          <div class="stage-body">
+            <div class="stage-grid">
+              <div>
+                <span class="stage-chip chip-graph">Data &middot; the 8-spin dataset</span>
+                <h3 class="stage-h3">Clean data at scale</h3>
+                <p class="stage-desc">A model is only as good as its training set. We rebuilt the data
+                  end-to-end: every molecule reduced to exactly eight hard-equivalent ¹H groups, shifts and
+                  couplings assigned from first principles, and the values <i>sampled</i> rather than reused so
+                  the model learns the chemistry, not a lookup table.
+                  <a class="grad-link" href="dataset.html">Explore the dataset &rarr;</a></p>
+                <div class="stage-detail">
+                  <div class="detail-row"><span class="dl">Shifts:</span><span class="dv">Pure-Python Pretsch additivity &mdash; aromatic base + ortho/meta/para increments, Shoolery aliphatic rules, alkene gem/cis/trans, per-ring heteroaromatic bases</span></div>
+                  <div class="detail-row"><span class="dl">Couplings:</span><span class="dv">Mechanism-specific J &mdash; geminal ²J, vicinal ³J, aromatic ring-position-aware ³/⁴J, olefinic cis/trans/gem, long-range / benzylic ⁴J</span></div>
+                  <div class="detail-row"><span class="dl">Dispersion:</span><span class="dv">Class-aware Gaussian jitter (shift σ floor 0.15 ppm; sign-preserving ±25 Hz clamp) so values sample the real chemical space instead of fixed table constants</span></div>
+                  <div class="detail-row"><span class="dl">Held-out split:</span><span class="dv">A leakage-controlled global 10% test set &mdash; union-find clustering on matrix fingerprint + InChIKey keeps near-duplicate molecules on the same side of the split</span></div>
                 </div>
+                <div class="insight-box">
+                  <b>Key finding:</b> an earlier dataset reused the same handful of table values over and over,
+                  letting the model memorize them. Sampling each molecule&rsquo;s shifts and couplings &mdash; and
+                  enforcing a leakage-controlled split &mdash; makes the held-out numbers honest rather than
+                  inflated by near-duplicates.
+                </div>
+              </div>
+              <div class="metrics-stack">
+                <div class="metric-row"><div class="metric-val">3.16M</div><div class="metric-lbl">molecules<br><span style="font-size:11px;color:var(--ink-faint)">PubChem, exactly 8 spin groups</span></div></div>
+                <div class="metric-row"><div class="metric-val">8</div><div class="metric-lbl">hard-equivalent ¹H groups<br><span style="font-size:11px;color:var(--ink-faint)">chemical + magnetic equivalence</span></div></div>
+                <div class="metric-row"><div class="metric-val">10%</div><div class="metric-lbl">leakage-controlled held-out<br><span style="font-size:11px;color:var(--ink-faint)">no model ever trains on it</span></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Stage 6: Scaling data & capacity -->
+        <div class="stage-slide" data-i="5">
+          <div class="stage-body">
+            <div class="stage-grid">
+              <div>
+                <span class="stage-chip chip-026">Scaling &middot; data × capacity</span>
+                <h3 class="stage-h3">Scaling data &amp; capacity</h3>
+                <p class="stage-desc">With clean data and a graph-output architecture, the remaining lever is
+                  scale. We train the same model at three data tiers and grow its capacity to match &mdash; the
+                  guiding rule being to increase model size as long as it isn&rsquo;t overfitting.</p>
+                <div class="stage-detail">
+                  <div class="detail-row"><span class="dl">Data tiers:</span><span class="dv">64k &rarr; 500k &rarr; 3M training molecules, all evaluated on the same global held-out test set</span></div>
+                  <div class="detail-row"><span class="dl">Model size:</span><span class="dv">Capacity scaled with the data &mdash; ~10M params at 64k, ~57M at 500k, ~137M at 3M (same <code>spingraph_decoder</code>, wider + deeper)</span></div>
+                  <div class="detail-row"><span class="dl">Yardstick:</span><span class="dv">A standardized held-out evaluation &mdash; every model scored on identical molecules it never saw, so tiers are directly comparable</span></div>
+                </div>
+                <div class="insight-box">
+                  <b>Where we are:</b> the 64k tier is trained and scored on the held-out set; the 500k (57M) and
+                  3M (137M) models are training now on the Scripps HPC. Their curves and per-molecule predictions
+                  will populate the viewers below as they finish.
+                </div>
+              </div>
+              <div class="metrics-stack">
+                <div class="metric-row"><div class="metric-val">0.047</div><div class="metric-lbl">ppm shift MAE<br><span style="font-size:11px;color:var(--ink-faint)">64k tier &middot; held-out (best run)</span></div></div>
+                <div class="metric-row"><div class="metric-val">10&rarr;57&rarr;137M</div><div class="metric-lbl">params per tier<br><span style="font-size:11px;color:var(--ink-faint)">64k / 500k / 3M</span></div></div>
+                <div class="metric-row"><div class="metric-val">3</div><div class="metric-lbl">data tiers<br><span style="font-size:11px;color:var(--ink-faint)">500k &amp; 3M training now</span></div></div>
               </div>
             </div>
           </div>
@@ -801,7 +864,7 @@
   const name   = document.getElementById('carName');
   const prev   = document.getElementById('carPrev');
   const next   = document.getElementById('carNext');
-  const names  = ['CNN Baseline','Differentiable Renderer','Spin Graph Decoder','Peak Channel + Soft Equiv'];
+  const names  = ['CNN Baseline','Differentiable Renderer','Spin Graph Decoder','Peak Channel + Soft Equiv','Clean Data at Scale','Scaling Data + Capacity'];
   let cur = 0;
   function go(i) {
     slides[cur].classList.remove('active'); dots[cur].classList.remove('active');
