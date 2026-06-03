@@ -89,7 +89,13 @@
   .htip b{color:var(--accent-2)} .htip .tdim{color:var(--ink-faint)}
   .hnote{color:var(--ink-faint);font-size:12.5px;margin-top:9px;line-height:1.5}
 
-  footer{padding:40px 0 60px;color:var(--ink-faint);font-size:13px;border-top:1px solid var(--line);margin-top:40px}
+  footer{padding:30px 0 60px;border-top:1px solid var(--line);margin-top:40px}
+  sup{font-size:.68em;line-height:0}
+  .ref{color:var(--accent);text-decoration:none;font-weight:600}
+  .ref:hover{text-decoration:underline}
+  .refs{list-style:decimal;padding-left:20px;margin:0 0 16px;color:var(--ink-soft);font-size:13px}
+  .refs li{margin:3px 0;scroll-margin-top:80px}
+  .foot-note{color:var(--ink-faint);font-size:13px}
 </style>
 </head>
 <body>
@@ -126,8 +132,8 @@
         <p>RDKit filters ChEMBL / PubChem and assigns <b>hard-equivalent</b> proton groups (chemically <i>and</i> magnetically equivalent, via a deuterium-substitution test). Only molecules with exactly 8 distinct groups are kept.</p></div>
       <div class="rule"><div class="n">02 · DEGENERACY</div><h3>Equivalent protons collapse</h3>
         <p>Each group carries a degeneracy — its number of equivalent ¹H (1 for CH, 2 for CH₂, 3 for CH₃, 6 or 9 for symmetry-equivalent methyls). Out-of-vocabulary degeneracies are filtered out.</p></div>
-      <div class="rule"><div class="n">03 · SHIFTS</div><h3>Pretsch additivity</h3>
-        <p>Chemical shifts come from a pure-Python Pretsch engine: aromatic base 7.34 ppm + ortho/meta/para substituent increments, Shoolery aliphatic rules, alkene (5.25 + gem/cis/trans) and per-ring heteroaromatic base shifts.</p></div>
+      <div class="rule"><div class="n">03 · SHIFTS</div><h3><i>Pretsch</i> additivity</h3>
+        <p>Chemical shifts come from experimentally-derived additivity constants<sup><a class="ref" href="#ref1">1</a></sup>: an aromatic base of 7.34 ppm plus ortho/meta/para substituent increments, Shoolery aliphatic rules, alkene shifts (5.25 + gem/cis/trans), and per-ring heteroaromatic bases.</p></div>
       <div class="rule"><div class="n">04 · COUPLINGS</div><h3>Mechanism-specific J</h3>
         <p>Scalar couplings are assigned by mechanism: geminal ²J, vicinal ³J, aromatic ring-position-aware ³/⁴J, olefinic cis/trans/geminal, and long-range / benzylic ⁴J — building the spin graph's edges.</p></div>
       <div class="rule"><div class="n">05 · DISPERSION</div><h3>Sampled, not reused</h3>
@@ -146,7 +152,12 @@
   </div>
 </section>
 
-<footer><div class="wrap">Spinhance · 8-spin ¹H NMR dataset explorer. Statistics computed from the PubChem 8-spin training split.</div></footer>
+<footer><div class="wrap">
+  <ol class="refs">
+    <li id="ref1">Pretsch, E.; Bühlmann, P.; Badertscher, M. <i>Structure Determination of Organic Compounds: Tables of Spectral Data</i>, 4th rev. and enl. ed.; Springer-Verlag: Berlin, Heidelberg, 2009.</li>
+  </ol>
+  <div class="foot-note">Spinhance · 8-spin ¹H NMR dataset explorer. Statistics computed from the PubChem 8-spin training split.</div>
+</div></footer>
 
 <script>
   // theme toggle — shares the site's localStorage key
