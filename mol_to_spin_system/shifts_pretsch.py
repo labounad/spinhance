@@ -285,17 +285,17 @@ HETARO_BASE: dict[str, dict[int, float]] = {
     "pyrimidine": {2: 9.27, 4: 8.78, 5: 7.38, 6: 8.78},
     # p185 pyrazine (1,4-diazine): all four H equivalent at 8.63
     "pyrazine":   {2: 8.63, 3: 8.63, 5: 8.63, 6: 8.63},
-    # ── azoles (p184): assignments uncertain from render — base+flag ──
-    # 1,3-oxazole (O1,C2,N3,C4,C5): H2 8.49, H4 8.31?, H5 6.38  (uncertain)
-    "oxazole":    {2: 7.95, 4: 7.09, 5: 7.70},   # uncertain — common literature values
-    # 1,2-oxazole / isoxazole (O1,N2,C3,C4,C5): H3 8.19, H4 6.x, H5 8.x  (uncertain)
-    "isoxazole":  {3: 8.19, 4: 6.30, 5: 8.42},   # uncertain
-    # 1,3-thiazole (S1,C2,N3,C4,C5): H2 8.72, H4 8.54, H5 7.26  (p184)
-    "thiazole":   {2: 8.72, 4: 8.54, 5: 7.26},
-    # 1,3-diazole / imidazole (N1,C2,N3,C4,C5): H2 7.58, H4/H5 7.58  (p184, tautomer-avg, uncertain)
-    "imidazole":  {2: 7.58, 4: 7.58, 5: 7.58},   # uncertain
-    # 1,2-diazole / pyrazole (N1,N2,C3,C4,C5): H3 7.75, H4 6.30, H5 7.75  (uncertain)
-    "pyrazole":   {3: 7.61, 4: 6.30, 5: 7.61},   # uncertain
+    # ── azoles (p184), verified against the rendered page (Pretsch verbatim) ──
+    # 1,3-oxazole (O1,C2,N3,C4,C5): H2 7.90, H4 7.15 (next to N3), H5 7.68 (next to O1)
+    "oxazole":    {2: 7.90, 4: 7.15, 5: 7.68},
+    # 1,2-oxazole / isoxazole (O1,N2,C3,C4,C5): H3 8.49, H4 6.38, H5 8.31
+    "isoxazole":  {3: 8.49, 4: 6.38, 5: 8.31},
+    # 1,3-thiazole (S1,C2,N3,C4,C5): H2 8.88, H4 7.98 (next to N3), H5 7.41 (next to S1)
+    "thiazole":   {2: 8.88, 4: 7.98, 5: 7.41},
+    # 1,3-diazole / imidazole (N1,C2,N3,C4,C5): H2 7.74, H4/H5 7.13 (tautomer-averaged)
+    "imidazole":  {2: 7.74, 4: 7.13, 5: 7.13},
+    # 1,2-diazole / pyrazole (N1,N2,C3,C4,C5): H3 7.74, H4 6.10, H5 7.74
+    "pyrazole":   {3: 7.74, 4: 6.10, 5: 7.74},
 }
 
 
@@ -329,12 +329,14 @@ FUSED_RINGS: list[tuple[str, str, dict[int, float]]] = [
     # Benzimidazole (p191). 0=C2,1=N3,2=C3a,3=C4,4=C5,5=C6,6=C7,7=C7a,8=N1
     ("benzimidazole", "c1nc2ccccc2[nH]1",
      {0: 8.08, 3: 7.70, 4: 7.26, 5: 7.26, 6: 7.70}),
-    # Quinoline (p194). 0=C2,1=C3,2=C4,3=C4a,4=C5,5=C6,6=C7,7=C8,8=C8a,9=N1
+    # Quinoline (p193, verified): H2 8.92, H3 7.39, H4 8.12, H5 7.82, H6 7.55,
+    # H7 7.72, H8 8.15.  0=C2,1=C3,2=C4,3=C4a,4=C5,5=C6,6=C7,7=C8,8=C8a,9=N1
     ("quinoline", "c1ccc2ccccc2n1",
-     {0: 8.85, 1: 7.38, 2: 8.13, 4: 7.79, 5: 7.79, 6: 7.79, 7: 8.13}),  # uncertain
-    # Isoquinoline (p194). 0=C1,1=N2,2=C3,3=C4,4=C4a,5=C5,6=C6,7=C7,8=C8,9=C8a
+     {0: 8.92, 1: 7.39, 2: 8.12, 4: 7.82, 5: 7.55, 6: 7.72, 7: 8.15}),
+    # Isoquinoline (p193): H1 9.22, H3 8.50 (both read on the page); benzo
+    # standard. 0=C1,1=N2,2=C3,3=C4,4=C4a,5=C5,6=C6,7=C7,8=C8,9=C8a
     ("isoquinoline", "c1cc2ccccc2cn1",
-     {0: 9.29, 2: 8.18, 3: 8.01, 5: 7.86, 6: 7.95, 7: 7.95, 8: 7.93}),  # uncertain
+     {0: 9.22, 2: 8.50, 3: 7.64, 5: 7.82, 6: 7.64, 7: 7.55, 8: 7.97}),
 ]
 
 
@@ -364,6 +366,26 @@ CLASS_DEFAULTS = {
     "heteroatom_H": 3.0,
     "other":       2.0,
 }
+
+# Naphthalene base shifts (Pretsch p182): the four alpha positions (1,4,5,8 —
+# peri to a ring-fusion carbon) = 7.84, the four beta positions (2,3,6,7) = 7.48.
+NAPHTHALENE_ALPHA = 7.84
+NAPHTHALENE_BETA = 7.48
+
+
+def _fused_carbocyclic_aromatic_shift(mol: Chem.Mol, c_idx: int) -> float:
+    """Naphthalene-type base δ for an H on a *fused* all-carbon aromatic 6-ring:
+    7.84 if the carbon is adjacent (peri) to a ring-fusion carbon (alpha, e.g.
+    naphthalene H1/4/5/8), else 7.48 (beta). Pretsch p182. Substituent
+    increments are NOT applied (approximate — flagged), but this is far closer
+    than the generic 7.30 aromatic fallback and generalises to the benzo rings
+    of arbitrary fused systems not covered by a named scaffold."""
+    ri = mol.GetRingInfo()
+    a = mol.GetAtomWithIdx(c_idx)
+    is_alpha = any(nb.GetIsAromatic() and nb.GetAtomicNum() == 6
+                   and ri.NumAtomRings(nb.GetIdx()) > 1
+                   for nb in a.GetNeighbors())
+    return NAPHTHALENE_ALPHA if is_alpha else NAPHTHALENE_BETA
 
 
 # ─── helpers ────────────────────────────────────────────────────────────────
@@ -910,6 +932,15 @@ def predict_shifts_pretsch_verbose(mol: Chem.Mol) -> dict[int, tuple[float, str]
             benzene_rings.append(list(ring))
             benzene_atoms.update(ring)
 
+    # fused all-carbon aromatic 6-rings (naphthalene-type / benzo rings of fused
+    # systems) not covered by a named scaffold -> naphthalene alpha/beta base δ.
+    fused_carbo_atoms: set[int] = set()
+    for ring in ri.AtomRings():
+        if len(ring) == 6 and all(
+            mol.GetAtomWithIdx(i).GetAtomicNum() == 6 and mol.GetAtomWithIdx(i).GetIsAromatic()
+            for i in ring) and any(ri.NumAtomRings(i) > 1 for i in ring):
+            fused_carbo_atoms.update(ring)
+
     for atom in mol.GetAtoms():
         if not _is_protium(atom):
             continue
@@ -941,6 +972,11 @@ def predict_shifts_pretsch_verbose(mol: Chem.Mol) -> dict[int, tuple[float, str]
             if d is not None:
                 result[h_idx] = (round(d, 3), "benzene")
                 continue
+        # 4b) fused carbocyclic aromatic (naphthalene-type / fused benzo ring)
+        if c_idx in fused_carbo_atoms:
+            d = _fused_carbocyclic_aromatic_shift(mol, c_idx)
+            result[h_idx] = (round(d, 3), "fused_arom?")
+            continue
         # 5) alkene (sp2 carbon, C=C)
         if c.GetAtomicNum() == 6 and not c.GetIsAromatic() and \
            any(b.GetBondType() == Chem.BondType.DOUBLE and b.GetOtherAtom(c).GetAtomicNum() == 6
