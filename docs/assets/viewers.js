@@ -175,7 +175,9 @@
       const predOf = (m) => (m.preds ? m.preds[mkey] : m);
       const spec = $("#txSpec", host), sel = $("#txSel", host), meta = $("#txMeta", host), mat = $("#txMatrix", host);
       const modSel = $("#txModel", host), filterCb = $("#txFilter", host), statusEl = $("#txStatus", host);
-      const el3d = $("#tx3d", host), load3d = $("#tx3dLoad", host); let v3d = null;
+      const el3d = $("#tx3d", host), load3d = $("#tx3dLoad", host), spinCb = $("#txSpin", host); let v3d = null;
+      function applySpin() { if (v3d) v3d.spin(spinCb && spinCb.checked ? "y" : false, 0.6); }
+      if (spinCb) spinCb.addEventListener("change", applySpin);
       if (modSel) { modSel.innerHTML = models.map(mm => `<option value="${mm.key}">${mm.label}</option>`).join(""); modSel.value = mkey; }
       const visibleIdx = () => mols.map((m, i) => i).filter(i => !filterTest || inTest(mols[i]));
       function rebuildMolOptions() {
@@ -197,7 +199,7 @@
             v3d.removeAllModels();
             v3d.addModel(m.xyz, "xyz");                      // 3Dmol infers bonds by distance
             v3d.setStyle({}, { stick: { radius: 0.13 }, sphere: { scale: 0.24 } });
-            v3d.zoomTo(); v3d.resize(); v3d.render(); v3d.spin("y", 0.6);
+            v3d.zoomTo(); v3d.resize(); v3d.render(); applySpin();
             if (load3d) load3d.style.opacity = "0";
           } catch (e) { if (load3d) { load3d.textContent = "3D unavailable"; load3d.style.opacity = "1"; } console.error(e); }
         });
