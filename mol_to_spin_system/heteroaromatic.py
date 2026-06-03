@@ -47,6 +47,31 @@ _RING_J: dict[str, dict[frozenset, float]] = {
         frozenset({2, 5}): 0.9, frozenset({3, 6}): 0.9,
         frozenset({2, 6}): 0.4,
     },
+    "pyridazine": {                  # 1,2-diazine: N1,N2; C3,4,5,6
+        frozenset({3, 4}): 4.9, frozenset({5, 6}): 4.9,
+        frozenset({4, 5}): 8.4,
+        frozenset({3, 5}): 2.0, frozenset({4, 6}): 2.0,
+        frozenset({3, 6}): 3.5,
+    },
+    "pyrimidine": {                  # 1,3-diazine: N1,N3; C2,4,5,6 (J24=J26=0 omitted)
+        frozenset({4, 5}): 5.0, frozenset({5, 6}): 5.0,
+        frozenset({4, 6}): 2.5,
+        frozenset({2, 5}): 1.5,
+    },
+    # pyrazine (1,4-diazine): four equivalent H -> single magnetic-equivalence
+    # group (no observable inter-proton coupling); handled by grouping, no table.
+}
+
+#: (ring size, sorted ((position, atomic-num), ...)) -> ring name, using the
+#: canonical numbering from ``_canonical_positions`` (heteroatoms at lowest
+#: locants; O<S<N seniority breaks ties, matching IUPAC).
+_NAME: dict[tuple, str] = {
+    (6, ((1, 7),)): "pyridine",
+    (6, ((1, 7), (2, 7))): "pyridazine",
+    (6, ((1, 7), (3, 7))): "pyrimidine",
+    (5, ((1, 8),)): "furan",
+    (5, ((1, 16),)): "thiophene",
+    (5, ((1, 7),)): "pyrrole",
 }
 
 
@@ -70,30 +95,29 @@ def _cycle_order(mol: Chem.Mol, ring: tuple[int, ...]) -> list[int]:
     return order
 
 
-def _classify(size: int, het: list[tuple[int, int]]) -> str | None:
-    """Ring name from size + heteroatom (idx, atomic-num) list. v1: single-het."""
-    if len(het) != 1:
-        return None
-    z = het[0][1]
-    if size == 6 and z == 7:
-        return "pyridine"
-    if size == 5:
-        return {8: "furan", 16: "thiophene", 7: "pyrrole"}.get(z)
-    return None
+#: heteroatom seniority for lowest-locant tiebreak (IUPAC: O before S before N)
+_SENIORITY = {8: 0, 16: 1, 7: 2}
 
 
-def _positions(mol: Chem.Mol, ring: tuple[int, ...]) -> dict[int, int] | None:
-    """Map each ring atom -> Pretsch position (heteroatom = 1). Single-het only."""
+def _canonical_positions(mol: Chem.Mol, ring: tuple[int, ...]) -> dict[int, int] | None:
+    """Number ring atoms 1..n giving heteroatoms the lowest locants (then O<S<N
+    seniority) — IUPAC-style. Returns {atom_idx: position} or None."""
     order = _cycle_order(mol, ring)
-    if len(order) != len(ring):
+    n = len(order)
+    if n != len(ring):
         return None
-    het_k = [k for k, i in enumerate(order)
-             if mol.GetAtomWithIdx(i).GetAtomicNum() != 6]
-    if len(het_k) != 1:
-        return None
-    k = het_k[0]
-    rot = order[k:] + order[:k]            # heteroatom first
-    return {atom: p + 1 for p, atom in enumerate(rot)}
+    z = {a: mol.GetAtomWithIdx(a).GetAtomicNum() for a in order}
+    best_key = None
+    best_seq = None
+    for start in range(n):
+        for step in (1, -1):
+            seq = [order[(start + step * j) % n] for j in range(n)]
+            het_locants = tuple(p + 1 for p, a in enumerate(seq) if z[a] != 6)
+            seniority = tuple(_SENIORITY.get(z[a], 9) for a in seq if z[a] != 6)
+            key = (het_locants, seniority)
+            if best_key is None or key < best_key:
+                best_key, best_seq = key, seq
+    return {a: p + 1 for p, a in enumerate(best_seq)}
 
 
 def _classified_rings(mol: Chem.Mol):
@@ -108,13 +132,13 @@ def _classified_rings(mol: Chem.Mol):
         size = len(ring)
         if size not in (5, 6):
             continue
-        het = [(i, mol.GetAtomWithIdx(i).GetAtomicNum())
-               for i in ring if mol.GetAtomWithIdx(i).GetAtomicNum() != 6]
-        name = _classify(size, het)
-        if name is None:
+        pos = _canonical_positions(mol, ring)
+        if pos is None:
             continue
-        pos = _positions(mol, ring)
-        if pos:
+        het = tuple(sorted((pos[i], mol.GetAtomWithIdx(i).GetAtomicNum())
+                           for i in ring if mol.GetAtomWithIdx(i).GetAtomicNum() != 6))
+        name = _NAME.get((size, het))
+        if name is not None:
             yield ring, name, pos
 
 
