@@ -121,7 +121,7 @@
     { m: "CNN baseline", arch: "ResNet-1D + typed heads", data: "64k ChEMBL", p: "5.0M", shift: "0.279", j: "1.80", f1: "0.807", deg: "0.732", st: "floor" },
     { m: "64k·022", arch: "spingraph + surrogate-spectral", data: "64k ChEMBL", p: "10M", shift: "0.064", j: "0.91", f1: "0.916", deg: "0.928", st: "superseded" },
     { m: "64k·025", arch: "spingraph, shift-2×, WSD LR", data: "64k ChEMBL", p: "10M", shift: "0.037", j: "0.59", f1: "0.940", deg: "0.945", st: "superseded" },
-    { m: "64k·026", arch: "025 + peak channel + soft-equiv", data: "64k ChEMBL", p: "10M", shift: "0.037", j: "0.65", f1: "0.940", deg: "0.960", st: "done" },
+    { m: "64k·026", arch: "025 + peak channel + soft-equiv", data: "64k ChEMBL", p: "10M", shift: "0.037", j: "0.65", f1: "0.940", deg: "0.960", st: "superseded" },
     { m: "500k·025", arch: "025 recipe", data: "500k PubChem", p: "10M", shift: "0.036", j: "0.51", f1: "0.969", deg: "0.969", st: "production" },
     { m: "500k·026", arch: "026 recipe", data: "500k PubChem", p: "10M", shift: "0.058", j: "0.78", f1: "0.944", deg: "0.952", st: "relaunching" },
     { m: "500k·027", arch: "025 + focal loss", data: "500k PubChem", p: "10M", shift: "0.032", j: "0.46", f1: "0.963", deg: "0.969", st: "running · ep40" },
@@ -134,6 +134,13 @@
       ["shift", "shift↓"], ["j", "J↓"], ["f1", "F1↑"], ["deg", "deg↑"], ["st", "status"]];
     let sortK = null, asc = true;
     const numK = new Set(["shift", "j", "f1", "deg"]);
+    const lowerBetter = new Set(["shift", "j"]);   // others (f1, deg) higher = better
+    // best value per metric column (across all rows) -> highlighted bold + gradient
+    const best = {};
+    numK.forEach(k => {
+      const vals = RUNS.map(r => parseFloat(r[k])).filter(v => !isNaN(v));
+      if (vals.length) best[k] = (lowerBetter.has(k) ? Math.min : Math.max).apply(null, vals);
+    });
     function render() {
       let rows = RUNS.slice();
       if (sortK) rows.sort((a, b) => {
@@ -143,8 +150,10 @@
       });
       host.innerHTML = `<table class="cmp"><thead><tr>${cols.map(c =>
         `<th data-k="${c[0]}"${c[0] === sortK ? ` class="srt ${asc ? 'a' : 'd'}"` : ''}>${c[1]}</th>`).join("")}</tr></thead><tbody>${
-        rows.map(r => `<tr class="st-${r.st}">${cols.map(c =>
-          `<td${numK.has(c[0]) ? ' class="num"' : ''}>${r[c[0]]}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+        rows.map(r => `<tr class="st-${r.st}">${cols.map(c => {
+          const isBest = numK.has(c[0]) && parseFloat(r[c[0]]) === best[c[0]];
+          return `<td${numK.has(c[0]) ? ` class="num${isBest ? ' best' : ''}"` : ''}>${r[c[0]]}</td>`;
+        }).join("")}</tr>`).join("")}</tbody></table>`;
       host.querySelectorAll("th").forEach(th => th.onclick = () => {
         const k = th.dataset.k; if (sortK === k) asc = !asc; else { sortK = k; asc = !numK.has(k); } render();
       });
