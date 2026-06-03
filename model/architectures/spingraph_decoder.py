@@ -66,11 +66,13 @@ class SpinGraphDecoderModel(SpinArchitecture):
                  node_hidden: int = 256, edge_hidden: int = 256,
                  region_feat_dim: int = 80, use_peak_channel: bool = False,
                  peak_min_frac: float = 0.01, peak_sigma: float = 2.0,
+                 use_cumint_channel: bool = False,
                  use_soft_equiv: bool = False,
                  **encoder_overrides):
         super().__init__()
         self.n_groups = n_groups
         self.use_peak_channel = use_peak_channel
+        self.use_cumint_channel = use_cumint_channel
         # The edge head always computes a soft-equivalence logit (cheap), but we only
         # EXPOSE it in auxiliary when this model was configured to use it — i.e. when a
         # SoftEquivLoss trains the flag. Decode-time shift averaging keys off the key's
@@ -78,7 +80,7 @@ class SpinGraphDecoderModel(SpinArchitecture):
         # random groups and wreck the decoded shifts. Gate it here.
         self.use_soft_equiv = use_soft_equiv
         self.peak_min_frac = peak_min_frac
-        in_channels = 2 if use_peak_channel else 1
+        in_channels = 1 + int(use_peak_channel) + int(use_cumint_channel)
         if use_peak_channel:
             self.register_buffer("peak_kernel", _gaussian_kernel(peak_sigma))
         stem, stages, blocks = SIZE_PRESETS[size]
@@ -126,10 +128,23 @@ class SpinGraphDecoderModel(SpinArchitecture):
                                         padding=k.shape[-1] // 2).squeeze(1)
         return smoothed
 
+    def _cumint_channel(self, spec: torch.Tensor) -> torch.Tensor:
+        """Cumulative-integral channel (B, P): the running integral of the spectrum
+        normalized to a 0->1 CDF. Its step sizes encode relative group sizes (proton
+        counts) — a GLOBAL cue the local conv stem can't compute — to help degeneracy,
+        especially the 2H-vs-1H area distinction that the production model misses."""
+        c = torch.cumsum(spec.clamp_min(0.0), dim=-1)
+        return c / c[:, -1:].clamp_min(1e-8)
+
     def _encoder_input(self, spec: torch.Tensor) -> torch.Tensor:
-        if not self.use_peak_channel:
-            return spec                                             # (B, P)
-        return torch.stack([spec, self._peak_channel(spec)], dim=1)  # (B, 2, P)
+        chans = [spec]
+        if self.use_peak_channel:
+            chans.append(self._peak_channel(spec))
+        if self.use_cumint_channel:
+            chans.append(self._cumint_channel(spec))
+        if len(chans) == 1:
+            return spec                                             # (B, P) — single-channel path unchanged
+        return torch.stack(chans, dim=1)                            # (B, C, P)
 
     def forward(self, x) -> ModelOutput:
         spec = self.spectrum_of(x)                                  # (B, P)

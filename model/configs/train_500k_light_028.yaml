@@ -1,0 +1,61 @@
+# "LIGHT" run 028 — medium spingraph on 500k PubChem = the PRODUCTION 025 recipe
+# (matrix, shift 2x) PLUS a cumulative-integral input channel (use_cumint_channel).
+# Clean A/B vs 500k·025 (production) to test whether the integral channel lifts
+# degeneracy prediction — specifically the 2H-vs-1H area confusion that the per-class
+# eval found (d=2 recall 0.858, mostly mis-called d=1). The channel encodes relative
+# proton counts (running integral) the local conv stem can't compute. 90 MHz only.
+# Submit via model/scripts/train_hpc_bundle.slurm (PRELOAD=true recommended).
+run:
+  name: light_028_500k
+  output_dir: model/runs
+
+data:
+  records: data/pubchem/spin_systems_pubchem.json.gz   # -> bundle/records.json.gz by the sbatch
+  parts: data/pubchem/spectra_parts/90MHz              # -> bundle by the sbatch
+  field: 90
+  split: none
+  sample_n: 500000
+  sample_seed: 0
+  preload: true
+
+model:
+  name: spingraph_decoder
+  size: medium
+  dim: 256
+  enc_layers: 2
+  dec_layers: 4
+  n_heads: 8
+  dropout: 0.1
+  use_cumint_channel: true     # the experiment: cumulative-integral 2nd input channel
+
+loss:
+  name: composite
+  terms:
+    - name: matrix
+      weight: 1.0
+      weights:
+        shift: 2.0
+        jmag: 1.0
+        presence: 0.5
+        deg: 0.5
+
+training:
+  epochs: 80
+  batch_size: 256           # -> 512 by the sbatch
+  lr: 0.0005
+  weight_decay: 0.01
+  amp: bf16
+  warmup_frac: 0.03
+  lr_stable_frac: 0.55
+  lr_min_factor: 0.35
+  grad_clip: 1.0
+  patience: 10
+  num_workers: 4
+  val_every: 1
+  seed: 0
+
+diagnostics:
+  enabled: true
+  log_every_steps: 100
+  probe_every_epochs: 3
+  probe_count: 16
