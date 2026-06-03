@@ -276,13 +276,26 @@ def _detail(d):
     fs = rr.read_failure_summary(d)
     if fs:
         st.markdown("###### Failure analysis")
-        cc = st.columns(2)
-        cc[0].metric("Dominant failure", fs.get("dominant_failure", "—"))
-        cc[1].metric("OK molecules", fs.get("n_ok", "?"))
-        fd = fs.get("failure_distribution", {})
+        dom = fs.get("dominant_failure", "—")
+        nmol = fs.get("n_molecules", 0) or 0
+        n_ok = fs.get("n_ok", 0)
+        cc = st.columns(3)
+        # "healthy" = no failures; show the leading failure's share otherwise
+        if dom in ("healthy", "none", "ok"):
+            cc[0].metric("Dominant failure", "none ✓")
+        else:
+            frac = fs.get("dominant_failure_frac")
+            cc[0].metric("Dominant failure", dom,
+                         delta=(f"{frac:.0%} of mols" if frac else None), delta_color="off")
+        ok_pct = f"{(n_ok / nmol):.0%}" if nmol else "—"
+        cc[1].metric("Healthy molecules", f"{n_ok}/{nmol}", delta=ok_pct, delta_color="off")
+        cc[2].metric("Failing", fs.get("n_failing", "?"))
+        # distribution chart: drop the (dominant) "ok" bar so failures are visible
+        fd = {k: v for k, v in fs.get("failure_distribution", {}).items() if k != "ok"}
         if fd:
             f = go.Figure(go.Bar(x=list(fd.keys()), y=list(fd.values()),
                           marker_color=ACCENT))
+            f.update_layout(title="Failure modes (excl. healthy)")
             st.plotly_chart(themed(f, 240), use_container_width=True)
 
 

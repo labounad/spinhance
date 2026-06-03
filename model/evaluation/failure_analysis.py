@@ -94,11 +94,20 @@ def save_failure_cases(per_sample_results, run_dir, epoch: int, n_worst: int = 3
         (epoch_dir / fname).write_text(json.dumps(worst, indent=2))
 
     counts = Counter(r.get("failure_type", "unknown") for r in tagged)
+    # "ok" tags healthy molecules — it is NOT a failure mode, so exclude it when
+    # picking the dominant failure. When nothing fails the run is "healthy"
+    # (distinct from "none" = no probe data at all).
+    failures = Counter({k: v for k, v in counts.items() if k != "ok"})
+    dominant = failures.most_common(1)[0][0] if failures else "healthy"
+    n = len(tagged)
     summary = {
-        "dominant_failure": counts.most_common(1)[0][0] if counts else "none",
+        "dominant_failure": dominant,
+        "dominant_failure_n": failures.get(dominant, 0),
+        "dominant_failure_frac": round(failures.get(dominant, 0) / n, 4) if n else 0.0,
+        "n_failing": sum(failures.values()),
         "n_ok": counts.get("ok", 0),
         "failure_distribution": dict(counts.most_common()),
-        "n_molecules": len(tagged),
+        "n_molecules": n,
     }
     (epoch_dir / "failure_summary.json").write_text(json.dumps(summary, indent=2))
     return summary
