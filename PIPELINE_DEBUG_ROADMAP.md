@@ -19,14 +19,17 @@ baseline** on clean data + clean augmentation._
 ### Identified, not yet fixed
 | # | Bug | Where | Plan |
 |---|-----|-------|------|
-| 7 | **Per-group shift augmentation never wired in** — `randomized_shifts` + stored `shift_range` are unused; spectra & labels both use raw predictor means (two inequivalent tBu → identical 1.38) | `mol_to_spin_system.augment` (unused), `simulation.graph_io.record_to_arrays` | Decide: bake sampled shifts in at generation (needs re-sim) or leave |
+| 7 | **Variability never applied — severe value reuse (CONFIRMED, quantified).** `augment.sample_record`/`bake_file` jitters shifts (`N(mean, σ_from_range)`, floor 0.05 ppm) AND couplings (per-type σ), class-aware — but was never run on the dataset. 500k bundle: shifts snap to ~1000 values (top-20 = 21%, e.g. 7.57 ppm ×21,550); couplings = **~10 constants** (7.5 Hz = 19%). The matrices are not a faithful sample of chemical space. | `mol_to_spin_system.augment` (built, unused); generation never bakes it | **Phase 3 rebuild: sample once per molecule (class-aware), then simulate the spectrum from the SAMPLED values** so spectrum+label stay consistent. Consider K realizations for more coverage. Tune σ floor/cap/k + per-type J σ. |
 
-### To audit (not yet investigated)
-- **Coupling modules** beyond geminal: vicinal/Karplus, aromatic ortho/meta/para, olefinic, benzylic/long-range — verify each is applied to the correct proton pairs, group-mapped correctly, and that intra-group couplings are dropped (geminal had a bug; the others are unaudited).
-- **Grouping edge cases:** vinyl pairs, AA′BB′ aromatics, diastereotopic CH₂ under 3-D embedding failure (`has_3d=False` fallback), strained/large rings.
-- **Shift predictor:** fallback/default behavior, solvent, resolution limits (e.g. two inequivalent tert-butyls predicted identical = predictor resolution, not a code bug — but a modeling limitation worth noting).
-- **Degeneracy normalization** (known d=2 information-limited problem) and its interaction with the ∫=1 normalization.
-- **Standardization / splits / `encode_target`** sanity.
+### Phase 1 audit — findings (complete)
+- **Grouping: sound.** styrene (vinyl NONE + ortho/meta SOFT pairs + para NONE = 8), p-/o-xylene (HARD methyls + AA′BB′), diastereotopic CH₂ (split, 3-D resolved), cyclopropane/acetylacetone all classify correctly after fixes #1–#3.
+- **Couplings: physically correct mechanisms, correctly targeted** (geminal CH₂-only after #2; vicinal Karplus-on-ring vs rotatable-empirical; aromatic ortho/meta/para; olefinic cis/trans; allylic/benzylic 4J). All **deterministic discrete values** → feed the reuse problem (#7).
+- **Minor smells (low priority):**
+  - Coupling modules iterate over all H incl. deuterium (harmless — D-couplings dropped downstream — but inconsistent with the D fix; should skip isotope≠protium for cleanliness).
+  - `aromatic_couplings` uses shortest-path separation → fused-ring peri/cross-ring pairs get no coupling (naphthalene peri ⁴J missed).
+  - `sample_record` class-aware grouping keys on `(mean, range)` as an equivalence proxy, not the true tier class (works in practice; fragile to accidental ties).
+  - 3-D embed failure (`has_3d=False`) → 2-D fallback can under-count diastereotopic CH₂ (documented limitation, rare).
+- **Still worth a look:** degeneracy normalization vs ∫=1 (known d=2 issue); standardization/splits/`encode_target` sanity.
 
 ## Roadmap
 1. **Finish the audit** (couplings, grouping edge cases, predictor) — find remaining bugs *before* committing compute.
