@@ -4,18 +4,22 @@ from rdkit import Chem
 
 from mol_to_spin_system.aromatic import aromatic_couplings
 from mol_to_spin_system.geminal import geminal_couplings
+from mol_to_spin_system.heteroaromatic import heteroaromatic_couplings
 from mol_to_spin_system.long_range import long_range_couplings
 from mol_to_spin_system.olefinic import olefinic_couplings
 from mol_to_spin_system.vicinal import vicinal_couplings
 
 # (estimator, type-tag) — the tag records which mechanism produced each J so a
 # per-type sampling sigma can be applied downstream (mol_to_spin_system.augment).
+# heteroaromatic runs AFTER aromatic so its ring-specific values override the
+# benzene fallback for the hetero rings it covers (same (i,j) keys).
 _ESTIMATORS = (
-    (geminal_couplings,    "geminal"),    # 2J, same carbon
-    (vicinal_couplings,    "vicinal"),    # 3J, H-C-C-H single bond
-    (olefinic_couplings,   "olefinic"),   # 3J, H-C=C-H
-    (aromatic_couplings,   "aromatic"),   # ortho/meta/para
-    (long_range_couplings, "long_range"), # 4J allylic/benzylic
+    (geminal_couplings,       "geminal"),    # 2J, same carbon
+    (vicinal_couplings,       "vicinal"),     # 3J, H-C-C-H single bond
+    (olefinic_couplings,      "olefinic"),    # 3J, H-C=C-H
+    (aromatic_couplings,      "aromatic"),    # benzene ortho/meta/para (fallback for all aromatic rings)
+    (heteroaromatic_couplings, "aromatic"),   # ring-specific override for heteroaromatics
+    (long_range_couplings,    "long_range"),  # 4J allylic/benzylic
 )
 
 
@@ -24,8 +28,10 @@ def all_couplings_typed(
 ) -> dict[tuple[int, int], tuple[float, str]]:
     """Merge every H-H estimator into ``{(atom_i, atom_j): (J_Hz, type)}``.
 
-    Each estimator covers a distinct topological relationship, so keys do not
-    overlap; *type* is the producing mechanism's tag.
+    Estimators are applied in order and a later one overwrites an earlier key:
+    most cover disjoint topologies, but ``heteroaromatic`` deliberately follows
+    ``aromatic`` to replace the benzene fallback on hetero rings. *type* is the
+    producing mechanism's tag.
     """
     merged: dict[tuple[int, int], tuple[float, str]] = {}
     for estimator, tag in _ESTIMATORS:
