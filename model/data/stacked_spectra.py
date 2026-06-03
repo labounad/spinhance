@@ -54,10 +54,20 @@ class StackedSpectra:
     def __len__(self):
         return self.total
 
-    def preload(self, rows) -> None:
-        """Load the given global rows into a RAM array via sequential whole-shard
-        reads (fast on GPFS), so ``__getitem__`` serves them from memory instead of
-        random mmap faults. Call once in the main process before DataLoader fork.
+    def preload(self, rows, dense_frac: float = 0.25) -> None:
+        """Load the given global rows into a RAM array, so ``__getitem__`` serves
+        them from memory instead of random mmap faults. Call once in the main
+        process before DataLoader fork.
+
+        Per shard the read strategy is chosen by density: when the needed rows are
+        a large fraction (≥ ``dense_frac``) of the shard, the whole shard is read
+        sequentially (fast on GPFS, the right call for dense training subsets);
+        when only a few rows are needed (the SPARSE case — e.g. a scattered held-out
+        test subset where each shard contributes ~a dozen of ~2000 rows) the shard
+        is mmap-ed and only the needed rows are faulted in. The sparse path reads
+        ~``len(rows)`` rows total instead of the full corpus — e.g. a 20k-row
+        held-out subset reads ~1.3 GB rather than ~196 GB of whole shards.
+
         Memory ≈ len(set(rows)) * P * 4 bytes (e.g. 500k * 16384 * 4 ≈ 33 GB)."""
         needed = sorted(set(int(r) for r in rows))
         if not needed:
@@ -71,16 +81,30 @@ class StackedSpectra:
             by_shard[k].append(r)
         gb = self._ram.nbytes / 1e9
         print(f"[stacked] preloading {len(needed)} rows from {len(by_shard)} shards "
-              f"into RAM (~{gb:.1f} GB) — sequential reads", flush=True)
+              f"into RAM (~{gb:.1f} GB)", flush=True)
+        n_full = n_sparse = 0
         for n, (k, rs) in enumerate(sorted(by_shard.items())):
-            part = np.load(self.files[k])                 # full sequential read (no mmap)
             base = int(self.offsets[k])
-            for r in rs:
-                self._ram[self._ram_index[r]] = part[r - base]
-            del part
+            shard_sz = int(self.offsets[k + 1] - base)
+            if len(rs) >= dense_frac * shard_sz:          # dense → one sequential read
+                part = np.load(self.files[k])
+                for r in rs:
+                    self._ram[self._ram_index[r]] = part[r - base]
+                del part
+                n_full += 1
+            else:                                          # sparse → fault only needed rows
+                mm = np.load(self.files[k], mmap_mode="r")
+                for r in rs:
+                    self._ram[self._ram_index[r]] = mm[r - base]
+                try:
+                    mm._mmap.close()
+                except Exception:
+                    pass
+                n_sparse += 1
             if (n + 1) % 500 == 0:
                 print(f"[stacked]   {n + 1}/{len(by_shard)} shards", flush=True)
-        print("[stacked] preload done", flush=True)
+        print(f"[stacked] preload done ({n_full} full-read, {n_sparse} sparse-mmap shards)",
+              flush=True)
 
     def _part(self, k: int) -> np.ndarray:
         m = self._mmaps.get(k)
