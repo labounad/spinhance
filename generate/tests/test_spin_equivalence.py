@@ -188,6 +188,23 @@ class TestAnalyzeSpinSystems:
         hard_methyls = [g for g in groups if g.tier == "HARD" and len(g.h_indices) == 3]
         assert len(hard_methyls) == 2
 
+    def test_deuterium_not_counted(self):
+        """Explicit deuterium (²H) is NMR-invisible in ¹H and must not be
+        counted as a spin group, flagged equivalent, or given a shift.
+
+        Regression for the deuterated tert-butyl arene that was counted as 8
+        groups ([9,9,3,3,1,1,1,1]) — the four aromatic D forming a phantom
+        equivalence class with duplicated shifts.  Only the two tert-butyls
+        and two methyls are real ¹H groups → 4 groups [9,9,3,3].
+        """
+        smi = "[2H]C1=C(C(=C2C(=C(C(=C(C2=C1[2H])C(C)(C)C)[2H])C(C)(C)C)C)C)[2H]"
+        n, sizes = analyze_spin_systems(_mol(smi))
+        assert n == 4
+        assert sizes == [9, 9, 3, 3]
+        # fully deuterated benzene → no observable protons at all
+        n6, _ = analyze_spin_systems(_mol("[2H]c1c([2H])c([2H])c([2H])c([2H])c1[2H]"))
+        assert n6 == 0
+
     # ── enantiotopic cases ───────────────────────────────────────────────────
     def test_enantiotopic_ch2_counts_separately(self):
         """CH₂ in fluorochloromethane: two enantiotopic H → 2 groups."""

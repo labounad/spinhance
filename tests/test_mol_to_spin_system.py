@@ -96,6 +96,15 @@ def test_proton_groups():
     assert degeneracies(groups) == [6]
 
 
+def test_proton_groups_excludes_deuterium():
+    # Deuterium (2H) is NMR-invisible: benzene-d6 has no proton groups, and a
+    # partially deuterated toluene counts only the CH3 (the ring D is ignored).
+    groups, _ = proton_groups(make_test_mol_3d("[2H]c1c([2H])c([2H])c([2H])c([2H])c1[2H]"))
+    assert groups == []
+    groups, _ = proton_groups(make_test_mol_3d("Cc1c([2H])c([2H])c([2H])c([2H])c1[2H]"))
+    assert degeneracies(groups) == [3]  # only the methyl
+
+
 # --- end-to-end (needs Java + nmrshiftdb predictor) -------------------------
 
 def _predictor_available() -> bool:
