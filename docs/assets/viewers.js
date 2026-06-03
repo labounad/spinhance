@@ -81,22 +81,34 @@
       // session legend toggles
       const leg = $("#lcLegend", host);
       leg.innerHTML = Object.keys(data).map(k =>
-        `<button data-k="${k}" class="on" title="click: show only this · double-click: pin/unpin" style="--c:${colOf(k)}"><i></i>${data[k].label}</button>`).join("");
-      const syncLegend = () => leg.querySelectorAll("button").forEach(b => b.classList.toggle("on", active.has(b.dataset.k)));
-      // single click -> solo that model; double click -> pin/unpin (build a multi-selection)
+        `<button data-k="${k}" class="on" title="click: show only this (kept pins stay) · double-click: pin/unpin" style="--c:${colOf(k)}"><i></i>${data[k].label}</button>`).join("");
+      // Selection = pinned set (double-click toggles, persistent) ∪ the last single-
+      // clicked "solo". Single click loads one but leaves pins alone; with nothing
+      // selected, all curves show. `active` (used by draw) is recomputed from these.
+      const pinned = new Set();
+      let solo = null;
+      const recompute = () => {
+        active.clear();
+        pinned.forEach(k => active.add(k));
+        if (solo) active.add(solo);
+        if (active.size === 0) Object.keys(data).forEach(k => active.add(k));
+      };
+      const syncLegend = () => leg.querySelectorAll("button").forEach(b => {
+        b.classList.toggle("on", active.has(b.dataset.k));
+        b.classList.toggle("pinned", pinned.has(b.dataset.k));
+      });
       let pend = null;
       leg.querySelectorAll("button").forEach(b => b.onclick = () => {
         const k = b.dataset.k;
-        if (pend && pend.k === k) {                       // 2nd click on same button = double
+        if (pend && pend.k === k) {                       // 2nd click on same button = double -> pin/unpin
           clearTimeout(pend.timer); pend = null;
-          active.has(k) ? active.delete(k) : active.add(k);   // pin / unpin
-          if (active.size === 0) active.add(k);               // never leave the plot empty
-          syncLegend(); draw();
+          pinned.has(k) ? pinned.delete(k) : pinned.add(k);
+          recompute(); syncLegend(); draw();
         } else {
           if (pend) clearTimeout(pend.timer);
-          pend = { k, timer: setTimeout(() => {            // single click = show only this
-            pend = null; active.clear(); active.add(k); syncLegend(); draw();
-          }, 220) };
+          pend = { k, timer: setTimeout(() => {            // single click -> load only this; pins persist
+            pend = null; solo = k; recompute(); syncLegend(); draw();
+          }, 200) };
         }
       });
       draw(); window.addEventListener("resize", draw);
