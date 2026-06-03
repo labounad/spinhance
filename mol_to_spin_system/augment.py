@@ -31,11 +31,18 @@ import numpy as np
 
 #: range -> sigma divisor ((max-min) ~ 4 sigma covers ~95% of a normal)
 DEFAULT_K = 4.0
-#: minimum sigma (ppm) — the predictor's intrinsic uncertainty floor
-DEFAULT_FLOOR = 0.05
+#: shift sampling sigma floor (ppm). With the Pretsch engine each environment is
+#: a POINT estimate (stored range is degenerate, min==max), so this floor IS the
+#: shift spread. It is set DELIBERATELY LARGER than the true per-environment
+#: chemical-space variability (~0.1 ppm) — "over-dispersion" (#7b): it stops the
+#: model from leaning on a value-prior and forces it to read peak positions from
+#: the spectrum (the spectrum is simulated FROM the sampled shift, so there is no
+#: label noise). Kept moderate so the legitimate chemical prior that disambiguates
+#: overlapping 90 MHz multiplets is not erased. Tunable / ablatable.
+DEFAULT_FLOOR = 0.15
 #: maximum sigma (ppm) — tame rare wide-spread environments
 DEFAULT_CAP = 0.4
-#: clip sampled shifts to a plausible ¹H window
+#: clip sampled shifts to a plausible ¹H window (physical clamp)
 SHIFT_CLIP = (-1.0, 13.0)
 
 #: per-type coupling sigma (Hz).  Unlike shifts, J has no database spread — it
@@ -99,11 +106,19 @@ def sample_couplings(
     default: float = DEFAULT_COUPLING_SIGMA,
     rng: np.random.Generator | None = None,
 ) -> np.ndarray:
-    """Randomized couplings ``N(J_i, sigma_type_i)`` for every group pair."""
+    """Randomized couplings ``N(J_i, sigma_type_i)`` for every group pair.
+
+    Physical clamp: the sampled coupling keeps the sign of its base value
+    (aromatic/vicinal positive, geminal negative — a sign flip is unphysical) and
+    its magnitude is capped at 25 Hz. Couplings are dispersed less than shifts —
+    they are harder to read from overlapping 90 MHz multiplets, so we keep more
+    of the prior.
+    """
     rng = rng if rng is not None else np.random.default_rng()
     jvals = np.asarray(jvals, dtype=float)
     sig = np.array([sigma.get(t, default) for t in types], dtype=float)
-    return rng.normal(jvals, sig)
+    out = rng.normal(jvals, sig)
+    return np.sign(jvals) * np.minimum(np.abs(out), 25.0)
 
 
 def sample_record(
