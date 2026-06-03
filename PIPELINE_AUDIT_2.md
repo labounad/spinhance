@@ -127,11 +127,98 @@ re-guesses from `(shift,range)`.
 - **A6 — LOW.** `np.mean([],axis=0)` → silent NaN shift if a class has no predicted
   atoms (`xyz.py:157–160`); guard empty classes.
 
-### B — Shifts & couplings
-- _pending_
+### B — Shifts & couplings  *(complete)*
+Collision quantification (400 ChEMBL mols, 2620 groups): **24.4% of groups share an
+exact δ with a distinct group; 30.6% of aromatic groups collide.** Drivers: (a) the
+substituent-blind fused/hetero base-shift paths (B1 — a BUG), (b) genuine additivity
+coarseness (inherent). Monosubstituted-benzene additivity verified excellent (±0.05).
 
-### C — Grouping, matrix, driver & consistency
-- _pending_
+- **B1 — CRITICAL.** Substituted heteroaromatics emit *unsubstituted-parent* shifts
+  with a confident flag: the "substituted?" test (`shifts_pretsch.py:853–855`) inspects
+  only the proton's own carbon, not the whole ring. Furfural ≡ 2-methylfuran shifts
+  (off ~0.8 ppm). **Fix:** flag on any ring carbon bearing a heavy substituent; ideally
+  per-ring Z-increment tables. Major collision driver between genuinely-distinct positions.
+- **B2 — HIGH.** Pyrazine base shift (8.63) is dead code — missing `_NAME` key
+  `(6,((1,7),(4,7)))` in `heteroaromatic.py:91–103` → pyrazine falls to 7.30 (off ~1.3 ppm).
+- **B3 — HIGH.** Ring vicinal ³J is a single-conformer lottery (`vicinal.py:124–126`):
+  cyclohexane J-set flips chair↔twist by embed seed. Reproducible (fixed seed) but not
+  correct. **Fix:** Karplus averaged over an ETKDG ensemble, or ring-type defaults.
+- **B4 — HIGH (overlaps C).** Diastereotopic CH₂ collapses to one group
+  (`groups.py:23` `CanonicalRankAtoms(breakTies=False)`) → geminal ²J dropped (matrix.py
+  skips gi==gj) + distinct shifts averaged. The mol_3078877 OCH₂ inconsistency. **Fix:**
+  detect diastereotopicity and split deterministically.
+- **B5 — MEDIUM.** `vicinal.py:121` applies ethane base (7.3 Hz) to sp²–sp² single bonds
+  (butadiene C2–C3 → 7.3, true ~10.4). Branch on hybridization.
+- **B6 — MEDIUM.** Geminal additive model undershoots multi-EN-substituted carbons
+  (`geminal.py:10`; CH₂Cl₂ −9.2 vs Pretsch −7.5). Nonlinear/per-pair correction.
+- **B7 — MEDIUM.** Fused/peri ⁴J missing (`aromatic.py:47` whole-mol shortest path routes
+  through fusion bond; naphthalene peri H1–H8 absent).
+- **B8 — MEDIUM.** Placeholder rows in `AROM_INCR`: `CH=CH2`≡`CH2Cl` (line 79), `C#N`≡`NCS`
+  (line 134) — not transcribed Pretsch values.
+- **B9 — LOW.** `shift_range` degenerate (confirms A); cosmetic until augment adds σ.
+- **B10 — LOW.** Olefinic geminal =CH₂ base +2.0 vs lit +2.5 (`geminal.py:9`).
+- **B11 — LOW.** Per-bond olefinic J uses a single dominant substituent for the whole C=C.
+
+### C — Grouping, matrix, driver & consistency  *(complete)*
+**Architecture finding:** TWO independent grouping algorithms. (1) **Dataset path**
+`generate/pipeline.py → classify_spin_groups → xyz_writer → entry_to_spin_system`
+(3D deuterium-substitution HARD/SOFT/NONE; splits enantiotopic + diastereotopic CH₂ —
+CORRECT). (2) **Utility path** `mol_to_spin_system/pipeline.py → build_spin_system →
+groups.py:proton_groups` (CanonicalRankAtoms, does NOT split). The earlier "OCH₂
+deg-2 vs split" was just me calling path (2); the dataset (path 1) split it correctly.
+
+- **C1 — HIGH.** `groups.py:proton_groups` splits neither enantiotopic nor
+  diastereotopic CH₂; its docstring is false. Not used for the dataset (only a utility +
+  tests). **Fix:** make `build_spin_system` delegate to `classify_spin_groups` (single
+  source of truth) or delete path (2); at minimum fix the docstring.
+- **C2 — HIGH.** Production classification is conformer-dependent: scanning 200 mols at
+  4–6 ETKDG seeds, **2% flip tier, 0.5% flip group COUNT** (e.g. CHEMBL8185: 8 groups on
+  3 seeds, 7 on 3). The fixed seed pins one sample of a multimodal answer → unstable
+  across RDKit/platform → train/serve skew + unstable regeneration. **Fix:** classify
+  over multiple conformers (consensus tier) and/or drop count-unstable mols; pin RDKit.
+- **C3 — MEDIUM.** 2D embed-failure fallback (`use_3d=False`) mis-groups diastereotopic
+  CH₂ as an (impossible) 2-H HARD rotor → wrong count. **Fix:** skip embed-failed mols
+  (or guard `_is_magnetically_equivalent` behind the rotor-shape check).
+- **C4 — MEDIUM.** InChI is ALWAYS empty: `xyz_writer.py:186` references `mol` not
+  `mol_h` → NameError swallowed by bare except. **Fix:** `MolToInchi(mol_h)` + tighten except.
+- **C5 — LOW.** `generate/pipeline.py:353–362` writes in completion order (nondeterministic
+  row order); `dedup.py` "first occurrence" → surviving representative varies run-to-run.
+  **Fix:** sort final dataset by a stable key (InChIKey) for byte-reproducibility.
+- **C6 — LOW.** Same doc/intent mismatch as A4 (merge_enantiotopic) — code correct, doc stale.
+
+**C verdict:** the dataset path is deterministic under a fixed seed with the correct
+grouping rule; before regeneration MUST fix C4, harden C2/C3 (consensus or drop +
+pin RDKit), and C5 (ordering/dedup). Unify the two grouping paths (C1) to prevent future divergence.
+
+---
+
+## 7. Synthesis & recommended rework (post-audit)
+
+The generation code has **one critical correctness bug (A1/A2)**, a **high-impact shift
+bug (B1)**, **determinism/stability gaps (C2–C5)**, **two divergent grouping paths
+(C1)**, and a cluster of **constant/rule errors (B2,B5,B6,B8,B10)**. A targeted rework is
+warranted (not a full rewrite — the dataset path's core is sound).
+
+**Rework workplan (Phase 2 — code), with regression tests for each:**
+1. **Equivalence-keyed sharing (A1/A2):** persist per-group `equiv_class` id in
+   `entry_to_spin_system`/`to_dict`; key `sample_record` on it; independent Gaussian for
+   all non-siblings. Regression: mol_3078877 → distinct aromatic shifts.
+2. **Heteroaromatic substituents (B1) + pyrazine (B2):** whole-ring substituent flag;
+   add missing `_NAME` entry; (stretch) per-ring Z-increments.
+3. **Unify grouping (C1):** single source of truth via `classify_spin_groups`.
+4. **Determinism/stability (C2/C3/C4/C5):** multi-conformer consensus + drop
+   count-unstable, skip embed-failed, fix InChI, stable sort/dedup, pin RDKit.
+5. **Coupling/constant fixes (B5,B6,B8,B10):** hybridization gate, multi-EN geminal,
+   transcribe AROM_INCR rows, =CH₂ base.
+6. **Defer/low:** B7 peri-⁴J, B11 per-bond olefinic, A6 NaN guard.
+
+## 8. Open decisions (owner) — gate the regeneration
+- **D1 (conformer stability, C2/C3):** consensus over K conformers + DROP molecules whose
+  group count is unstable (recommended) vs keep single-seed. Affects dataset composition.
+- **D2 (symmetric aromatics, A3):** make 1,3,5-symmetric ring H truly HARD (automorphism
+  test) — chemically correct but changes group counts / dataset membership.
+- **D3 (rework scope):** the staged rework above (recommended) vs minimal (A1/A2 + B1/B2
+  only) for a faster regeneration.
 
 ---
 
