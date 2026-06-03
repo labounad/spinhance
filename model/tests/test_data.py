@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader
 
 from model.data.splits import canonical_order, make_splits
 from model.data.standardization import DegeneracyVocab, Standardizer, class_balance
-from model.data.transforms import encode_target, augment_spectrum
+from model.data.transforms import encode_target, augment_spectrum, _one_h_height
 from model.data.dataset import SpectrumMatrixDataset
 from model.data.collate import collate_spin_batch
 from model.schemas import SpinBatch
@@ -63,8 +63,40 @@ def test_standardizer_roundtrip():
 def test_augment_preserves_length_and_nonneg():
     rng = np.random.default_rng(0)
     spec = np.abs(rng.standard_normal(P)).astype(np.float32)
-    out = augment_spectrum(spec, 0.0, 12.0, rng=rng)
+    out = augment_spectrum(spec, 0.0, 12.0, rng=rng, n_protons=10)
     assert out.shape == (P,) and (out >= 0).all()
+
+
+def test_noise_reference_is_1h_not_max():
+    # Two unit-integral spectra, same N and same total integral but very
+    # different max heights (a tall singlet vs a spread-out band). The 1H
+    # reference height must be identical (it depends on Σspec/N, not max), so a
+    # large singlet is no longer "punished" with extra noise.
+    P_ = 16384
+    dx = 12.0 / P_
+    tall = np.zeros(P_, dtype=np.float64); tall[8000] = 1.0
+    tall /= tall.sum() * dx                     # unit integral, very high max
+    flat = np.ones(P_, dtype=np.float64)
+    flat /= flat.sum() * dx                     # unit integral, tiny max
+    assert tall.max() > 100 * flat.max()
+    h_tall = _one_h_height(tall, 10)
+    h_flat = _one_h_height(flat, 10)
+    assert np.isclose(h_tall, h_flat, rtol=1e-6)         # reference unaffected by max
+    # and it scales as 1/N
+    assert np.isclose(_one_h_height(tall, 20), h_tall / 2, rtol=1e-6)
+
+
+def test_augment_noise_level_in_range():
+    # Sampled noise fraction stays within the log-uniform band across draws.
+    rng = np.random.default_rng(1)
+    spec = np.zeros(P, dtype=np.float32); spec[100] = 1.0; spec[300] = 0.3
+    for _ in range(5):
+        out = augment_spectrum(spec, 0.0, 12.0, rng=rng, n_protons=8,
+                               noise_frac_range=(0.003, 0.015))
+        assert out.shape == (P,) and (out >= 0).all()
+    # peaks are not moved (no referencing shift)
+    out = augment_spectrum(spec, 0.0, 12.0, rng=rng, n_protons=8, noise_frac_range=None)
+    assert int(out[90:110].argmax()) + 90 == 100
 
 
 def test_class_balance_shapes():

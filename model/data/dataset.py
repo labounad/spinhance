@@ -85,7 +85,9 @@ class SpectrumMatrixDataset(Dataset):
         inp = clean
         if self.augment:
             rng = np.random.default_rng((_WORKER_SEED, self.seed, i))
-            inp = augment_spectrum(clean, self.ppm_from, self.ppm_to, rng=rng, **self.aug_kwargs)
+            n_protons = int(sum(int(x) for x in r["degeneracy"]))
+            inp = augment_spectrum(clean, self.ppm_from, self.ppm_to, rng=rng,
+                                   n_protons=n_protons, **self.aug_kwargs)
 
         t = self.std.transform(
             encode_target(r["shifts"], r["couplings"], r["degeneracy"], self.vocab,

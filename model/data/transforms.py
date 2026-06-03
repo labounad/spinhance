@@ -42,15 +42,45 @@ def _renorm(spec, dx):
     return spec / area if area > 0 else spec
 
 
-def augment_spectrum(spec, ppm_from=0.0, ppm_to=12.0, rng=None,
-                     noise_sigma_frac=0.005, broaden_sigma_pts=0.0):
+# Peak/sum ratio of ONE simulated line (pseudo-Voigt, η=0.8, ~1 Hz @ 90 MHz on
+# the 12 ppm / 16384-pt grid → ~7.6-pt HWHM). Converts a group's per-proton
+# integral into its per-proton PEAK height.  It only calibrates the absolute
+# noise scale — i.e. what `frac` means as 1/SNR of a single proton; the
+# per-molecule 1/N scaling (the actual fix vs the old spec.max() reference) is
+# independent of this constant.  Recompute if the simulation linewidth changes.
+_LINE_PEAK_TO_SUM = 0.047
+
+
+def _one_h_height(spec, n_protons):
+    """Peak height a single-proton singlet would have in this unit-∫ spectrum.
+
+    The spectrum integrates to 1 over its ``n_protons`` protons, so one proton's
+    integral is ``Σspec/n_protons`` and its peak height is that times the line's
+    peak/sum ratio.  Referencing noise to THIS (not ``spec.max()``) means a
+    molecule with a tall 9H tert-butyl singlet no longer gets 9× the noise on
+    its minor peaks.
+    """
+    return _LINE_PEAK_TO_SUM * float(np.sum(spec)) / max(int(n_protons), 1)
+
+
+def augment_spectrum(spec, ppm_from=0.0, ppm_to=12.0, rng=None, *,
+                     n_protons=None, noise_frac_range=(0.003, 0.015),
+                     broaden_sigma_pts=0.0):
     """Augmented copy of a normalized spectrum (unit integral).
 
     The model operates on **processed, referenced** spectra, so we only model
     distortions that survive good processing:
 
-    noise_sigma_frac   Gaussian intensity-noise std as a fraction of peak height
-                       (peak = max intensity of this spectrum)
+    noise_frac_range   (lo, hi) for the intensity-noise level, sampled
+                       LOG-UNIFORMLY per spectrum.  The level is the noise RMS
+                       as a fraction of a **1H-singlet** peak height — i.e.
+                       1/SNR of a single proton — so it is independent of how
+                       the molecule's protons are distributed among peaks
+                       (a 9H tert-butyl singlet no longer inflates the noise).
+                       Pass equal endpoints for a fixed level; ``None`` to skip.
+    n_protons          total protons (Σ degeneracy); sets the 1H reference
+                       height.  If ``None``, falls back to ``spec.max()``
+                       (standalone use only — the dataset always passes it).
     broaden_sigma_pts  optional Gaussian broadening (points) ~ linewidth jitter
 
     Deliberately NOT modeled:
@@ -66,7 +96,6 @@ def augment_spectrum(spec, ppm_from=0.0, ppm_to=12.0, rng=None,
     spec = np.asarray(spec, float).copy()
     P = len(spec)
     dx = (ppm_to - ppm_from) / P
-    peak = spec.max() if spec.max() > 0 else 1.0
 
     if broaden_sigma_pts > 0:
         k = int(max(3, round(6 * broaden_sigma_pts)))
@@ -75,8 +104,13 @@ def augment_spectrum(spec, ppm_from=0.0, ppm_to=12.0, rng=None,
         g /= g.sum()
         spec = np.convolve(spec, g, mode="same")
 
-    if noise_sigma_frac > 0:
-        spec = spec + rng.normal(0, noise_sigma_frac * peak, P)
+    if noise_frac_range is not None:
+        lo, hi = noise_frac_range
+        frac = float(np.exp(rng.uniform(np.log(lo), np.log(hi)))) if hi > lo else float(lo)
+        ref = (_one_h_height(spec, n_protons) if n_protons
+               else (spec.max() if spec.max() > 0 else 1.0))
+        if ref > 0:
+            spec = spec + rng.normal(0, frac * ref, P)
 
     spec = np.clip(spec, 0.0, None)
     return _renorm(spec, dx).astype(np.float32)
