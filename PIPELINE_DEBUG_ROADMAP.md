@@ -4,6 +4,15 @@ _Started 2026-06-02. Goal: fully debug generation → simulation → data → tr
 regenerate clean datasets, and re-run every inverse model **beyond the CNN
 baseline** on clean data + clean augmentation._
 
+> **STATUS — all CODE prerequisites complete (PRs #71–#94).** Bug fixes #1–#8;
+> noise→1H-referenced+log-uniform; deuterium-molecule elimination; Pretsch
+> coupling enrichment (Tier 1 monocyclic+fused-5, Tier 2 substituent-dependent);
+> Pretsch shift engine (Tier 3) built, ~95% coverage, **wired in replacing HOSE
+> (Java dependency removed)**; variability bake with over-dispersion + clamps.
+> **Remaining = HPC execution only:** Phase 3 rebuild (re-screen → build → bake →
+> simulate → bundle, predictor-free) and Phase 4 retrain (all models beyond the
+> CNN baseline). No predictor needed anymore.
+
 ## Bugs
 
 ### Fixed (merged)
