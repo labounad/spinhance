@@ -14,11 +14,11 @@ baseline** on clean data + clean augmentation._
 | 3 | **Deuterium counted as ¹H** — ²H/³H counted as groups; D→D substitution is a no-op so all D also collapsed into one bogus equivalence class (duplicated shifts) | `generate/spin_equivalence`, `mol_to_spin_system.groups.proton_groups` | #72 |
 | 4 | **Baseline-drift augmentation** — non-physical for processed (baseline-corrected) data | `model/data/transforms.augment_spectrum` | #73 |
 | 5 | **Global referencing-shift augmentation** — slid the spectrum ±0.01 ppm while leaving labels fixed → ~0.01 ppm pure label noise on already-referenced spectra | `model/data/transforms.augment_spectrum` | #73 |
+| 6 | **Noise scaled to `spec.max()`** instead of a 1H-singlet reference — punished large-singlet molecules (a 9H tBu made its minor peaks see ~9× too much noise). Now `noise = frac × (1H height = peak/sum × Σspec / N)`, `frac` log-uniform 0.3–1.5% per spectrum | `model/data/transforms.augment_spectrum` (+ `dataset` threads `n_protons`) | #75 |
 
 ### Identified, not yet fixed
 | # | Bug | Where | Plan |
 |---|-----|-------|------|
-| 6 | **Noise scaled to `spec.max()`** instead of a 1H-singlet reference. Punishes large-singlet molecules (a 9H tBu makes its minor peaks see ~9× too much noise) — likely cause of poor tBu performance | `model/data/transforms.augment_spectrum` | Approach A: `noise_sigma = frac × H_unit / N`, `N = Σ degeneracy`. Training-time only, no re-sim |
 | 7 | **Per-group shift augmentation never wired in** — `randomized_shifts` + stored `shift_range` are unused; spectra & labels both use raw predictor means (two inequivalent tBu → identical 1.38) | `mol_to_spin_system.augment` (unused), `simulation.graph_io.record_to_arrays` | Decide: bake sampled shifts in at generation (needs re-sim) or leave |
 
 ### To audit (not yet investigated)
