@@ -123,9 +123,10 @@
     { m: "64k·025", arch: "spingraph, shift-2×, WSD LR", data: "64k ChEMBL", p: "10M", shift: "0.037", j: "0.59", f1: "0.940", deg: "0.945", st: "superseded" },
     { m: "64k·026", arch: "025 + peak channel + soft-equiv", data: "64k ChEMBL", p: "10M", shift: "0.037", j: "0.65", f1: "0.940", deg: "0.960", st: "done" },
     { m: "500k·025", arch: "025 recipe", data: "500k PubChem", p: "10M", shift: "0.036", j: "0.51", f1: "0.969", deg: "0.969", st: "production" },
-    { m: "500k·026", arch: "026 recipe", data: "500k PubChem", p: "10M", shift: "0.059", j: "0.89", f1: "0.935", deg: "0.959", st: "running · ep11" },
-    { m: "1M·025", arch: "025 recipe, xl", data: "1M PubChem", p: "57M", shift: "0.052", j: "0.59", f1: "0.958", deg: "0.927", st: "running · ep11" },
-    { m: "1M·026", arch: "026 recipe, xl", data: "1M PubChem", p: "57M", shift: "0.046", j: "0.70", f1: "0.961", deg: "0.969", st: "running · ep11" },
+    { m: "500k·026", arch: "026 recipe", data: "500k PubChem", p: "10M", shift: "0.058", j: "0.78", f1: "0.944", deg: "0.952", st: "relaunching" },
+    { m: "500k·027", arch: "025 + focal loss", data: "500k PubChem", p: "10M", shift: "0.032", j: "0.46", f1: "0.963", deg: "0.969", st: "running · ep40" },
+    { m: "1M·025", arch: "025 recipe, xl", data: "1M PubChem", p: "57M", shift: "0.045", j: "0.53", f1: "0.971", deg: "0.976", st: "running · ep16" },
+    { m: "1M·026", arch: "026 recipe, xl", data: "1M PubChem", p: "57M", shift: "0.044", j: "0.62", f1: "0.964", deg: "0.919", st: "running · ep16" },
   ];
   function initTable() {
     const host = $("#cmpTable"); if (!host) return;
