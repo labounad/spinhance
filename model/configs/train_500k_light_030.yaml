@@ -1,0 +1,66 @@
+# "LIGHT" run 030 — the 026 recipe (peak-channel + soft-equivalence flag/loss) PLUS
+# the 028 augmentation: a cumulative-integral input channel. A 026-based variant to
+# test whether the integral channel's 2H-area cue stacks on top of the soft-equiv
+# flags (3 input channels: spectrum + peak + cumint). 500k PubChem (same seed-0
+# subset as 025/026), 90 MHz. Submit via model/scripts/train_hpc_bundle.slurm
+# (PRELOAD=true, --mem 64G).
+run:
+  name: light_030_500k
+  output_dir: model/runs
+
+data:
+  records: data/pubchem/spin_systems_pubchem.json.gz
+  parts: data/pubchem/spectra_parts/90MHz
+  field: 90
+  split: none
+  sample_n: 500000
+  sample_seed: 0
+  preload: true
+
+model:
+  name: spingraph_decoder
+  size: medium
+  dim: 256
+  enc_layers: 2
+  dec_layers: 4
+  n_heads: 8
+  dropout: 0.1
+  use_peak_channel: true     # 026 Idea 1
+  use_soft_equiv: true       # 026 Idea 2 — soft-equivalence flag
+  use_cumint_channel: true   # 028 augmentation: cumulative-integral 3rd input channel
+
+loss:
+  name: composite
+  terms:
+    - name: matrix
+      weight: 1.0
+      weights:
+        shift: 2.0
+        jmag: 1.0
+        presence: 0.5
+        deg: 0.5
+    - name: soft_equiv       # 026 Idea 2
+      weight: 0.5
+      tol_ppm: 0.03
+      consistency_weight: 1.0
+
+training:
+  epochs: 80
+  batch_size: 256
+  lr: 0.0005
+  weight_decay: 0.01
+  amp: bf16
+  warmup_frac: 0.03
+  lr_stable_frac: 0.55
+  lr_min_factor: 0.35
+  grad_clip: 1.0
+  patience: 10
+  num_workers: 4
+  val_every: 1
+  seed: 0
+
+diagnostics:
+  enabled: true
+  log_every_steps: 100
+  probe_every_epochs: 3
+  probe_count: 16
