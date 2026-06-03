@@ -11,11 +11,15 @@
     accent: css("--accent") || "#5b8def", accent3: css("--accent-3") || "#22b8a6",
     panel: css("--panel") || "#fff",
   });
-  const SES = {  // colour per model in both viewers
+  const SES = {  // explicit colour per key (legacy keys); others fall back to PALETTE
     "022": "#9aa0a6", "025": "var-accent", "026": "var-accent3",
     "light025": "#e0a44d", "light026": "#c46be0", "light027": "#7ee06b", "xl025": "#e06b6b", "xl026": "#6bd0e0",
   };
-  const colOf = (k) => { const c = C(); const v = SES[k] || c.soft;
+  // deterministic distinct colours for arbitrary keys (e.g. "64k_027", "500k_027")
+  const PALETTE = ["#5b8cff", "#34e3c4", "#b07bff", "#e0a44d", "#7ee06b", "#e06b6b", "#6bd0e0", "#c46be0", "#f5a623", "#e3d34e"];
+  const hashIdx = (k) => { let h = 0; for (let i = 0; i < k.length; i++) h = (h * 31 + k.charCodeAt(i)) >>> 0; return h % PALETTE.length; };
+  const colOf = (k) => { const c = C(); const v = SES[k];
+    if (!v) return PALETTE[hashIdx(k)];
     return v === "var-accent" ? c.accent : v === "var-accent3" ? c.accent3 : v; };
 
   // ---- generic responsive line plot ---------------------------------------
@@ -64,11 +68,13 @@
       const metrics = [["shift", "shift MAE (ppm)", 3], ["j", "J MAE (Hz)", 2], ["f1", "presence F1", 2], ["deg", "deg balanced-acc", 2]];
       let metric = "shift";
       const active = new Set(Object.keys(data));
+      // distinct colour per curve: explicit SES if defined, else palette by index
+      const cmap = {}; Object.keys(data).forEach((k, i) => { cmap[k] = SES[k] ? colOf(k) : PALETTE[i % PALETTE.length]; });
       const canvas = $("#lcCanvas", host);
       function draw() {
         const md = metrics.find(m => m[0] === metric);
         const series = Object.keys(data).filter(k => active.has(k)).map(k => ({
-          color: colOf(k), pts: data[k].series.map(p => [p.epoch, p[metric]]),
+          color: cmap[k], pts: data[k].series.map(p => [p.epoch, p[metric]]),
         }));
         linePlot(canvas, series, { xlabel: "epoch", yd: md[2] >= 3 ? 3 : 2 });
       }
@@ -81,7 +87,7 @@
       // session legend toggles
       const leg = $("#lcLegend", host);
       leg.innerHTML = Object.keys(data).map(k =>
-        `<button data-k="${k}" class="on" title="click: show only this (kept pins stay) · double-click: pin/unpin" style="--c:${colOf(k)}"><i></i>${data[k].label}</button>`).join("");
+        `<button data-k="${k}" class="on" title="click: show only this (kept pins stay) · double-click: pin/unpin" style="--c:${cmap[k]}"><i></i>${data[k].label}</button>`).join("");
       // Selection = pinned set (double-click toggles, persistent) ∪ the last single-
       // clicked "solo". Single click loads one but leaves pins alone; with nothing
       // selected, all curves show. `active` (used by draw) is recomputed from these.
@@ -117,16 +123,17 @@
   }
 
   // ====================== 2. COMPARISON TABLE ==============================
+  // Held-out (leakage-controlled global 10% PubChem) metrics. 64k tier trained;
+  // 500k/3M training (numbers fill in once their checkpoints land).
   const RUNS = [
-    { m: "CNN baseline", arch: "ResNet-1D + typed heads", data: "64k ChEMBL", p: "5.0M", shift: "0.279", j: "1.80", f1: "0.807", deg: "0.732", st: "floor" },
-    { m: "64k·022", arch: "spingraph + surrogate-spectral", data: "64k ChEMBL", p: "10M", shift: "0.064", j: "0.91", f1: "0.916", deg: "0.928", st: "superseded" },
-    { m: "64k·025", arch: "spingraph, shift-2×, WSD LR", data: "64k ChEMBL", p: "10M", shift: "0.037", j: "0.59", f1: "0.940", deg: "0.945", st: "superseded" },
-    { m: "64k·026", arch: "025 + peak channel + soft-equiv", data: "64k ChEMBL", p: "10M", shift: "0.037", j: "0.65", f1: "0.940", deg: "0.960", st: "superseded" },
-    { m: "500k·025", arch: "025 recipe", data: "500k PubChem", p: "10M", shift: "0.036", j: "0.51", f1: "0.969", deg: "0.969", st: "production" },
-    { m: "500k·026", arch: "026 recipe", data: "500k PubChem", p: "10M", shift: "0.058", j: "0.78", f1: "0.944", deg: "0.952", st: "relaunching" },
-    { m: "500k·027", arch: "025 + focal loss", data: "500k PubChem", p: "10M", shift: "0.032", j: "0.46", f1: "0.963", deg: "0.969", st: "done" },
-    { m: "1M·025", arch: "025 recipe, xl", data: "1M PubChem", p: "57M", shift: "0.045", j: "0.53", f1: "0.971", deg: "0.976", st: "running · ep16" },
-    { m: "1M·026", arch: "026 recipe, xl", data: "1M PubChem", p: "57M", shift: "0.044", j: "0.62", f1: "0.964", deg: "0.919", st: "running · ep16" },
+    { m: "CNN baseline", arch: "ResNet-1D + typed heads", data: "64k", p: "5.0M", shift: "0.279", j: "1.80", f1: "0.807", deg: "0.732", st: "floor" },
+    { m: "64k·025", arch: "spingraph_decoder", data: "64k PubChem", p: "10M", shift: "0.083", j: "1.80", f1: "0.849", deg: "0.825", st: "trained" },
+    { m: "64k·026", arch: "spingraph_decoder", data: "64k PubChem", p: "10M", shift: "0.079", j: "1.69", f1: "0.869", deg: "0.866", st: "trained" },
+    { m: "64k·027", arch: "spingraph_decoder · best", data: "64k PubChem", p: "10M", shift: "0.047", j: "1.49", f1: "0.890", deg: "0.867", st: "production" },
+    { m: "64k·028", arch: "spingraph_decoder", data: "64k PubChem", p: "10M", shift: "0.084", j: "1.70", f1: "0.871", deg: "0.885", st: "trained" },
+    { m: "64k·029", arch: "spingraph_decoder", data: "64k PubChem", p: "10M", shift: "0.068", j: "1.71", f1: "0.843", deg: "0.899", st: "trained" },
+    { m: "500k·025–029", arch: "spingraph_decoder · xl", data: "500k PubChem", p: "57M", shift: "—", j: "—", f1: "—", deg: "—", st: "running" },
+    { m: "3M·025–029", arch: "spingraph_decoder · xl", data: "3M PubChem", p: "137M", shift: "—", j: "—", f1: "—", deg: "—", st: "running" },
   ];
   function initTable() {
     const host = $("#cmpTable"); if (!host) return;
@@ -510,7 +517,7 @@
   function initTestEval() {
     const host = $("#testEval"); if (!host) return;
     fetch("data/test_eval.json").then(r => r.json()).then(d => {
-      const models = ["025", "026"];
+      const models = Object.keys(d).filter(k => k !== "_meta");
       const rows = [["shift_mae_ppm", "shift MAE (ppm) ↓"], ["j_mae_hz", "J MAE (Hz) ↓"],
         ["presence_f1", "presence F1 ↑"], ["deg_acc_balanced", "deg balanced-acc ↑"]];
       let h = '<table class="cmp"><thead><tr><th>metric</th>';
