@@ -51,6 +51,24 @@ def test_registered_and_builds():
     assert isinstance(_model(), SpinGraphDecoderModel)
 
 
+def test_cumint_channel():
+    from model.architectures import build_architecture
+    m = build_architecture("spingraph_decoder", n_deg_classes=C, dim=32, enc_layers=1,
+                           dec_layers=1, n_heads=2, use_cumint_channel=True).eval()
+    spec = torch.rand(B, P)
+    ci = m._cumint_channel(spec)
+    assert ci.shape == (B, P)
+    assert torch.allclose(ci[:, -1], torch.ones(B), atol=1e-4)          # 0->1 CDF
+    assert (ci[:, 1:] >= ci[:, :-1] - 1e-6).all()                       # monotonic
+    assert m._encoder_input(spec).shape == (B, 2, P)                    # spec + cumint
+    out = m(spec).validate(n_groups=G)
+    assert out.shifts.shape == (B, G) and torch.isfinite(out.shifts).all()
+    # composes with the peak channel -> 3 channels
+    m3 = build_architecture("spingraph_decoder", n_deg_classes=C, dim=32, enc_layers=1,
+                            dec_layers=1, n_heads=2, use_peak_channel=True, use_cumint_channel=True).eval()
+    assert m3._encoder_input(spec).shape == (B, 3, P)
+
+
 def test_shape_contract_global_only():
     m = _model().eval()
     out = m(_batch(regions=False)).validate(n_groups=G)
