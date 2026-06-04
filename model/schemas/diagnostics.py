@@ -2,7 +2,7 @@
 model.schemas.diagnostics
 =========================
 Typed payloads for the run-directory diagnostics contract. These are lightweight
-structures the trainer fills and the DiagnosticsWriter serializes; AutoAI and the
+structures the trainer fills and the DiagnosticsWriter serializes; monitoring agents and the
 dashboard read the resulting JSON/JSONL. Kept as dataclasses (not free dicts) so
 the field names are discoverable and stable.
 """
@@ -14,7 +14,7 @@ from typing import Any
 
 @dataclass
 class RunStatus:
-    """Atomically-rewritten status.json — the file AutoAI reads first."""
+    """Atomically-rewritten status.json — the file monitoring agents reads first."""
     state: str                      # "running" | "finished" | "failed"
     run_id: str
     epoch: int

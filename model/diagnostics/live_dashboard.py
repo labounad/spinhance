@@ -4,7 +4,7 @@ model.diagnostics.live_dashboard
 Streamlit dashboard for monitoring the SpinHance training fleet. Reads the
 canonical run layout (status.json / metrics.jsonl / summary.json / probes/)
 directly from a **runs directory** (default ``model/runs/``) via
-``autoai.run_reader`` — so it works on the HPC's GPFS runs (rsync them locally
+``model.diagnostics.run_reader`` — so it works on the HPC's GPFS runs (rsync them locally
 or run with an SSH port-forward) as well as S3 sessions.
 
 Multi-run by design: a fleet comparison table + overlaid learning curves across
@@ -25,7 +25,7 @@ from pathlib import Path
 import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from autoai import run_reader as rr  # noqa: E402
+from model.diagnostics import run_reader as rr  # noqa: E402
 
 st.set_page_config(page_title="SpinHance · training fleet", layout="wide",
                    initial_sidebar_state="expanded")

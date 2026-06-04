@@ -1,6 +1,8 @@
-# SpinHance AutoAI Ideas
+# SpinHance Architecture Ideas
 
-This file guides the autonomous ML loop in `autoai/`. It should be treated as a ranked menu of model/loss/representation experiments. The goal is not to implement every idea in order blindly, but to explore increasingly structured architectures under a consistent evaluation protocol.
+> Kept as a reference design doc. The `autoai/` autonomous-loop package this originally drove has been removed (unused); the ideas below remain a useful ranked menu of architecture/loss/representation experiments — several (the structured query decoder, peak channel, soft-equivalence) became the production `spingraph_decoder`.
+
+It should be treated as a ranked menu of model/loss/representation experiments. The goal is not to implement every idea in order blindly, but to explore increasingly structured architectures under a consistent evaluation protocol.
 
 ---
 

@@ -154,7 +154,7 @@ PYTHONPATH=. python -m model.experiments.train --config model/configs/baseline_m
 PYTHONPATH=. python -m model.experiments.train --config model/configs/baseline_matrix.yaml --set training.epochs=2 --set run.name=smoke
 ```
 
-Every run writes the canonical artifact directory consumed by AutoAI and the dashboard:
+Every run writes the canonical artifact directory consumed by the live dashboard + monitoring tools:
 
 ```
 model/runs/<run_id>/

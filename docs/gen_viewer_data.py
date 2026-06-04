@@ -7,7 +7,7 @@ REBUILD fleet (Audit-2 regeneration). One run per data tier:
 
 Reads val rows from metrics.jsonl + the standardized heldout_eval.json (written by
 model.experiments.eval_heldout on the leakage-controlled global 10% PubChem test
-split) via autoai.run_reader. Run on the HPC where the run dirs live, then pull the
+split) via model.diagnostics.run_reader. Run on the HPC where the run dirs live, then pull the
 two JSON files into docs/data/.
 
     PYTHONPATH=. python docs/gen_viewer_data.py
@@ -15,7 +15,7 @@ two JSON files into docs/data/.
 import glob
 import json
 
-from autoai import run_reader as rr
+from model.diagnostics import run_reader as rr
 
 RUNS = "model/runs"
 

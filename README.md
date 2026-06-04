@@ -166,7 +166,7 @@ model.load_state_dict(ck["model"], strict=False)
 
 ## Training diagnostics
 
-Each run writes the canonical diagnostics layout (config, `metrics.jsonl`, `probes/`, `summary.json`, checkpoints) to `model/runs/<id>/` — read by `autoai/run_reader.py`, the failure-analysis tools, and the live dashboard.
+Each run writes the canonical diagnostics layout (config, `metrics.jsonl`, `probes/`, `summary.json`, checkpoints) to `model/runs/<id>/` — read by `model/diagnostics/run_reader.py`, the failure-analysis tools, and the live dashboard.
 
 Live fleet dashboard (overlaid learning curves + held-out eval + per-run probes across all `model/runs/`):
 
@@ -181,7 +181,7 @@ Per-molecule inspector GUI:
 streamlit run model/gui.py
 ~~~
 
-See `docs/training_diagnostics.md` for the run/diagnostics contract used by collaborators and AutoAI agents.
+See `docs/training_diagnostics.md` for the run/diagnostics contract used by collaborators and monitoring tools.
 
 ---
 
@@ -195,8 +195,8 @@ Per-stage and cross-cutting docs (a `CLAUDE.md` is the AI-facing contract for a 
 | **Stage 1 — generate** | `generate/README.md`, `generate/CLAUDE.md`, `generate/XYZ_FORMAT.md` (Task 1→2 interface) |
 | **Stage 2 — spin systems** | `mol_to_spin_system/README.md`, `mol_to_spin_system/SETUP.md` (Pretsch is production; Java/HOSE is legacy) |
 | **Stage 3 — simulation** | `simulation/README.md`, `simulation/CLAUDE.md` |
-| **Stage 4 — model** | `model/README.md`, `model/DESIGN.md`, `model/RESULTS.md`, `model/SUGGESTIONS.md`. `autoai/README.md` + `autoai/IDEAS.md` (autonomous loop). |
+| **Stage 4 — model** | `model/README.md`, `model/DESIGN.md`, `model/RESULTS.md`, `model/SUGGESTIONS.md`; `docs/IDEAS.md` (architecture-experiment menu, Families A–R). |
 | **Website** | `docs/README.md`, `docs/PRESENTATION_NOTES.md`, `docs/training_diagnostics.md` |
 | **Ops / reference** | `context/` (AWS, EC2, Bedrock) |
 
-> **Active code:** the production model package is **`model/`** (`spingraph_decoder`, `python -m model.experiments.train`). The earlier `aws_trainer/` and the non-adopted `modelv2/` rewrite have both been removed.
+> **Active code:** the production model package is **`model/`** (`spingraph_decoder`, `python -m model.experiments.train`). The earlier `aws_trainer/`, the non-adopted `modelv2/` rewrite, and the unused `autoai/` autonomous-loop have all been removed; run-reading lives in `model/diagnostics/run_reader.py`.

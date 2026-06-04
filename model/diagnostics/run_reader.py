@@ -1,8 +1,8 @@
 """
-autoai.run_reader
+model.diagnostics.run_reader
 ==================
 Read structured run artifacts from model/diagnostics.py.
-Gives the AutoAI orchestrator machine-readable access to training runs
+Machine-readable access to training runs for the live dashboard + monitoring tools
 instead of parsing raw log text.
 
 Supports both local run directories (plain filesystem paths) and S3-backed
@@ -189,7 +189,7 @@ _FAILURE_HINTS: dict[str, str] = {
 
 
 def analyze_run(run_dir) -> dict:
-    """Return a machine-readable analysis dict for the AutoAI orchestrator."""
+    """Return a machine-readable analysis dict for the live dashboard / monitoring tools."""
     run_id  = str(run_dir).rstrip("/").rsplit("/", 1)[-1]
     status  = read_status(run_dir)
     summary = read_summary(run_dir)

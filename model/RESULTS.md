@@ -196,7 +196,7 @@ Train-vs-val curves show **mild overfitting / information-limit, not capacity-st
 - **Low-field under-determination / peak overlap.** → motivates support-region tokenization.
 
 Next: the IDEAS north-star structured spin-graph model (Families D+E+H+G+K+L) — see
-`autoai/IDEAS.md` and the plan in `model-rebuild/spingraph-decoder`. Deferred 90-MHz-legal levers
+`docs/IDEAS.md` and the plan in `model-rebuild/spingraph-decoder`. Deferred 90-MHz-legal levers
 (not yet tried): stronger realistic augmentation (linewidth-variability/noise — bridges sim→real),
 focal loss / oversampling for degeneracy, `cosine_weight` sweep.
 

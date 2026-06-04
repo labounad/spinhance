@@ -1,5 +1,5 @@
 """
-Tests for autoai.run_reader.  Torch-free; uses only stdlib + numpy.
+Tests for model.diagnostics.run_reader.  Torch-free; uses only stdlib + numpy.
 """
 import json
 from pathlib import Path
@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from autoai.run_reader import (
+from model.diagnostics.run_reader import (
     analyze_run,
     find_latest_run,
     list_runs,
