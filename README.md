@@ -199,4 +199,4 @@ Per-stage and cross-cutting docs (a `CLAUDE.md` is the AI-facing contract for a 
 | **Website** | `docs/README.md`, `docs/PRESENTATION_NOTES.md`, `docs/training_diagnostics.md` |
 | **Ops / reference** | `context/` (AWS, EC2, Bedrock) |
 
-> **Active vs legacy code:** the production model package is **`model/`** (`spingraph_decoder`). `modelv2/` is a non-adopted rewrite (see its `DESIGN.md` banner) and `aws_trainer/` has been removed in favour of `model.experiments.train`.
+> **Active code:** the production model package is **`model/`** (`spingraph_decoder`, `python -m model.experiments.train`). The earlier `aws_trainer/` and the non-adopted `modelv2/` rewrite have both been removed.

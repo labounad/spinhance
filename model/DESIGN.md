@@ -104,8 +104,6 @@ Files:
 - `diff_renderer_torch.py` — production twin: torch block assembly + `RegularizedEigh`
   + FFT broadening; mirrors the oracle; `python -m model.diff_renderer_torch` runs
   parity-vs-oracle + `autograd.gradcheck`.
-- `diff_renderer_ref.py` — original *explicit* oracle, kept for tiny-system
-  cross-checks and the eigh-spike record; `test_diff_renderer.py`.
 
 ### 6. Loss strategy — **staged: matrix anchor → spectral consistency**
 - **Stage 1:** matrix loss only (Decision 4) for a stable, identifiable baseline.
@@ -224,8 +222,7 @@ Build order from DESIGN; ✅ = built, 🔬 = numeric core verified in numpy here
 
 | File | Role | Status |
 |---|---|---|
-| `diff_renderer_ref.py` / `test_diff_renderer.py` | numpy renderer oracle | ✅ 🔬 (fwd corr 0.9999 vs pyspin, grad ~1e-6 vs FD) |
-| `diff_renderer_torch.py` | torch renderer + `RegularizedEigh` | ✅ ⏳ (`-m model.diff_renderer_torch` = gradcheck) |
+| `model/renderers/` (`exact`, `surrogate`) | torch renderers + `RegularizedEigh`, registry-selected | ✅ (see `model/tests/test_renderers.py`) |
 | `splits.py` / `test_splits.py` | scaffold split + matrix dedup (Dec 8) | ✅ 🔬 (zero leakage, ratios ~0.69/0.21/0.10) |
 | `targets.py` / `test_targets.py` | target encode/standardize/augment (Dec 3,4) | ✅ 🔬 |
 | `dataset.py` | torch Dataset + bucketed sampler (Dec 7) | ✅ ⏳ (`-m model.dataset` smoke) |
