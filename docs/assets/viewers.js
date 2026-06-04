@@ -125,8 +125,10 @@
   // Data-driven from data/test_eval.json (the corrected-data fleet). Validation metrics;
   // auto-fills as tiers finish (running tiers show "—"). The held-out TEST view is below.
   const RECIPE_DESC = { "025": "matrix (shift 2×)", "026": "+ peak-channel + soft-equiv",
-    "027": "+ focal loss", "028": "+ cum-integral channel", "029": "026 + focal" };
-  const FLEET_ORDER = ["64k_025", "64k_026", "64k_027", "64k_028", "64k_029", "500k_026", "3M_026"];
+    "027": "+ focal loss", "028": "+ cum-integral channel", "029": "026 + focal",
+    "030": "super (026+027+028)" };
+  const FLEET_ORDER = ["64k_025", "64k_026", "64k_027", "64k_028", "64k_029", "64k_030",
+    "500k_026", "3M_026"];
   function initTable() {
     const host = $("#cmpTable"); if (!host) return;
     fetch("data/test_eval.json").then(r => r.json()).then(d => {
@@ -585,7 +587,7 @@
           (meta.note || "Held-out test evaluation is computed once a model finishes training.") + '</p>';
         return;
       }
-      const RECIPES = ["025", "026", "027", "028", "029"];
+      const RECIPES = ["025", "026", "027", "028", "029", "030"];
       const SIZES = [["64k", "10M"], ["500k", "57M"], ["3M", "137M"]];
       const rows = [["shift_mae_ppm", "shift MAE (ppm) ↓", true], ["j_mae_hz", "J MAE (Hz) ↓", true],
         ["presence_f1", "presence F1 ↑", false], ["deg_acc_balanced", "deg balanced-acc ↑", false]];
