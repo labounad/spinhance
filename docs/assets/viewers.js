@@ -11,9 +11,8 @@
     accent: css("--accent") || "#5b8def", accent3: css("--accent-3") || "#22b8a6",
     panel: css("--panel") || "#fff",
   });
-  const SES = {  // explicit colour per key (legacy keys); others fall back to PALETTE
-    "022": "#9aa0a6", "025": "var-accent", "026": "var-accent3",
-    "light025": "#e0a44d", "light026": "#c46be0", "light027": "#7ee06b", "xl025": "#e06b6b", "xl026": "#6bd0e0",
+  const SES = {  // explicit colour per fleet key; others fall back to PALETTE
+    "baseline": "#9aa0a6", "64k": "var-accent", "500k": "var-accent3", "3M": "#b07bff",
   };
   // deterministic distinct colours for arbitrary keys (e.g. "64k_027", "500k_027")
   const PALETTE = ["#5b8cff", "#34e3c4", "#b07bff", "#e0a44d", "#7ee06b", "#e06b6b", "#6bd0e0", "#c46be0", "#f5a623", "#e3d34e"];
@@ -123,17 +122,14 @@
   }
 
   // ====================== 2. COMPARISON TABLE ==============================
-  // Held-out (leakage-controlled global 10% PubChem) metrics. 64k tier trained;
-  // 500k/3M training (numbers fill in once their checkpoints land).
+  // Held-out (leakage-controlled global 10% PubChem) metrics on the corrected-data
+  // REBUILD fleet — the 10M -> 57M -> 137M data×capacity sweep. All three are training
+  // now; metrics ("—") fill in from gen_viewer_data.py once their checkpoints land.
   const RUNS = [
-    { m: "CNN baseline", arch: "ResNet-1D + typed heads", data: "64k ChEMBL", p: "5.0M", shift: "0.78", j: "4.35", f1: "0.591", deg: "0.338", st: "floor" },
-    { m: "64k·025", arch: "spingraph_decoder", data: "64k PubChem", p: "10M", shift: "0.083", j: "1.80", f1: "0.849", deg: "0.825", st: "trained" },
-    { m: "64k·026", arch: "spingraph_decoder", data: "64k PubChem", p: "10M", shift: "0.079", j: "1.69", f1: "0.869", deg: "0.866", st: "trained" },
-    { m: "64k·027", arch: "spingraph_decoder · best", data: "64k PubChem", p: "10M", shift: "0.047", j: "1.49", f1: "0.890", deg: "0.867", st: "production" },
-    { m: "64k·028", arch: "spingraph_decoder", data: "64k PubChem", p: "10M", shift: "0.084", j: "1.70", f1: "0.871", deg: "0.885", st: "trained" },
-    { m: "64k·029", arch: "spingraph_decoder", data: "64k PubChem", p: "10M", shift: "0.068", j: "1.71", f1: "0.843", deg: "0.899", st: "trained" },
-    { m: "500k·025–029", arch: "spingraph_decoder · xl", data: "500k PubChem", p: "57M", shift: "—", j: "—", f1: "—", deg: "—", st: "running" },
-    { m: "3M·025–029", arch: "spingraph_decoder · xl", data: "3M PubChem", p: "137M", shift: "—", j: "—", f1: "—", deg: "—", st: "running" },
+    { m: "CNN baseline", arch: "ResNet-1D + typed heads", data: "ChEMBL",       p: "5.0M", shift: "—", j: "—", f1: "—", deg: "—", st: "floor" },
+    { m: "64k · 026",    arch: "spingraph_decoder · medium", data: "64k PubChem",  p: "10M",  shift: "—", j: "—", f1: "—", deg: "—", st: "running" },
+    { m: "500k · xl",    arch: "spingraph_decoder · xl",     data: "500k PubChem", p: "57M",  shift: "—", j: "—", f1: "—", deg: "—", st: "running" },
+    { m: "3M · xxl",     arch: "spingraph_decoder · xxl",    data: "3M PubChem",   p: "137M", shift: "—", j: "—", f1: "—", deg: "—", st: "running" },
   ];
   function initTable() {
     const host = $("#cmpTable"); if (!host) return;
@@ -175,7 +171,7 @@
       const ppm = data.ppm, mols = data.molecules; let idx = 0;
       // per-model predictions + per-model test-split membership
       const models = data.models || [{ key: "_", label: "model" }];
-      let mkey = (models.find(x => x.key === "027") || models[0]).key;   // default: best 64k model
+      let mkey = (models.find(x => x.key === "64k") || models[0]).key;   // default: 64k tier (first to finish)
       const labelOf = (k) => (models.find(x => x.key === k) || {}).label || k;
       const inTest = () => true;   // every molecule is in the shared global held-out set
       const predOf = (m) => (m.preds ? m.preds[mkey] : m);
