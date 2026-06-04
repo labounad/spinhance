@@ -182,6 +182,9 @@
       // per-molecule ppm axis: each molecule stores its own [x0,x1] window (higher resolution
       // than a shared 0-12 axis). ppmOf(m) reconstructs the axis from the window + sample count.
       const winOf = (m) => [m.x0 != null ? m.x0 : 0, m.x1 != null ? m.x1 : 12];
+      // Each spectrum ships its own adaptive mesh x (m.ix for the input, preds[k].rx for a
+      // model render) — points clustered at peaks, sparse on baseline; the line plot
+      // interpolates linearly between them. Old data without a mesh falls back to a uniform axis.
       const ppmOf = (m) => { const [a, b] = winOf(m), n = m.input.length;
         return m.input.map((_, i) => a + i * (b - a) / (n - 1)); };
       if (!mols || !mols.length) {          // held-out explorer not generated yet (tier still training)
@@ -196,7 +199,7 @@
       const inTest = () => true;   // every molecule is in the shared global held-out set
       const predOf = (m) => (m.preds ? m.preds[mkey] : m);
       const spec = $("#txSpec", host), sel = $("#txSel", host), meta = $("#txMeta", host), mat = $("#txMatrix", host);
-      const modSel = $("#txModel", host), statusEl = $("#txStatus", host);
+      const modSel = $("#txModel", host), statusEl = $("#txStatus", host), refCb = $("#txRefine", host);
       const el3d = $("#tx3d", host), load3d = $("#tx3dLoad", host), spinCb = $("#txSpin", host); let v3d = null;
       function applySpin() { if (v3d) v3d.spin(spinCb && spinCb.checked ? "y" : false, 0.6); }
       if (spinCb) spinCb.addEventListener("change", applySpin);
@@ -229,16 +232,24 @@
       // Interactive zoom state for the spectrum plot: x-range (ppm) + y-stretch factor.
       let xr0 = 0, xr1 = 12, yZoom = 1;
       const PADL = 16, PADR = 14, PADT = 12, PADB = 30;   // mirror linePlot's noY paddings
+      const showRef = () => refCb && refCb.checked;
       function drawSpec() {
-        const m = mols[idx], P = predOf(m), c = C(), px = ppmOf(m);
+        const m = mols[idx], P = predOf(m), c = C();
+        const ix = m.ix || ppmOf(m), rx = (P && P.rx) || ppmOf(m);   // per-spectrum adaptive mesh x
         // target-spectrum colour encodes test membership: teal = held-out test for this model, amber = out-of-distribution
         const tgt = inTest(m) ? (css("--accent-2") || "#34e3c4") : "#f5a623";
-        const dmax = Math.max(1e-6, ...m.input, ...P.rendered);   // full-scale peak; yZoom shrinks the window -> taller peaks
-        linePlot(spec, [
-          { color: tgt, width: 1.8, pts: m.input.map((v, i) => [px[i], v]) },
-          { color: c.accent, width: 2, pts: P.rendered.map((v, i) => [px[i], v]) },
-        ], { xlabel: "ppm", x0: xr0, x1: xr1, y0: 0, y1: dmax / yZoom, invertX: true, noY: true,
-             xdp: (xr1 - xr0) < 6 ? 1 : 0 });
+        const ref = showRef() && P.refined;                          // refined overlay (analysis-by-synthesis)
+        const dmax = Math.max(1e-6, ...m.input, ...P.rendered, ...(ref ? P.refined : []));
+        const series = [
+          { color: tgt, width: 1.8, pts: m.input.map((v, i) => [ix[i], v]) },
+          { color: c.accent, width: 2, pts: P.rendered.map((v, i) => [rx[i], v]) },
+        ];
+        if (ref) {                                                   // violet, drawn on top
+          const fx = P.fx || ppmOf(m);
+          series.push({ color: "#b07bff", width: 2, pts: P.refined.map((v, i) => [fx[i], v]) });
+        }
+        linePlot(spec, series, { xlabel: "ppm", x0: xr0, x1: xr1, y0: 0, y1: dmax / yZoom,
+             invertX: true, noY: true, xdp: (xr1 - xr0) < 6 ? 1 : 0 });
       }
 
       // --- plot interactions: scroll = stretch Y, click-drag horizontally = zoom X, dbl-click = reset ---
@@ -309,14 +320,18 @@
           statusEl.className = "tx-status is-test";
           statusEl.innerHTML = `● held-out test molecule — no model trained on it · predictions from <b>${labelOf(mkey)}</b>`;
         }
-        meta.innerHTML = `<span class="mono">${m.smiles || m.id}</span> · ${m.n_spins} protons ·
-          shift MAE <b>${P.shift_mae.toFixed(3)}</b> ppm · J MAE <b>${P.j_mae.toFixed(2)}</b> Hz`;
+        const hasRef = showRef() && P.ref_shift_mae != null && !P.ref_skipped;
+        const shiftTxt = hasRef
+          ? `shift MAE <b>${P.shift_mae.toFixed(3)}</b> → <b style="color:#b07bff">${P.ref_shift_mae.toFixed(3)}</b> ppm <span class="mono" style="color:var(--ink-faint)">(refined)</span>`
+          : `shift MAE <b>${P.shift_mae.toFixed(3)}</b> ppm`;
+        meta.innerHTML = `<span class="mono">${m.smiles || m.id}</span> · ${m.n_spins} protons · ${shiftTxt} · J MAE <b>${P.j_mae.toFixed(2)}</b> Hz`;
         drawSpec(); drawMatrix(); render3d(m);
       }
       function step(d) { const vis = visibleIdx(); let p = vis.indexOf(idx); if (p < 0) p = 0;
         p = (p + d + vis.length) % vis.length; idx = vis[p]; show(); }
       sel.onchange = () => { idx = +sel.value; show(); };
       if (modSel) modSel.onchange = () => { mkey = modSel.value; rebuildMolOptions(); show(); };
+      if (refCb) refCb.onchange = () => show();   // toggle the refined overlay + the raw→refined MAE
       $("#txPrev", host).onclick = () => step(-1);
       $("#txNext", host).onclick = () => step(1);
       idx = 0;

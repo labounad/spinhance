@@ -17,6 +17,8 @@ non-regressing on the spectral objective (reverts if it can't improve it).
 """
 from __future__ import annotations
 
+import time
+
 import numpy as np
 import torch
 
@@ -30,9 +32,21 @@ def _spec_loss(sp, tgt, dx, w1_w, cos_w):
     return w1_w * w1 + cos_w * (1.0 - cos)
 
 
+def _eigh_cost(struct):
+    """Cheap proxy for one simulate()'s work: sum of block eigendecomposition cost
+    (~n^3) over all manifold combos. Dense/high-symmetry systems blow this up; we use
+    it to skip refinement on molecules that would be too slow to polish cheaply."""
+    cost = 0
+    for (_, _, sb) in struct["combos"]:
+        for _, blk in sb["blocks"].items():
+            cost += int(blk["n"]) ** 3
+    return cost
+
+
 def refine_shifts(shifts0, couplings, degeneracy, target, *, field_mhz=90.0,
-                  n_steps=150, lr=0.02, trust=0.3, w1_w=1.0, cos_w=0.5, reg=2.0,
-                  points=16384, ppm_from=0.0, ppm_to=12.0, accept=True):
+                  n_steps=120, lr=0.02, trust=0.3, w1_w=1.0, cos_w=0.5, reg=2.0,
+                  points=16384, ppm_from=0.0, ppm_to=12.0, accept=True,
+                  patience=15, plateau_tol=1e-4, max_seconds=8.0, max_cost=6e7):
     """Refine the chemical shifts (ppm) to match ``target`` spectrum; couplings and
     degeneracy held fixed.
 
@@ -46,10 +60,17 @@ def refine_shifts(shifts0, couplings, degeneracy, target, *, field_mhz=90.0,
       reg:        soft L2 pull toward shifts0 (extra regularisation inside the box).
       accept:     if True, revert to shifts0 when refinement fails to improve the
                   spectral loss (guarantees the step never hurts the objective).
+      patience/plateau_tol: early-stop when the loss hasn't improved by plateau_tol
+                  for `patience` consecutive steps (most molecules converge < 60 steps).
+      max_seconds: wall-clock budget per molecule — break out with the best-so-far if
+                  exceeded (bounds the cost on dense, slow-to-simulate systems).
+      max_cost:   skip refinement entirely (return the prediction unchanged) when one
+                  simulate() would cost more than this (see _eigh_cost) — avoids burning
+                  the time budget on hopeless cases.
 
     Returns:
-      (refined_shifts (G,) np.float, info) where info has spectral loss/cosine
-      before ('*0') and after ('*1') refinement.
+      (refined_shifts (G,) np.float, info) where info has spectral loss/cosine before
+      ('*0') and after ('*1'), plus `reverted` and `skipped` flags.
     """
     dt = torch.float64
     s0 = torch.as_tensor(np.asarray(shifts0), dtype=dt)
@@ -68,16 +89,30 @@ def refine_shifts(shifts0, couplings, degeneracy, target, *, field_mhz=90.0,
         loss0 = _spec_loss(sp0, tgt, dx, w1_w, cos_w).item()
         cos0 = cosine_similarity(sp0[None], tgt[None]).item()
 
+    # cost guard: too expensive to polish cheaply -> leave the prediction untouched.
+    if max_cost is not None and _eigh_cost(struct) > max_cost:
+        return np.asarray(shifts0, float), {
+            "loss0": loss0, "loss1": loss0, "cos0": cos0, "cos1": cos0,
+            "reverted": False, "skipped": True, "steps": 0}
+
     s = s0.clone().requires_grad_(True)
     opt = torch.optim.Adam([s], lr=lr)
     lo, hi = s0 - trust, s0 + trust
-    for _ in range(n_steps):
+    best, stale, t0, step = loss0, 0, time.time(), 0
+    for step in range(1, n_steps + 1):
         opt.zero_grad()
         loss = _spec_loss(render(s), tgt, dx, w1_w, cos_w) + reg * ((s - s0) ** 2).mean()
         loss.backward()
         opt.step()
         with torch.no_grad():
             s.copy_(torch.min(torch.max(s, lo), hi))   # project back into the trust box
+        lv = float(loss.detach())
+        if lv < best - plateau_tol:
+            best, stale = lv, 0
+        else:
+            stale += 1
+        if stale >= patience or (time.time() - t0) > max_seconds:   # converged or out of time
+            break
 
     with torch.no_grad():
         sp1 = render(s)
@@ -89,5 +124,6 @@ def refine_shifts(shifts0, couplings, degeneracy, target, *, field_mhz=90.0,
     if accept and loss1 > loss0:                       # non-regressing guard
         refined, loss1, cos1, reverted = s0, loss0, cos0, True
     return refined.cpu().numpy(), {
-        "loss0": loss0, "loss1": loss1, "cos0": cos0, "cos1": cos1, "reverted": reverted,
+        "loss0": loss0, "loss1": loss1, "cos0": cos0, "cos1": cos1,
+        "reverted": reverted, "skipped": False, "steps": step,
     }

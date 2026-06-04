@@ -25,6 +25,7 @@ from model.data.stacked_spectra import StackedSpectra
 from model.data.standardization import DegeneracyVocab, Standardizer
 from model.architectures import build_architecture
 from model.evaluation.metrics import decode, _np_pred
+from model.inference.refine import refine_shifts
 
 REB = "/gpfs/home/labounader/rebuild3M"
 RUNS = "/gpfs/home/labounader/code/spinhance/model/runs"
@@ -91,7 +92,46 @@ for k, p in MODELS.items():
 PPM_MAX = 12.0
 MARGIN = 0.4        # ppm padding on each side of the active region
 MIN_WIN = 1.5       # don't over-zoom narrow spectra
-N_OUT = 1024        # output points across the (smaller) window -> higher effective resolution
+
+# --- adaptive peak mesh (Ramer-Douglas-Peucker) -------------------------------
+# A ¹H spectrum is ~95% flat baseline + a handful of sharp peaks; a uniform grid wastes
+# nearly all its points on the baseline. Every peak has the same shape (pseudo-Voigt,
+# eta=0.8), so we render each curve at full resolution, then keep only the points needed
+# to reproduce it by LINEAR INTERPOLATION to within a vertical tolerance EPS (RDP with a
+# vertical-distance metric == bounding the interpolation error). Flat baseline collapses
+# to its endpoints; points cluster around peaks where the curve actually bends. Each
+# spectrum carries its own mesh (x, y), so the plotter just interpolates between them.
+PPM_FULL = np.linspace(0.0, PPM_MAX, P)          # full-res ppm grid (0..12), the sample source
+EPS = 0.004                                      # max linear-interp error, fraction of input peak
+SNAP = 7.5e-4                                    # values below this (normalized) snap to 0 (cheap baseline)
+
+
+def rdp_curve(y_full, lo, hi, sc):
+    """Sparse polyline (xs ppm, ys) reproducing the full-res curve y_full on [lo, hi] to
+    within EPS vertical error after /sc normalization. Returns two equal-length lists."""
+    i0 = max(0, int(round(lo / PPM_MAX * P)))
+    i1 = min(P - 1, int(round(hi / PPM_MAX * P)))
+    y = (y_full[i0:i1 + 1].astype(float)) / sc
+    n = y.size
+    if n < 2:
+        return [round(lo, 4)], [0.0]
+    keep = np.zeros(n, bool); keep[0] = keep[-1] = True
+    stack = [(0, n - 1)]
+    while stack:                                  # iterative RDP, vertical (interp-error) metric
+        a, b = stack.pop()
+        if b <= a + 1:
+            continue
+        seg = np.arange(a + 1, b)
+        line = y[a] + (y[b] - y[a]) * (seg - a) / (b - a)
+        d = np.abs(y[a + 1:b] - line)
+        k = int(d.argmax())
+        if d[k] > EPS:
+            mid = a + 1 + k; keep[mid] = True
+            stack.append((a, mid)); stack.append((mid, b))
+    idx = np.nonzero(keep)[0]
+    xs = [round(float(v), 4) for v in PPM_FULL[i0 + idx]]
+    ys = [(0.0 if v < SNAP else round(float(v), 4)) for v in y[idx]]
+    return xs, ys
 
 
 def active_window(shifts):
@@ -103,19 +143,6 @@ def active_window(shifts):
         lo = max(0.0, c - MIN_WIN / 2.0); hi = min(PPM_MAX, lo + MIN_WIN)
         lo = max(0.0, hi - MIN_WIN)
     return lo, hi
-
-
-def window_pool(y, lo, hi):
-    """Crop a full 0-PPM_MAX spectrum to [lo, hi] and max-pool to ~N_OUT points.
-    Sampling stays bounded (<=~2*N_OUT) but the window is smaller -> finer ppm resolution."""
-    i0 = max(0, int(round(lo / PPM_MAX * P)))
-    i1 = min(P, int(round(hi / PPM_MAX * P)))
-    seg = y[i0:i1]
-    if seg.size == 0:
-        return np.zeros(1, np.float32)
-    k = max(1, seg.size // N_OUT)
-    m = (seg.size // k) * k
-    return seg[:m].reshape(-1, k).max(1)
 
 
 def xyz_of(smi):
@@ -158,15 +185,27 @@ def emit(rid, smi, sh, cp, dg, spec):
         psh, pcp, pdg = dec["shifts"][0], dec["couplings"][0], dec["degeneracy"][0]
         po = np.argsort(-psh); psh2, pdg2 = psh[po], pdg[po]; pJ = pcp[np.ix_(po, po)]
         _, rspec = simulate_spectrum_composite(psh, pcp, pdg, 90.0, points=P)
+        rx, ry = rdp_curve(rspec, lo, hi, sc)              # this model's adaptive mesh
         mm = np.abs(tJ[iu]) > 0.5
+        # test-time refinement (analysis-by-synthesis): polish the predicted shifts to
+        # match the INPUT spectrum (couplings/degeneracy fixed) — a "legal" correction
+        # that uses only the 90 MHz input. Render + mesh the post-corrected spectrum.
+        refined, rinfo = refine_shifts(psh, pcp, pdg, spec, field_mhz=90.0, trust=0.3)
+        rsh = np.sort(refined)[::-1]
+        _, fspec = simulate_spectrum_composite(refined, pcp, pdg, 90.0, points=P)
+        fx, fy = rdp_curve(fspec, lo, hi, sc)
         preds[k] = {"pred_shift": [round(float(x), 3) for x in psh2], "pred_deg": [int(x) for x in pdg2],
                     "pred_J": [[round(float(pJ[i, j]), 2) for j in range(G)] for i in range(G)],
-                    "rendered": [round(float(v / sc), 4) for v in window_pool(rspec, lo, hi)],
+                    "rx": rx, "rendered": ry,
+                    "ref_shift": [round(float(x), 3) for x in rsh], "fx": fx, "refined": fy,
+                    "ref_skipped": bool(rinfo.get("skipped", False)),
                     "shift_mae": round(float(np.mean(np.abs(tsh - psh2))), 4),
+                    "ref_shift_mae": round(float(np.mean(np.abs(tsh - rsh))), 4),
                     "j_mae": round(float(np.mean(np.abs(tJ[iu][mm] - pJ[iu][mm]))) if mm.any() else 0.0, 3)}
+    ix, iy = rdp_curve(spec, lo, hi, sc)                   # the input (target) adaptive mesh
     return {"id": rid, "smiles": smi or "", "n_spins": int(np.sum(dg)), "src": "pubchem",
             "x0": round(lo, 3), "x1": round(hi, 3),
-            "input": [round(float(v / sc), 4) for v in window_pool(spec, lo, hi)],
+            "ix": ix, "input": iy,
             "true_shift": [round(float(x), 3) for x in tsh], "true_deg": [int(x) for x in tdg],
             "true_J": [[round(float(tJ[i, j]), 2) for j in range(G)] for i in range(G)],
             "xyz": xyz_of(smi), "preds": preds}
@@ -183,8 +222,9 @@ for r in recs:
     if len(mols) % 20 == 0:
         print(" ", len(mols), "/", len(recs), flush=True)
 
-# Each molecule carries its own [x0, x1] ppm window; the viewer derives a per-molecule
-# ppm axis from it (no shared global axis), so spectra are stored at the window's resolution.
+# Each molecule carries its own [x0, x1] window + an adaptive peak mesh (mx); the viewer
+# plots input/render against mx (points clustered at peaks, sparse on baseline) and
+# interpolates linearly between them — far fewer stored points than a uniform axis.
 out = {"models": [{"key": k, "label": l} for k, l in MODEL_LABELS], "molecules": mols}
 json.dump(out, open(OUT, "w"), separators=(",", ":"))
 print("WROTE", OUT, round(os.path.getsize(OUT) / 1024, 1), "KB |", len(mols), "mols", flush=True)
