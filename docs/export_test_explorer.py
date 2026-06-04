@@ -57,8 +57,12 @@ FLEET = [("64k_025", "rebuild_64k_025",     "64k · 025 (matrix)"),
          ("64k_028", "rebuild_64k_028",     "64k · 028 (cum-integral)"),
          ("64k_029", "rebuild_64k_029",     "64k · 029 (026+focal)"),
          ("64k_030", "rebuild_64k_030",     "64k · 030 (super)"),
-         ("500k_025", "rebuild_500k_xl_025", "500k · 025 (57M, best)"),
-         ("500k",    "rebuild_500k_xl_026", "500k · 026 (57M)"),
+         ("500k_025", "rebuild_500k_xl_025", "500k · 025 (matrix, 57M)"),
+         ("500k_026", "rebuild_500k_xl_026", "500k · 026 (peak+soft-eq, 57M)"),
+         ("500k_027", "rebuild_500k_xl_027", "500k · 027 (focal, 57M)"),
+         ("500k_028", "rebuild_500k_xl_028", "500k · 028 (cum-integral, 57M)"),
+         ("500k_029", "rebuild_500k_xl_029", "500k · 029 (026+focal, 57M, best)"),
+         ("500k_030", "rebuild_500k_xl_030", "500k · 030 (super, 57M)"),
          ("3M",      "rebuild_3M_xxl_026",  "3M · 026 (137M)")]
 MODELS, MODEL_LABELS = {}, []
 # CNN baseline (trained on ChEMBL, but handles PubChem fine) — reference floor.
