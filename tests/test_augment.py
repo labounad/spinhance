@@ -70,3 +70,16 @@ def test_coupling_sign_preserved_and_bounded():
         jac = d["couplings"][1][2]   # long-range, base -0.7
         assert jab > 0 and jac < 0           # signs never flip
         assert abs(jab) <= 25 and abs(jac) <= 25
+
+
+def test_to_old_format_preserves_equiv_orbit():
+    """The baked dataset schema MUST keep equiv_orbit (the model derives the soft-equiv
+    label from it) while dropping the bake-only fields. A regression here silently strips
+    the symmetry signal from every record -> the soft-equiv head trains on nothing."""
+    from mol_to_spin_system.augment import to_old_format
+    rec = {"chembl_id": "X", "smiles": "C", "inchikey": "K", "labels": ["A", "B"],
+           "spin_groups": [[1.0, 1], [2.0, 1]], "couplings": [],
+           "equiv_orbit": [0, 0], "shift_range": [[1, 1], [2, 2]], "coupling_types": []}
+    out = to_old_format(rec)
+    assert out["equiv_orbit"] == [0, 0]                       # carried into the dataset
+    assert "shift_range" not in out and "coupling_types" not in out   # bake-only fields dropped
