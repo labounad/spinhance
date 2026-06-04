@@ -238,7 +238,7 @@
         const ix = m.ix || ppmOf(m), rx = (P && P.rx) || ppmOf(m);   // per-spectrum adaptive mesh x
         // target-spectrum colour encodes test membership: teal = held-out test for this model, amber = out-of-distribution
         const tgt = inTest(m) ? (css("--accent-2") || "#34e3c4") : "#f5a623";
-        const ref = showRef() && P.refined;                          // refined overlay (analysis-by-synthesis)
+        const ref = showRef() && P.refined && !P.ref_skipped;        // refined overlay (skip dense systems left unrefined)
         const dmax = Math.max(1e-6, ...m.input, ...P.rendered, ...(ref ? P.refined : []));
         const series = [
           { color: tgt, width: 1.8, pts: m.input.map((v, i) => [ix[i], v]) },
