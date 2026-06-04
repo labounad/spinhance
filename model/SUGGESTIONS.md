@@ -1,7 +1,11 @@
 # Suggested improvements to model/
 
 These are things missing from `model/` that are needed for a serious training run
-(especially on EC2 with the 60k dataset). Listed roughly in priority order.
+(at scale on the 3.13M-molecule PubChem dataset / HPC). Listed roughly in priority order.
+
+> **Note (2026-06-03):** several items below are now addressed — spectra are served from
+> stacked shards with an optional in-RAM `StackedSpectra` preload (#1), and the model is
+> 90 MHz-only by config (#5). The data scale is now ~3.13M, not 60k. Re-triage before acting.
 
 ---
 

@@ -1,8 +1,10 @@
 # Pipeline Audit 2 — Spin-System Generation Correctness
 
-**Status:** ACTIVE (opened 2026-06-03). Single source of truth for the second
-audit + generation-code fix/refactor + full dataset regeneration + retrain of all
-PubChem models + website propagation. Update the ledger and status as work lands.
+**Status:** LANDED (opened 2026-06-03; core complete same day). Single source of
+truth for the second audit + generation-code fix/refactor + full dataset regeneration
++ retrain of all PubChem models + website propagation. Audit + fix + regeneration +
+leakage-split are **done**; the 64k·026 model finished and its held-out eval is live on
+the site; the rest of the fleet (500k/3M + 64k ablations) is training. Update as it lands.
 
 ---
 
@@ -245,6 +247,23 @@ warranted (not a full rewrite — the dataset path's core is sound).
 ---
 
 ## 6. Status log
+- 2026-06-03 (eve): **AUDIT-2 LANDED — regenerated, split, retraining, website live.**
+  - **Regeneration done**: 1605/1605 shards, **0 failures**; spot-check (23,402 records / 12
+    shards) → 0 missing `equiv_orbit`, 0 co-orbit pairs failing to share a shift, cross-orbit
+    coincidental overlap **0.031%** (natural rate, no longer forced).
+  - **Merged + leakage-split**: `records_3M.json.gz` = **3,126,829** molecules (spectra rows
+    ALIGNED); cluster split → **train 2,814,147 / test 312,682** (10.00%, leakage-controlled).
+  - **Fleet retraining** on corrected data — the data×capacity sweep at the **026 recipe**:
+    64k=medium **10.05M**, 500k=xl **56.6M**, 3M=xxl **137.4M** (`train_3M_spingraph_xxl_026`
+    created). Plus the **64k ablation sweep** 025 (matrix-only) / 027 (focal) / 028 (cum-integral)
+    / 029 (026+focal). **64k·026 finished** (early-stop ep98): held-out **test 0.0452 ppm /
+    1.38 Hz / F1 0.909 / deg 0.950 ≥ val** → no overfitting.
+  - **Website propagated** (PRs #121/#122/#123/#124, merged): dataset-explorer stats regenerated
+    from the corrected train split; 3.16M→3.13M; dashboard filter→`rebuild`; model-viewer
+    generators retargeted to the rebuild fleet (turnkey `docs/refresh_website_data.sh`); the
+    **held-out test-set evaluation + molecule explorer are live** for the finished 64k·026.
+  - Remaining: 500k/3M finish → backfill their viewer columns; 027/028/029 backfill as they land.
+
 - 2026-06-03: **Validation PASSED at scale** (3000-mol sample, fixed pipeline):
   co-orbit groups always share (0 violations); **0 FORCED cross-orbit duplicates**
   (seed-persistence test over 5 seeds) — the old forced-duplication (~24% of groups)

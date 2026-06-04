@@ -1,5 +1,13 @@
 # Pipeline Debug & Re-train Roadmap
 
+> ⚠️ **SUPERSEDED by [PIPELINE_AUDIT_2.md](PIPELINE_AUDIT_2.md) (2026-06-03).** This was
+> the *first* debug campaign (audit-1: bug fixes #1–#8, HOSE→Pretsch, the first 3M rebuild
+> → 3,156,290 mols / 315,629 test, the 025/026/027 × {64k,500k,3M} fleet). A second audit
+> then found the **spin-equivalence keying bug** and re-did the whole thing: the current
+> dataset is **3,126,829 mols / 312,682 test**, and the live fleet is the **026 recipe** at
+> three sizes (10M/57M/137M) + 64k ablations 025/027/028/029. Treat the numbers below as
+> historical; PIPELINE_AUDIT_2.md is the source of truth.
+
 _Started 2026-06-02. Goal: fully debug generation → simulation → data → training,
 regenerate clean datasets, and re-run every inverse model **beyond the CNN
 baseline** on clean data + clean augmentation._

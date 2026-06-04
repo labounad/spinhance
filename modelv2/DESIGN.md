@@ -1,5 +1,11 @@
 # modelv2 — Design Document
 
+> ⚠️ **LEGACY / NOT THE ACTIVE PACKAGE.** `modelv2/` was an exploratory clean-rewrite that
+> was **not** adopted — it is imported nowhere and nothing in the current pipeline runs it.
+> The **production package is [`model/`](../model/)** (`python -m model.experiments.train
+> --config …`, `spingraph_decoder`, the 026 recipe). Kept for design reference only; the
+> problem statement below is still accurate but the code/CLI here is not what is trained.
+
 ## Problem statement
 
 Predict the field-independent ¹H NMR spin system (shifts, scalar couplings,

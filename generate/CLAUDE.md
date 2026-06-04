@@ -15,20 +15,17 @@ derives from it automatically.
 ## Pipeline stages
 
 ```
-ChEMBL chemreps.txt  (~738 MB)
+ChEMBL chemreps.txt / PubChem / ZINC  (via generate/sources.py)
         │
-        ▼  generate/chembl_filter.py
-        │  Heuristic: n_proton_bearing_c ≤ 8  AND  n_ch_protons ≥ 8
-        │  Fast O(n) stream; ~10 min on full ChEMBL
+        ▼  generate/pipeline.py  —  two filters in a single stream, no intermediate file:
+        │   1. Heuristic pre-filter: n_proton_bearing_c ≤ 8 AND n_ch_protons ≥ 8 (fast O(n))
+        │   2. Exact 3-D deuterium test (calls spin_equivalence.py); ~100–500 ms/mol
         ▼
-chembl_8spin.csv (intermediate not kept)  (~1 M rows)
-        │
-        ▼  generate/screen.py  (calls spin_equivalence.py)
-        │  Exact 3-D deuterium test; ~100–500 ms/mol
-        ▼
-chembl_8spin.csv  (~4 K rows — the final dataset)
+chembl_8spin.csv  (the final 8-spin-group dataset)
         │
         ▼  generate/viewer.py  (triage GUI)
+
+  Entry point: generate/cli.py  (`python -m generate.cli run …` / `python -m generate.pipeline`)
 ```
 
 ---
@@ -105,10 +102,13 @@ as in the reference implementation in the pasted equivalence module).
 generate/
 ├── config.py           ← N_SPIN_GROUPS and all thresholds (edit here only)
 ├── spin_equivalence.py ← core algorithm (embed, strip, test, count)
-├── chembl_filter.py    ← fast heuristic pre-filter (streams ChEMBL)
-├── screen.py           ← applies spin_equivalence to filter output
+├── sources.py          ← pluggable (id, SMILES) readers (ChEMBL / PubChem / ZINC)
+├── pipeline.py         ← end-to-end screen: heuristic pre-filter + exact 3-D test, single pass
+├── dedup.py            ← InChIKey de-duplication
+├── merge_shards.py     ← merge sharded screening outputs
+├── buckets.py          ← bucketing helpers
 ├── viewer.py           ← Tkinter gallery + deuterium triage GUI
-├── cli.py              ← spinhance-gen CLI (filter / screen / view)
+├── cli.py              ← unified CLI (run / view …)
 ├── __init__.py         ← public API re-exports
 ├── CLAUDE.md           ← this file
 ├── README.md           ← human-facing docs
