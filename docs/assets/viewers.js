@@ -21,6 +21,32 @@
     if (!v) return PALETTE[hashIdx(k)];
     return v === "var-accent" ? c.accent : v === "var-accent3" ? c.accent3 : v; };
 
+  // Stroke a series either as straight segments or, when `smooth`, as a monotone cubic
+  // (Fritsch–Carlson) spline: smooth AND shape-preserving — no overshoot above peaks or
+  // dips below baseline (unlike Catmull-Rom/bezier ringing). Assumes x ascending.
+  function strokeSeries(ctx, pts, X, Y, smooth) {
+    const n = pts.length;
+    if (!smooth || n < 3) {
+      pts.forEach((p, i) => { const xx = X(p[0]), yy = Y(p[1]); i ? ctx.lineTo(xx, yy) : ctx.moveTo(xx, yy); });
+      return;
+    }
+    const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+    const dx = [], sl = [];
+    for (let i = 0; i < n - 1; i++) { dx[i] = xs[i + 1] - xs[i]; sl[i] = dx[i] ? (ys[i + 1] - ys[i]) / dx[i] : 0; }
+    const m = new Array(n);
+    m[0] = sl[0]; m[n - 1] = sl[n - 2];
+    for (let i = 1; i < n - 1; i++) {
+      if (sl[i - 1] * sl[i] <= 0) m[i] = 0;          // local extremum -> flat tangent (kills overshoot)
+      else { const w1 = 2 * dx[i] + dx[i - 1], w2 = dx[i] + 2 * dx[i - 1]; m[i] = (w1 + w2) / (w1 / sl[i - 1] + w2 / sl[i]); }
+    }
+    ctx.moveTo(X(xs[0]), Y(ys[0]));
+    for (let i = 0; i < n - 1; i++) {                // Hermite -> cubic bezier control points
+      const c1x = xs[i] + dx[i] / 3, c1y = ys[i] + m[i] * dx[i] / 3;
+      const c2x = xs[i + 1] - dx[i] / 3, c2y = ys[i + 1] - m[i + 1] * dx[i] / 3;
+      ctx.bezierCurveTo(X(c1x), Y(c1y), X(c2x), Y(c2y), X(xs[i + 1]), Y(ys[i + 1]));
+    }
+  }
+
   // ---- generic responsive line plot ---------------------------------------
   function linePlot(canvas, series, opts) {
     opts = opts || {};
@@ -55,7 +81,7 @@
     series.forEach(s => {
       ctx.globalAlpha = s.alpha != null ? s.alpha : 1;
       ctx.strokeStyle = s.color; ctx.lineWidth = s.width || 2.2; ctx.beginPath();
-      s.pts.forEach((p, i) => { const xx = X(p[0]), yy = Y(p[1]); i ? ctx.lineTo(xx, yy) : ctx.moveTo(xx, yy); });
+      strokeSeries(ctx, s.pts, X, Y, opts.smooth);   // smooth = monotone-cubic spline (opt-in)
       ctx.stroke();
       if (s.mark != null) { ctx.fillStyle = s.color; const p = s.pts[s.mark]; ctx.beginPath(); ctx.arc(X(p[0]), Y(p[1]), 3.5, 0, 7); ctx.fill(); }
       ctx.globalAlpha = 1;
@@ -252,7 +278,7 @@
         if (ref) { const fx = P.fx || ppmOf(m);                       // violet, drawn on top
           series.push({ color: "#b07bff", width: 2, alpha: LINE_ALPHA, pts: P.refined.map((v, i) => [fx[i], v]) }); }
         linePlot(spec, series, { xlabel: "ppm", x0: xr0, x1: xr1, y0: 0, y1: dmax / yZoom,
-             invertX: true, noY: true, xdp: (xr1 - xr0) < 6 ? 1 : 0 });
+             invertX: true, noY: true, smooth: true, xdp: (xr1 - xr0) < 6 ? 1 : 0 });
       }
 
       // --- plot interactions: scroll = stretch Y, click-drag horizontally = zoom X, dbl-click = reset ---
