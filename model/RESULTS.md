@@ -1,11 +1,88 @@
 # SpinHance Model Results
 
-> ⚠️ **The results below predate the Audit-2 regeneration.** They were trained on the
-> first-pass data (64k ChEMBL / early 500k–1M PubChem) before the spin-equivalence fix.
-> The **current** corrected-data fleet is the 026 recipe at three sizes (10M/57M/137M) +
-> 64k ablations 025/027/028/029; the finished **64k·026** scores held-out **test 0.0452 ppm /
-> 1.38 Hz / F1 0.909 / deg 0.950**. Live numbers are on the website (Explore the Models) and
-> tracked in [PIPELINE_AUDIT_2.md](../PIPELINE_AUDIT_2.md). Treat the table below as history.
+> The **current fleet** is the corrected-data (Audit-2) recipe sweep on the leakage-controlled
+> global 10% PubChem held-out split. Scroll to **[Current fleet](#current-fleet-2026-06-04)**
+> for the live numbers; everything below that section is **history** (first-pass data, pre
+> spin-equivalence fix). Live numbers are also on the website (Explore the Models) and tracked
+> in [PIPELINE_AUDIT_2.md](../PIPELINE_AUDIT_2.md).
+
+## Current fleet (2026-06-04)
+
+The fleet is the shared `spingraph_decoder` backbone trained at two finished tiers — **64k**
+(medium, ~10M params) and **500k** (xl, ~57M params) — across the **025–030 recipe ladder**.
+A third **3M** tier (~137M params) is **paused / under revision** (architectural + training
+issues to resolve before the next 3M run), so it is not in the tables below.
+
+**Recipe ladder** (see `docs/models.html` / `RECIPE_DESC` in `docs/assets/viewers.js`):
+
+| recipe | what it adds (over 025) |
+|---|---|
+| **025** | matrix loss, chemical **shift weighted 2×** + WSD LR — the baseline |
+| **026** | + **peak-channel input** + **soft-equivalence** flag/loss |
+| **027** | + **focal loss** (degeneracy + presence) |
+| **028** | + **cumulative-integral input channel** |
+| **029** | **026 + 027** (peak channel + soft-equiv + focal) |
+| **030** | **"super" = 026 + 027 + 028** (all four ideas at once) |
+
+Metrics are **`shift_mae_ppm / j_mae_hz / presence_f1 / deg_acc_balanced`** on the **shared
+held-out test split** (leakage-controlled global 10% PubChem, union-find on matrix fingerprint
++ InChIKey; 312,682 held-out molecules, 30,000 scored; every model evaluated on identical
+molecules). Source of truth: `docs/data/test_eval.json`.
+
+**64k tier (medium ~10M) — held-out test:**
+
+| recipe | shift (ppm) | J (Hz) | presence F1 | deg bal-acc |
+|---|---|---|---|---|
+| 025 | 0.0477 | 1.393 | 0.908 | 0.938 |
+| 026 | 0.0452 | 1.377 | 0.909 | 0.950 |
+| 027 | 0.0411 | 1.315 | 0.898 | 0.946 |
+| 028 | 0.0479 | 1.390 | 0.907 | 0.949 |
+| **029** | **0.0390** | 1.318 | 0.891 | 0.944 |
+| 030 | 0.0415 | 1.342 | 0.891 | 0.951 |
+
+**500k tier (xl ~57M) — held-out test:**
+
+| recipe | shift (ppm) | J (Hz) | presence F1 | deg bal-acc |
+|---|---|---|---|---|
+| 025 | 0.0257 | 0.937 | 0.962 | 0.981 |
+| 026 | 0.0416 | 1.127 | 0.948 | 0.972 |
+| 027 | 0.0288 | 0.963 | 0.954 | 0.983 |
+| 028 | 0.0274 | 0.949 | 0.963 | 0.983 |
+| **029 ⭐** | **0.0235** | 0.935 | 0.954 | 0.984 |
+| 030 | 0.0438 | 1.145 | 0.922 | 0.959 |
+
+**Fleet-best = 500k·029** at **0.0235 ppm** held-out (val 0.0241) — the 026+027 combination
+(peak channel + soft-equivalence + focal loss) on the 57M model. Scaling 64k→500k helps every
+recipe (≈2× lower shift MAE, higher F1/degeneracy from the more diverse PubChem corpus).
+
+**The 030 "super" model did not win.** Stacking all four ideas (026+027+028) underperformed the
+leaner recipes at both tiers (500k·030 test 0.0438 / val a much worse 0.1299; 64k·030 test 0.0415),
+i.e. the cumulative-integral channel + the full stack regressed shift accuracy rather than adding
+on top — the targeted, paired recipes (027, 029) are the ones that pay off.
+
+### Test-time spectral refinement (analysis-by-synthesis)
+
+A **decode-time**, input-only polishing step (`model/inference/refine.py`, eval harness
+`model/experiments/refine_eval.py`): the network fixes the discrete structure (degeneracy,
+coupling topology) and predicts shifts *almost* right, then `refine_shifts` runs gradient
+descent on just the chemical shifts through the **differentiable exact simulator** to maximise
+overlap with the molecule's own **input 90 MHz spectrum** (objective = Wasserstein-1 + (1−cosine),
+inside a trust region around the model's prediction; couplings + degeneracy held fixed). It is
+non-regressing (reverts on the spectral objective) and hardened with early-stop, a per-molecule
+wall-clock budget, and an eigh-cost guard that skips dense systems. No retraining; uses only the
+90 MHz input → it is a "legal" step.
+
+Measured shift-MAE improvement on the refined molecules:
+
+| model | shift MAE before → after | gain | sanity |
+|---|---|---|---|
+| 64k·029 | 0.0517 → **0.0295** ppm | **+43%** | cos(true, target) = 1.0000 |
+| 500k·025 | 0.0247 → **0.0056** ppm | **+77%** | cos(true, target) = 1.0000 |
+
+(The website explorer renders this as a violet "refined" overlay with the per-molecule
+raw→refined MAE; skipped dense molecules are not overlaid.)
+
+---
 
 ## Training history (2026-06-01) — presentation summary
 

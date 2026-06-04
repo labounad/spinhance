@@ -746,6 +746,15 @@ High after a stable supervised model exists.
 
 ## Architecture Family M — Neural Prediction + Local Physics Refinement
 
+> ✅ **IMPLEMENTED** — `model/inference/refine.py` (`refine_shifts`), eval harness
+> `model/experiments/refine_eval.py`. A decode-time, input-only ("legal") step: gradient descent
+> on the predicted **chemical shifts** through the exact differentiable simulator to match the
+> input 90 MHz spectrum (objective W1 + (1−cos)); couplings + degeneracy fixed; a **trust region**
+> + soft L2 pull keep it in the right basin (addresses the caution below), non-regressing, hardened
+> with early-stop + per-molecule wall-clock budget + an eigh-cost guard that skips dense systems.
+> **Result:** shift-MAE +43% (64k·029: 0.0517→0.0295 ppm) and +77% (500k·025: 0.0247→0.0056 ppm).
+> See `model/RESULTS.md` and `model/DESIGN.md` §12.
+
 ### Approach
 
 Use the neural model to initialize the spin system, then run local differentiable optimization on shifts and J values to better match the spectrum.

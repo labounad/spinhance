@@ -37,12 +37,15 @@ dataclasses in `model/schemas`.
 ResNet1D conv stem → ppm-positioned global tokens → pre-LN Transformer encoder →
 8 learned spin-group queries → Transformer decoder → per-node heads (shift +
 degeneracy) + symmetric `PairwiseEdgeHead`. Sizes via `model.size`:
-`medium` ≈ 10M (production), **`xl` ≈ 57M** (`dim512/enc4/dec6`, for the 3M+ regime).
-See `RESULTS.md` for the ablation; the production model is **light-025**
-(`train_500k_light_025.yaml`) — the 025 recipe (matrix loss, `shift` weighted 2× + WSD LR)
-trained on 500k PubChem (0.036 ppm / 0.51 Hz, best ep43), superseding the 64k session-025.
+`medium` ≈ 10M (64k tier), **`xl` ≈ 57M** (`dim512/enc4/dec6`, the 500k+ regime).
+See `RESULTS.md` for the full **025–030 recipe sweep**; the **fleet-best is 500k·029**
+(026+027 — peak channel + soft-equiv + focal loss) at **0.0235 ppm** held-out on the
+leakage-controlled global PubChem test split. The 3M (~137M) tier is **paused / under revision**.
+The model also supports a decode-time **test-time refinement** step
+(`model/inference/refine.py`) that polishes predicted shifts against the input 90 MHz spectrum
+(+43–77% shift-MAE — see `RESULTS.md` and `DESIGN.md` §12).
 
-Two optional, default-off inductive biases (added in session026):
+Two optional, default-off inductive biases (added in the 026 recipe):
 - **`model.use_peak_channel`** — feeds a 2nd conv input channel: an in-model
   peak-emphasis map (local maxima above a per-sample threshold, Gaussian-smoothed)
   computed from the spectrum in `forward`. A shift-localization prior with no
@@ -114,21 +117,27 @@ The three swappable layers are name-registered; build by string key
 | `train_64k_spingraph_shift2x_matrixonly.yaml` | spingraph · matrix(shift 2×) · 64k — session 025 (superseded by light-025) |
 | `train_64k_spingraph_shift2x_spectral.yaml` | session 025 + spectral variant |
 | `train_64k_spingraph_regions.yaml` | spingraph + region tokens · 64k — session 023 (abandoned, slower/no gain) |
-| `train_64k_026_peaks_softequiv.yaml` | spingraph(peak+soft-equiv) · matrix+soft_equiv · 64k — session 026 |
-| `train_500k_light_025.yaml` | spingraph medium · 025 recipe · 500k PubChem — **production** (0.036 ppm, ep43) |
-| `train_500k_light_026.yaml` | spingraph medium · 026 recipe · 500k PubChem |
-| `train_3M_spingraph_xl_{025,026}.yaml` | spingraph **xl** · 025/026 recipe · 3.2M PubChem |
+| `train_64k_026_peaks_softequiv.yaml` | spingraph(peak+soft-equiv) · matrix+soft_equiv · 64k — recipe 026 |
+| 64k recipes `025`–`030` | spingraph medium · the 025–030 ladder · 64k PubChem (the ablation tier) |
+| 500k recipes `025`–`030` | spingraph **xl** · the 025–030 ladder · 500k PubChem — **fleet-best = 029, 0.0235 ppm** |
+| 3M recipes (`026`, `030`) | spingraph **xl** · 3M PubChem — **paused / under revision** |
 
 ## Data paths
 
 - **Per-file** (default, ChEMBL 64k): `data.records` JSON + `data.spectra` dir of
   `<mol_id>.npy` (`load_records`).
-- **Stacked shards** (PubChem 3M+): set `data.parts` to a dir of `part_NNNNN.npy`
+- **Stacked shards** (PubChem 500k–3M): set `data.parts` to a dir of `part_NNNNN.npy`
   (1000 spectra each, 90 MHz only) keyed by record order to a `.json[.gz]`
   `data.records`. `StackedSpectra` mmaps shards lazily (headers-only index);
-  `load_pubchem_records` streams the gz. Configs `train_3M_spingraph_xl_{025,026}.yaml`.
+  `load_pubchem_records` streams the gz; `data.sample_n` reservoir-samples the tier.
   ⚠️ Use `num_workers≤2` at ≥500k records on a ≤16 GB box (per-worker record-list
-  copies OOM; COW is broken by Python refcounting); full 3.2M needs ≥32 GB RAM.
+  copies OOM; COW is broken by Python refcounting); full 3M needs ≥32 GB RAM.
+
+On the **Garibaldi HPC**, the training-generated data lives in the group filesystem at
+`/gpfs/group/shenvi/Users/labounader/spinhance/` — `rebuild3M/` (the 3M PubChem dataset +
+stacked spectra parts), `rebuild500k/` (the 500k tier), `runs/` (checkpoints — `model/runs` is
+a **symlink** into here), `ckpts/` (CNN baseline), `spectra_run/` (90 MHz spectra), and
+`legacy/bundle_{500k_s0,1M_s0,600_2p16}/`. The repo checkout and conda env stay in `$HOME`.
 
 ## Training stages (see the master plan)
 
