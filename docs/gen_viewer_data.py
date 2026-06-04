@@ -72,15 +72,19 @@ for key, name, label, tier, recipe, params in FLEET:
             lc[key] = {"label": label + ("" if finished else " · training"),
                        "series": s, **meta}
         h = rr.read_heldout_eval(d)
-    # every FLEET member gets a test_eval entry (so the grid shows all submitted combos);
-    # finished+evaluated -> numbers, otherwise a 'training' stub (column shown, no values).
-    if finished and h and h.get("metrics"):
+    # every FLEET member gets a test_eval entry (so the grid shows all submitted combos).
+    # A FINISHED run always carries its validation numbers (drives the model-comparison
+    # card); the held-out `test` block is added only once eval_heldout has been run for it
+    # (drives the held-out card). So a finished-but-not-yet-evaluated run (e.g. one that
+    # just completed) shows real val + a "pending" held-out cell, rather than a bare stub.
+    if finished:
         bm = (rr.analyze_run(d).get("best_metrics", {}) or {})
-        m = h["metrics"]
         te[key] = {**meta, "state": "finished",
-                   "val":  {k: round(bm.get(k, 0), 4) for k in KEYS},
-                   "test": {k: round(m.get(k, 0), 4) for k in KEYS}}
-        n_eval = h.get("n_test", n_eval)
+                   "val": {k: round(bm.get(k, 0), 4) for k in KEYS}}
+        if h and h.get("metrics"):
+            m = h["metrics"]
+            te[key]["test"] = {k: round(m.get(k, 0), 4) for k in KEYS}
+            n_eval = h.get("n_test", n_eval)
     else:
         te[key] = {**meta, "state": "training"}
 

@@ -609,8 +609,10 @@
       function render() {
         const cs = cols();
         let h = '<table class="cmp"><thead><tr><th>metric</th>';
-        cs.forEach(c => h += '<th class="num">' + c.lbl + (d[c.k].state !== "finished" ?
-          ' <span style="color:var(--ink-faint);font-weight:400">· training</span>' : '') + '</th>');
+        cs.forEach(c => { const e = d[c.k];
+          const tag = e.state !== "finished" ? "· training" : (!e.test ? "· eval pending" : "");
+          h += '<th class="num">' + c.lbl + (tag ?
+            ' <span style="color:var(--ink-faint);font-weight:400">' + tag + '</span>' : '') + '</th>'; });
         h += '</tr></thead><tbody>';
         rows.forEach(([mk, lbl, lower]) => {
           const vals = cs.map(c => done(c.k) ? d[c.k].test[mk] : null);
