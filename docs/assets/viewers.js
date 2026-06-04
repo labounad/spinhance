@@ -127,7 +127,7 @@
   // now; metrics ("—") fill in from gen_viewer_data.py once their checkpoints land.
   const RUNS = [
     { m: "CNN baseline", arch: "ResNet-1D + typed heads", data: "ChEMBL",       p: "5.0M", shift: "—", j: "—", f1: "—", deg: "—", st: "floor" },
-    { m: "64k · 026",    arch: "spingraph_decoder · medium", data: "64k PubChem",  p: "10M",  shift: "—", j: "—", f1: "—", deg: "—", st: "running" },
+    { m: "64k · 026",    arch: "spingraph_decoder · medium", data: "64k PubChem",  p: "10M",  shift: "0.057", j: "1.42", f1: "0.901", deg: "0.944", st: "running" },
     { m: "500k · xl",    arch: "spingraph_decoder · xl",     data: "500k PubChem", p: "57M",  shift: "—", j: "—", f1: "—", deg: "—", st: "running" },
     { m: "3M · xxl",     arch: "spingraph_decoder · xxl",    data: "3M PubChem",   p: "137M", shift: "—", j: "—", f1: "—", deg: "—", st: "running" },
   ];
@@ -169,6 +169,11 @@
     const host = $("#txViewer"); if (!host) return;
     fetch("data/test_explorer.json").then(r => r.json()).then(data => {
       const ppm = data.ppm, mols = data.molecules; let idx = 0;
+      if (!mols || !mols.length) {          // held-out explorer not generated yet (tier still training)
+        host.innerHTML = '<p class="muted">' + (data.note ||
+          "The held-out test-molecule explorer is generated once a tier finishes training — coming shortly.") + '</p>';
+        return;
+      }
       // per-model predictions + per-model test-split membership
       const models = data.models || [{ key: "_", label: "model" }];
       let mkey = (models.find(x => x.key === "64k") || models[0]).key;   // default: 64k tier (first to finish)
@@ -510,6 +515,12 @@
     const host = $("#testEval"); if (!host) return;
     fetch("data/test_eval.json").then(r => r.json()).then(d => {
       const models = Object.keys(d).filter(k => k !== "_meta");
+      if (!models.length) {                 // held-out eval not computed yet (tier still training)
+        const meta = d._meta || {};
+        host.innerHTML = '<p class="muted" style="font-size:13px">' +
+          (meta.note || "Held-out test evaluation is computed once a tier finishes training.") + '</p>';
+        return;
+      }
       const rows = [["shift_mae_ppm", "shift MAE (ppm) ↓"], ["j_mae_hz", "J MAE (Hz) ↓"],
         ["presence_f1", "presence F1 ↑"], ["deg_acc_balanced", "deg balanced-acc ↑"]];
       let h = '<table class="cmp"><thead><tr><th>metric</th>';
