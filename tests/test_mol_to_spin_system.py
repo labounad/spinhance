@@ -226,3 +226,37 @@ def test_shifts_ethanol_methyl():
 
     means = [v["mean"] for v in predict_shifts(make_test_mol_3d("CCO"), nucleus="H").values()]
     assert any(abs(m - 1.2) < 0.5 for m in means)  # methyl near 1.2 ppm
+
+
+# --- Audit-2: per-group symmetry orbit (soft-equivalence signal) -------------
+
+def test_entry_to_spin_system_emits_symmetry_equiv_orbit():
+    """entry_to_spin_system must tag each spin group with its canonical symmetry orbit
+    (Chem.CanonicalRankAtoms, breakTies=False) so chemically-equivalent-but-distinct groups
+    share an id. This is the Audit-2 linchpin: the original bug keyed equivalence off a
+    (shift, range) proxy, forcing accidental collisions to merge. Ethyl benzoate's
+    monosubstituted ring gives three symmetry-equivalent group pairs among its 8 groups."""
+    import os
+    import tempfile
+    from collections import Counter
+
+    from generate.xyz_writer import molecule_to_xyz
+    from mol_to_spin_system.xyz import entry_to_spin_system, iter_xyz_entries
+
+    block = molecule_to_xyz("CCOC(=O)c1ccccc1", chembl_id="TEST", inchikey="TESTKEY")
+    assert block, "expected an 8-group labelled XYZ block"
+    with tempfile.NamedTemporaryFile("w", suffix=".xyz", delete=False) as f:
+        f.write(block)
+        path = f.name
+    try:
+        comment, atoms = next(iter_xyz_entries(path))
+    finally:
+        os.unlink(path)
+
+    d = entry_to_spin_system(comment, atoms).to_dict()
+    orb = d.get("equiv_orbit")
+    assert orb is not None and len(orb) == len(d["labels"]) == 8   # one orbit id per group
+    assert all(isinstance(o, int) for o in orb)                    # serialized as ints
+    # The symmetric ring yields soft-equiv pairs: orbit-class sizes are robust to RDKit's
+    # internal rank numbers (a chemical fact), unlike the raw ids. Three pairs + two singletons.
+    assert sorted(Counter(orb).values()) == [1, 1, 2, 2, 2]

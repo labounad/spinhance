@@ -142,3 +142,52 @@ def test_make_splits_no_leakage_synthetic():
     assert report["scaffold_leaks"] == 0
     assert report["dup_matrix_leaks"] == 0
     assert set(assignment.values()) <= {"train", "val", "test"}
+
+
+# ── soft-equivalence target: equiv_orbit -> (G,G) label in CANONICAL order ───────
+# This is the Audit-2 linchpin: the dataset turns the per-group symmetry orbit into the
+# label the soft-equiv loss supervises. A bug here (missing the canonical reorder, wrong
+# orbit equality, non-zero diagonal) is SILENT — the loss would still run, just on a
+# wrong/no-op target — so it must be pinned directly.
+
+def test_soft_equiv_target_from_equiv_orbit_canonical_order():
+    r = _records(1)[0]
+    # Deliberately UNSORTED shifts so the canonical reorder is non-trivial: if the
+    # implementation forgot to reorder equiv_orbit into canonical order, `expected`
+    # (which does reorder) would not match and this test fails.
+    r["shifts"] = np.array([2., 9., 5., 7., 1., 8., 3., 6.])
+    r["equiv_orbit"] = [0, 0, 1, 2, 3, 4, 5, 1]   # input groups (0,1) co-orbit; (2,7) co-orbit
+    vocab = DegeneracyVocab()
+    std = Standardizer().fit(_records(8), vocab)
+    ds = SpectrumMatrixDataset([r], vocab, std, spectrum_field="spec90", augment=False)
+    se = ds[0]["soft_equiv_target"].numpy()
+
+    order = canonical_order(r["shifts"], r["couplings"], r["degeneracy"])
+    oc = np.asarray(r["equiv_orbit"])[order]
+    expected = (oc[:, None] == oc[None, :]); np.fill_diagonal(expected, False)
+    assert np.array_equal(se, expected.astype(np.float32))      # orbit-equality in canonical order
+    assert np.array_equal(se, se.T)                              # symmetric
+    assert np.all(np.diagonal(se) == 0)                          # zero diagonal (distinct groups only)
+    assert se.sum() == 4                                         # exactly the two co-orbit pairs (×2)
+
+
+def test_soft_equiv_target_absent_is_all_zero():
+    r = _records(1)[0]                                           # legacy record: no equiv_orbit
+    vocab = DegeneracyVocab()
+    std = Standardizer().fit(_records(8), vocab)
+    ds = SpectrumMatrixDataset([r], vocab, std, spectrum_field="spec90", augment=False)
+    assert ds[0]["soft_equiv_target"].abs().sum() == 0          # -> loss no-ops, never spuriously supervised
+
+
+def test_collate_stacks_soft_equiv_target():
+    recs = _records(8)
+    for r in recs:
+        r["equiv_orbit"] = [0, 0, 1, 2, 3, 4, 5, 6]             # one co-orbit pair per molecule
+    vocab = DegeneracyVocab()
+    std = Standardizer().fit(recs, vocab)
+    ds = SpectrumMatrixDataset(recs, vocab, std, spectrum_field="spec90", augment=False)
+    dl = DataLoader(ds, batch_size=4, shuffle=False, collate_fn=collate_spin_batch)
+    batch = next(iter(dl))
+    assert batch.soft_equiv_target is not None
+    assert batch.soft_equiv_target.shape == (4, G, G)
+    assert torch.equal(batch.soft_equiv_target[0], ds[0]["soft_equiv_target"])  # per-item preserved
