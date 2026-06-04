@@ -35,7 +35,7 @@ export NCCL_DEBUG=WARN          # surface NCCL init/interface problems in the lo
 # effective batch (~2048-4096) with a short warmup. 90 MHz only. MAXMOL/EPOCHS
 # optional overrides for the smoke test.
 DATA_OV="--set data.records=/gpfs/home/yimingzhang/hackathon-shared/spin_systems_pubchem.json.gz \
- --set data.parts=/gpfs/home/yimingzhang/hackathon-shared/spectra_run/out/90MHz \
+ --set data.parts=/gpfs/group/shenvi/Users/labounader/spinhance/spectra_run/out/90MHz \
  --set data.max_mol=${MAXMOL:-0} \
  --set training.batch_size=512 \
  --set training.num_workers=4 \

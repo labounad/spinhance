@@ -3,7 +3,7 @@
 # (~33GB) contiguous stacked-shard dir, so we preload it into RAM (fast: a few big
 # sequential reads, not 3200 random ones) with modest --mem — no GPFS I/O storm, no
 # 210GB array. Submit:
-#   sbatch --export=ALL,CONFIG=model/configs/train_500k_light_025.yaml,RUN_NAME=light_025_bundle,BUNDLE=/gpfs/home/labounader/bundle_500k_s0 \
+#   sbatch --export=ALL,CONFIG=model/configs/train_500k_light_025.yaml,RUN_NAME=light_025_bundle,BUNDLE=/gpfs/group/shenvi/Users/labounader/spinhance/legacy/bundle_500k_s0 \
 #          -J light025b model/scripts/train_hpc_bundle.slurm
 #SBATCH -p alphafold
 #SBATCH --gres=gpu:rtxa5000:1
@@ -18,7 +18,7 @@ cd /gpfs/home/labounader/code/spinhance
 export PYTHONPATH=.
 ulimit -n 16384 2>/dev/null || true
 ENVPY=/gpfs/home/labounader/micromamba/envs/spinhance/bin/python
-BUNDLE="${BUNDLE:-/gpfs/home/labounader/bundle_500k_s0}"
+BUNDLE="${BUNDLE:-/gpfs/group/shenvi/Users/labounader/spinhance/legacy/bundle_500k_s0}"
 # PRELOAD=true loads the ~33 GB (500k @ 2^14) bundle into RAM once, so training is
 # immune to GPFS random-mmap contention on busy nodes (the 500k·026 crawl). Set
 # --mem >= 48G at submit when using it.

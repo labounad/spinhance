@@ -12,8 +12,8 @@ The test records carry an explicit ``row`` (→ full parts) and are pre-sorted b
 across model tiers (64k ⊂ 500k ⊂ 3M).
 
     python -m model.experiments.eval_heldout --run-dir model/runs/<id> [more...] \
-        --test-records /gpfs/.../rebuild3M/records_3M_test.json.gz \
-        --parts /gpfs/.../rebuild3M/parts --device cuda [--limit 50000]
+        --test-records /gpfs/group/shenvi/Users/labounader/spinhance/rebuild3M/records_3M_test.json.gz \
+        --parts /gpfs/group/shenvi/Users/labounader/spinhance/rebuild3M/parts --device cuda [--limit 50000]
 
 Pass several ``--run-dir`` to score the whole fleet in one process: the spectra
 are model-independent, so the held-out rows are ``preload``-ed into RAM ONCE

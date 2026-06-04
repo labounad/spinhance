@@ -24,7 +24,7 @@ ulimit -n 16384 2>/dev/null || true    # headroom for stacked-shard mmaps (belt 
 # HPC data + scale overrides (full 3.2M; big batch — the xl model is memory-light;
 # 257GB RAM so workers are cheap). 90 MHz ONLY (model input constraint).
 DATA_OV="--set data.records=/gpfs/home/yimingzhang/hackathon-shared/spin_systems_pubchem.json.gz \
- --set data.parts=/gpfs/home/yimingzhang/hackathon-shared/spectra_run/out/90MHz \
+ --set data.parts=/gpfs/group/shenvi/Users/labounader/spinhance/spectra_run/out/90MHz \
  --set data.max_mol=0 \
  --set training.batch_size=512 \
  --set training.num_workers=4"

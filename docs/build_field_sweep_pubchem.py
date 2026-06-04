@@ -4,7 +4,7 @@ windows, 3D coords, N_FIELDS). The website ships PubChem molecules throughout, a
 the bundle records live on the HPC, so run this there:
 
     PYTHONPATH=. python docs/build_field_sweep_pubchem.py \
-        /gpfs/home/labounader/bundle_1M_s0/records.json.gz /tmp/field_sweep.json
+        /gpfs/group/shenvi/Users/labounader/spinhance/legacy/bundle_1M_s0/records.json.gz /tmp/field_sweep.json
 
 Per-frame STICKS only (amps normalized per frame); the hero broadens + morphs them
 client-side at the chosen field (docs/assets/sweep.js), so resolution and lineshape
@@ -27,7 +27,7 @@ import build_field_sweep as B                                  # noqa: E402
 from simulation.graph_io import record_to_arrays, molecule_id  # noqa: E402
 from simulation.pyspin.composite import largest_component_spins  # noqa: E402
 
-SRC = sys.argv[1] if len(sys.argv) > 1 else "/gpfs/home/labounader/bundle_1M_s0/records.json.gz"
+SRC = sys.argv[1] if len(sys.argv) > 1 else "/gpfs/group/shenvi/Users/labounader/spinhance/legacy/bundle_1M_s0/records.json.gz"
 OUT = sys.argv[2] if len(sys.argv) > 2 else "docs/data/field_sweep.json"
 MAX_ELIGIBLE = 4000        # scan enough PubChem records to sample N_MOLECULES from
 
