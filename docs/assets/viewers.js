@@ -51,12 +51,14 @@
     ctx.textAlign = "center";
     for (let i = 0; i <= 4; i++) { const xv = x0 + (x1 - x0) * i / 4; ctx.fillText(opts.xdp != null ? xv.toFixed(opts.xdp) : Math.round(xv), X(xv), H - padB + 16); }
     ctx.fillStyle = c.soft; ctx.fillText(opts.xlabel || "epoch", (padL + W - padR) / 2, H - 4);
-    // series
+    // series (s.alpha gives a per-line opacity so overlapping traces stay readable)
     series.forEach(s => {
+      ctx.globalAlpha = s.alpha != null ? s.alpha : 1;
       ctx.strokeStyle = s.color; ctx.lineWidth = s.width || 2.2; ctx.beginPath();
       s.pts.forEach((p, i) => { const xx = X(p[0]), yy = Y(p[1]); i ? ctx.lineTo(xx, yy) : ctx.moveTo(xx, yy); });
       ctx.stroke();
       if (s.mark != null) { ctx.fillStyle = s.color; const p = s.pts[s.mark]; ctx.beginPath(); ctx.arc(X(p[0]), Y(p[1]), 3.5, 0, 7); ctx.fill(); }
+      ctx.globalAlpha = 1;
     });
   }
 
@@ -199,7 +201,9 @@
       const inTest = () => true;   // every molecule is in the shared global held-out set
       const predOf = (m) => (m.preds ? m.preds[mkey] : m);
       const spec = $("#txSpec", host), sel = $("#txSel", host), meta = $("#txMeta", host), mat = $("#txMatrix", host);
-      const modSel = $("#txModel", host), statusEl = $("#txStatus", host), refCb = $("#txRefine", host);
+      const modSel = $("#txModel", host), statusEl = $("#txStatus", host);
+      const vis = { target: true, pred: true, refined: true };   // per-trace visibility (legend toggles)
+      const LINE_ALPHA = 0.78;                                    // slight transparency so overlaps read clearly
       const el3d = $("#tx3d", host), load3d = $("#tx3dLoad", host), spinCb = $("#txSpin", host); let v3d = null;
       function applySpin() { if (v3d) v3d.spin(spinCb && spinCb.checked ? "y" : false, 0.6); }
       if (spinCb) spinCb.addEventListener("change", applySpin);
@@ -232,22 +236,21 @@
       // Interactive zoom state for the spectrum plot: x-range (ppm) + y-stretch factor.
       let xr0 = 0, xr1 = 12, yZoom = 1;
       const PADL = 16, PADR = 14, PADT = 12, PADB = 30;   // mirror linePlot's noY paddings
-      const showRef = () => refCb && refCb.checked;
+      const showRef = (P) => vis.refined && P.refined && !P.ref_skipped;   // refined available + toggled on
       function drawSpec() {
         const m = mols[idx], P = predOf(m), c = C();
         const ix = m.ix || ppmOf(m), rx = (P && P.rx) || ppmOf(m);   // per-spectrum adaptive mesh x
         // target-spectrum colour encodes test membership: teal = held-out test for this model, amber = out-of-distribution
         const tgt = inTest(m) ? (css("--accent-2") || "#34e3c4") : "#f5a623";
-        const ref = showRef() && P.refined && !P.ref_skipped;        // refined overlay (skip dense systems left unrefined)
-        const dmax = Math.max(1e-6, ...m.input, ...P.rendered, ...(ref ? P.refined : []));
-        const series = [
-          { color: tgt, width: 1.8, pts: m.input.map((v, i) => [ix[i], v]) },
-          { color: c.accent, width: 2, pts: P.rendered.map((v, i) => [rx[i], v]) },
-        ];
-        if (ref) {                                                   // violet, drawn on top
-          const fx = P.fx || ppmOf(m);
-          series.push({ color: "#b07bff", width: 2, pts: P.refined.map((v, i) => [fx[i], v]) });
-        }
+        const ref = showRef(P);
+        // y-scale spans only the visible traces, so a soloed line still fills the plot
+        const dmax = Math.max(1e-6, ...(vis.target ? m.input : []), ...(vis.pred ? P.rendered : []),
+                              ...(ref ? P.refined : []));
+        const series = [];
+        if (vis.target) series.push({ color: tgt, width: 1.8, alpha: LINE_ALPHA, pts: m.input.map((v, i) => [ix[i], v]) });
+        if (vis.pred) series.push({ color: c.accent, width: 2, alpha: LINE_ALPHA, pts: P.rendered.map((v, i) => [rx[i], v]) });
+        if (ref) { const fx = P.fx || ppmOf(m);                       // violet, drawn on top
+          series.push({ color: "#b07bff", width: 2, alpha: LINE_ALPHA, pts: P.refined.map((v, i) => [fx[i], v]) }); }
         linePlot(spec, series, { xlabel: "ppm", x0: xr0, x1: xr1, y0: 0, y1: dmax / yZoom,
              invertX: true, noY: true, xdp: (xr1 - xr0) < 6 ? 1 : 0 });
       }
@@ -313,6 +316,14 @@
           `<table class="nodes"><thead><tr><th>#</th><th>δ true</th><th>δ pred</th><th>n true</th><th>n pred</th></tr></thead><tbody>${rows}</tbody></table>
            <div class="jwrap"><div><div class="jlbl">J — target</div>${grid(m.true_J)}</div><div><div class="jlbl">J — predicted</div>${grid(P.pred_J)}</div></div>`;
       }
+      function setMeta() {                         // reflects the current refined-toggle state
+        const m = mols[idx], P = predOf(m);
+        const hasRef = showRef(P) && P.ref_shift_mae != null;
+        const shiftTxt = hasRef
+          ? `shift MAE <b>${P.shift_mae.toFixed(3)}</b> → <b style="color:#b07bff">${P.ref_shift_mae.toFixed(3)}</b> ppm <span class="mono" style="color:var(--ink-faint)">(refined)</span>`
+          : `shift MAE <b>${P.shift_mae.toFixed(3)}</b> ppm`;
+        meta.innerHTML = `<span class="mono">${m.smiles || m.id}</span> · ${m.n_spins} protons · ${shiftTxt} · J MAE <b>${P.j_mae.toFixed(2)}</b> Hz`;
+      }
       function show() {
         const m = mols[idx], P = predOf(m); sel.value = idx;
         [xr0, xr1] = winOf(m); yZoom = 1;          // reset zoom to this molecule's window on navigation
@@ -320,18 +331,17 @@
           statusEl.className = "tx-status is-test";
           statusEl.innerHTML = `● held-out test molecule — no model trained on it · predictions from <b>${labelOf(mkey)}</b>`;
         }
-        const hasRef = showRef() && P.ref_shift_mae != null && !P.ref_skipped;
-        const shiftTxt = hasRef
-          ? `shift MAE <b>${P.shift_mae.toFixed(3)}</b> → <b style="color:#b07bff">${P.ref_shift_mae.toFixed(3)}</b> ppm <span class="mono" style="color:var(--ink-faint)">(refined)</span>`
-          : `shift MAE <b>${P.shift_mae.toFixed(3)}</b> ppm`;
-        meta.innerHTML = `<span class="mono">${m.smiles || m.id}</span> · ${m.n_spins} protons · ${shiftTxt} · J MAE <b>${P.j_mae.toFixed(2)}</b> Hz`;
-        drawSpec(); drawMatrix(); render3d(m);
+        setMeta(); drawSpec(); drawMatrix(); render3d(m);
       }
       function step(d) { const vis = visibleIdx(); let p = vis.indexOf(idx); if (p < 0) p = 0;
         p = (p + d + vis.length) % vis.length; idx = vis[p]; show(); }
       sel.onchange = () => { idx = +sel.value; show(); };
       if (modSel) modSel.onchange = () => { mkey = modSel.value; rebuildMolOptions(); show(); };
-      if (refCb) refCb.onchange = () => show();   // toggle the refined overlay + the raw→refined MAE
+      // legend = per-trace toggles (target / prediction / refined); update plot + meta in place
+      host.querySelectorAll(".tx-leg").forEach(b => b.onclick = () => {
+        const s = b.dataset.s; vis[s] = !vis[s];
+        b.classList.toggle("off", !vis[s]); drawSpec(); setMeta();
+      });
       $("#txPrev", host).onclick = () => step(-1);
       $("#txNext", host).onclick = () => step(1);
       idx = 0;

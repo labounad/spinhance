@@ -270,8 +270,12 @@
   @media(max-width:760px){.tx-lower{grid-template-columns:1fr}}
   .tx-3d-wrap{position:relative;border:1px solid var(--line);border-radius:12px;background:var(--panel-2,var(--bg-soft));padding:10px}
   .tx-3d{position:relative;width:100%;height:260px}
-  .tx-legend{display:flex;gap:16px;font-size:12px;color:var(--ink-soft);margin-bottom:4px;flex-wrap:wrap}
+  .tx-legend{display:flex;gap:14px;font-size:12px;color:var(--ink-soft);margin-bottom:4px;flex-wrap:wrap;align-items:center}
   .tx-legend .sw{display:inline-block;width:13px;height:3px;vertical-align:middle;margin-right:5px}
+  .tx-leg{background:none;border:none;padding:2px 3px;font:inherit;color:var(--ink-soft);cursor:pointer;display:inline-flex;align-items:center;border-radius:5px}
+  .tx-leg:hover{color:var(--ink)}
+  .tx-leg.off{opacity:.4;text-decoration:line-through}
+  .tx-legtip{font-size:11px;color:var(--ink-faint)}
   table.nodes{width:100%;border-collapse:collapse;font-size:12.5px;font-variant-numeric:tabular-nums}
   table.nodes th{color:var(--ink-faint);font-weight:600;padding:4px 6px;text-align:right;border-bottom:1px solid var(--line)}
   table.nodes td{padding:4px 6px;text-align:right;border-bottom:1px solid var(--line)}
@@ -922,7 +926,6 @@
       <div class="vb-head"><h3>Held-out test-molecule explorer <span class="split-tag split-test">test</span></h3>
         <div class="tx-nav">
           <label class="tx-modlabel">model <select id="txModel" class="tx-sel"></select></label>
-          <label class="spin-toggle tx-reftoggle"><input type="checkbox" id="txRefine" checked><span class="switch"></span>refine</label>
           <span class="tx-navgrp">
             <button class="car-btn car-prev" id="txPrev" aria-label="Previous molecule"></button>
             <select id="txSel" class="tx-sel"></select>
@@ -932,9 +935,10 @@
       <div class="tx-status" id="txStatus"></div>
       <div class="tx-meta" id="txMeta"></div>
       <div class="tx-legend">
-        <span><i class="sw" style="background:var(--accent-2)"></i>target — held-out test spectrum</span>
-        <span><i class="sw" style="background:var(--accent)"></i>rendered from prediction</span>
-        <span id="txRefLeg"><i class="sw" style="background:#b07bff"></i>refined — shifts polished vs the input</span>
+        <button class="tx-leg on" data-s="target"><i class="sw" style="background:var(--accent-2)"></i>target — held-out test spectrum</button>
+        <button class="tx-leg on" data-s="pred"><i class="sw" style="background:var(--accent)"></i>rendered from prediction</button>
+        <button class="tx-leg on" data-s="refined"><i class="sw" style="background:#b07bff"></i>refined — shifts polished vs the input</button>
+        <span class="tx-legtip">click a label to toggle its trace</span>
       </div>
       <canvas id="txSpec" class="vb-canvas"></canvas>
       <div class="tx-lower">
