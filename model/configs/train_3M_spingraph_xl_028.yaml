@@ -1,0 +1,56 @@
+# 028 recipe at xl (57M) — the 500k-tier companion to train_64k_028. = the 025 base
+# (matrix, shift 2x) PLUS a cumulative-integral input channel (use_cumint_channel).
+# Used for the 500k tier via SAMPLE_N=500000. 90 MHz only; xl stability tuning kept.
+run:
+  name: spingraph_xl_028
+  output_dir: model/runs
+
+data:
+  records: data/pubchem/spin_systems_pubchem.json.gz
+  parts: data/pubchem/spectra_parts/90MHz
+  field: 90
+  split: none
+  max_mol: 0
+  preload: true
+
+model:
+  name: spingraph_decoder
+  size: xl
+  dim: 512
+  enc_layers: 4
+  dec_layers: 6
+  n_heads: 8
+  dropout: 0.1
+  use_cumint_channel: true     # the experiment: cumulative-integral 2nd input channel
+
+loss:
+  name: composite
+  terms:
+    - name: matrix
+      weight: 1.0
+      weights:
+        shift: 2.0
+        jmag: 1.0
+        presence: 0.5
+        deg: 0.5
+
+training:
+  epochs: 60
+  batch_size: 256
+  lr: 0.0002
+  weight_decay: 0.01
+  amp: bf16
+  warmup_frac: 0.05
+  lr_stable_frac: 0.50
+  lr_min_factor: 0.30
+  grad_clip: 0.5
+  patience: 8
+  num_workers: 2
+  val_every: 1
+  seed: 0
+
+diagnostics:
+  enabled: true
+  log_every_steps: 200
+  probe_every_epochs: 2
+  probe_count: 16

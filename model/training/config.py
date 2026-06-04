@@ -33,6 +33,8 @@ class DataCfg:
     sample_n: int = 0            # uniform RANDOM subset of N (reservoir); precedence over max_mol
     sample_seed: int = 0
     preload: bool = False        # stacked path: load needed rows into RAM (fast on GPFS); RAM ≈ n*P*4
+    preload_cache: str = ""      # optional .npz cache of the (rows, spectra) subset; loaded if present,
+                                 # else built on first preload — skips re-reading 1605 shards every run
     region_tokens: bool = False  # extract support-region tokens (Family D/E/H); off = unchanged
     region_max: int = 48         # max regions per spectrum (padded/truncated)
     # NOTE: the attribute `field` (NMR field) above shadows dataclasses.field in

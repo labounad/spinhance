@@ -21,6 +21,7 @@ copy-on-write (read-only) without duplicating it.
 """
 from __future__ import annotations
 
+import os
 import re
 from collections import OrderedDict, defaultdict
 from pathlib import Path
@@ -54,7 +55,7 @@ class StackedSpectra:
     def __len__(self):
         return self.total
 
-    def preload(self, rows, dense_frac: float = 0.25) -> None:
+    def preload(self, rows, dense_frac: float = 0.25, cache: str | None = None) -> None:
         """Load the given global rows into a RAM array, so ``__getitem__`` serves
         them from memory instead of random mmap faults. Call once in the main
         process before DataLoader fork.
@@ -71,6 +72,17 @@ class StackedSpectra:
         Memory ≈ len(set(rows)) * P * 4 bytes (e.g. 500k * 16384 * 4 ≈ 33 GB)."""
         needed = sorted(set(int(r) for r in rows))
         if not needed:
+            return
+        if cache and Path(cache).exists():       # load the pre-materialized subset (one f32 read)
+            z = np.load(cache)
+            self._ram = z["spectra"]
+            self._ram_index = {int(r): i for i, r in enumerate(z["rows"])}
+            miss = [r for r in needed if r not in self._ram_index]
+            if miss:
+                raise ValueError(f"preload cache {cache} is missing {len(miss)} requested rows "
+                                 f"(stale — delete it to rebuild)")
+            print(f"[stacked] preload from cache {cache} "
+                  f"({self._ram.shape[0]} rows, {self._ram.nbytes / 1e9:.1f} GB)", flush=True)
             return
         P = int(np.load(self.files[0], mmap_mode="r").shape[1])
         self._ram_index = {r: i for i, r in enumerate(needed)}
@@ -105,6 +117,11 @@ class StackedSpectra:
                 print(f"[stacked]   {n + 1}/{len(by_shard)} shards", flush=True)
         print(f"[stacked] preload done ({n_full} full-read, {n_sparse} sparse-mmap shards)",
               flush=True)
+        if cache:                                 # persist for next run (atomic write)
+            tmp = str(cache) + ".tmp.npz"
+            np.savez(tmp, rows=np.asarray(needed, dtype=np.int64), spectra=self._ram)
+            os.replace(tmp, cache)
+            print(f"[stacked] wrote preload cache -> {cache} ({self._ram.nbytes / 1e9:.1f} GB)", flush=True)
 
     def _part(self, k: int) -> np.ndarray:
         m = self._mmaps.get(k)
