@@ -1,0 +1,58 @@
+# 027 recipe at 64k, on the CORRECTED (Audit-2) data. = the 025 base (matrix, shift 2x,
+# NO peak channel / soft-equiv) PLUS focal modulation on the two class-imbalanced terms:
+# focal CE on degeneracy (lifts rare-class balanced acc — 6H/9H) + focal BCE on coupling
+# presence (sharpens the sparse, easy-negative-dominated edge boundary -> F1). Loss-only
+# change; model is identical to 025, so rebuild_64k_027 vs rebuild_64k_025 isolates focal.
+# 90 MHz only; data paths + batch=512 from train_rebuild.slurm (SAMPLE_N=64000).
+run:
+  name: spingraph_027_64k
+  output_dir: model/runs
+
+data:
+  records: mol_to_spin_system/data/spin_systems_chembl.json
+  spectra: simulation/data/spectra
+  field: 90
+  split: none
+
+model:
+  name: spingraph_decoder
+  size: medium
+  dim: 256
+  enc_layers: 2
+  dec_layers: 4
+  n_heads: 8
+  dropout: 0.1
+
+loss:
+  name: composite
+  terms:
+    - name: matrix
+      weight: 1.0
+      weights:                  # shift weighted 2x (same as 025)
+        shift: 2.0
+        jmag: 1.0
+        presence: 0.5
+        deg: 0.5
+      deg_focal_gamma: 2.0       # proposal #1: focal CE on degeneracy (rare-class)
+      presence_focal_gamma: 2.0  # proposal #2: focal BCE on coupling presence
+
+training:
+  epochs: 100
+  batch_size: 256
+  lr: 0.0003
+  weight_decay: 0.01
+  amp: bf16
+  warmup_frac: 0.05
+  lr_stable_frac: 0.60
+  lr_min_factor: 0.40
+  grad_clip: 1.0
+  patience: 20
+  num_workers: 8
+  val_every: 1
+  seed: 0
+
+diagnostics:
+  enabled: true
+  log_every_steps: 50
+  probe_every_epochs: 5
+  probe_count: 16

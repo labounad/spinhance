@@ -1,0 +1,63 @@
+# 029 recipe at 64k, on the CORRECTED (Audit-2) data. = the 026 base (peak-channel +
+# soft-equivalence flag/loss) PLUS 027's focal modulation: focal CE on degeneracy +
+# focal BCE on coupling presence. Tests whether focal's rare-class gains STACK on top of
+# the soft-equivalence flags. rebuild_64k_029 vs rebuild_64k_026 isolates focal-on-top.
+# 90 MHz only; data paths + batch=512 from train_rebuild.slurm (SAMPLE_N=64000).
+run:
+  name: spingraph_029_64k
+  output_dir: model/runs
+
+data:
+  records: mol_to_spin_system/data/spin_systems_chembl.json
+  spectra: simulation/data/spectra
+  field: 90
+  split: none
+
+model:
+  name: spingraph_decoder
+  size: medium
+  dim: 256
+  enc_layers: 2
+  dec_layers: 4
+  n_heads: 8
+  dropout: 0.1
+  use_peak_channel: true     # 026 Idea 1
+  use_soft_equiv: true       # 026 Idea 2 — expose soft_equiv_logits for the loss + decode
+
+loss:
+  name: composite
+  terms:
+    - name: matrix
+      weight: 1.0
+      weights:                  # shift weighted 2x (same as 026)
+        shift: 2.0
+        jmag: 1.0
+        presence: 0.5
+        deg: 0.5
+      deg_focal_gamma: 2.0       # 027 augmentation: focal CE on degeneracy
+      presence_focal_gamma: 2.0  # 027 augmentation: focal BCE on presence
+    - name: soft_equiv          # 026 Idea 2
+      weight: 0.5
+      tol_ppm: 0.03
+      consistency_weight: 1.0
+
+training:
+  epochs: 100
+  batch_size: 256
+  lr: 0.0003
+  weight_decay: 0.01
+  amp: bf16
+  warmup_frac: 0.05
+  lr_stable_frac: 0.60
+  lr_min_factor: 0.40
+  grad_clip: 1.0
+  patience: 20
+  num_workers: 8
+  val_every: 1
+  seed: 0
+
+diagnostics:
+  enabled: true
+  log_every_steps: 50
+  probe_every_epochs: 5
+  probe_count: 16
