@@ -1,0 +1,69 @@
+# 3M "xxl 026": the capacity top of the data×capacity scaling sweep — the same
+# spingraph_decoder + 026 ideas (peak-channel input + soft-equivalence) as the 64k
+# (medium, ~10M) and 500k (xl, ~57M) tiers, widened + deepened to ~137M params so the
+# largest-data tier also gets the largest model. Trained on the FULL corrected 2.81M
+# train split (records_3M_train.json.gz) from the Audit-2 regeneration.
+#   model : spingraph_decoder dim768 enc6 dec8  -> 137.4M params
+#   loss  : matrix (shift-2x) + soft_equiv (Idea 2)
+#   data  : PubChem 90 MHz stacked shards, full train split (streamed; preload=false)
+# Stability: the 57M xl decoder diverged at ep7 on the 1M set at the old LR; this 2.4x
+# larger model keeps the xl's tighter regime (warmup 0.05, grad_clip 0.5) and drops the
+# LR further to 1.5e-4. Batch 256 (the slurm launcher's 512 is overridden at submit).
+run:
+  name: spingraph_xxl_026_3M
+  output_dir: model/runs
+
+data:
+  records: data/pubchem/spin_systems_pubchem.json.gz
+  parts: data/pubchem/spectra_parts/90MHz
+  field: 90
+  split: none
+  max_mol: 0                                     # override with --set data.max_mol=<N>
+  preload: false           # full 3.2M is ~196GB RAM-resident — stream from mmap'd shards
+
+model:
+  name: spingraph_decoder
+  size: xl                  # CNN-encoder preset (SIZE_PRESETS); transformer is scaled via dim/enc/dec below
+  dim: 768
+  enc_layers: 6
+  dec_layers: 8
+  n_heads: 8
+  dropout: 0.1
+  use_peak_channel: true        # Idea 1
+  use_soft_equiv: true          # Idea 2 — expose soft_equiv_logits for the loss + decode
+
+loss:
+  name: composite
+  terms:
+    - name: matrix
+      weight: 1.0
+      weights:
+        shift: 2.0
+        jmag: 1.0
+        presence: 0.5
+        deg: 0.5
+    - name: soft_equiv          # Idea 2
+      weight: 0.5
+      tol_ppm: 0.03
+      consistency_weight: 1.0
+
+training:
+  epochs: 60
+  batch_size: 256
+  lr: 0.00015               # lower than the xl's 2e-4: a 2.4x larger decoder is more divergence-prone
+  weight_decay: 0.01
+  amp: bf16
+  warmup_frac: 0.05         # match the xl: settle the transformer decoder before peak LR
+  lr_stable_frac: 0.50
+  lr_min_factor: 0.30
+  grad_clip: 0.5            # match the xl: clamp the gradient spike that blew up ep7 at 57M
+  patience: 8
+  num_workers: 2
+  val_every: 1
+  seed: 0
+
+diagnostics:
+  enabled: true
+  log_every_steps: 200
+  probe_every_epochs: 2
+  probe_count: 16
