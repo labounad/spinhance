@@ -121,54 +121,67 @@
     }).catch(e => { host.innerHTML = "<p class='muted'>learning curves unavailable</p>"; console.error(e); });
   }
 
-  // ====================== 2. COMPARISON TABLE ==============================
-  // Held-out (leakage-controlled global 10% PubChem) metrics on the corrected-data
-  // REBUILD fleet — the 10M -> 57M -> 137M data×capacity sweep. All three are training
-  // now; metrics ("—") fill in from gen_viewer_data.py once their checkpoints land.
-  const RUNS = [
-    { m: "CNN baseline", arch: "ResNet-1D + typed heads", data: "ChEMBL",       p: "5.0M", shift: "—", j: "—", f1: "—", deg: "—", st: "floor" },
-    { m: "64k · 026",    arch: "spingraph_decoder · medium", data: "64k PubChem",  p: "10M",  shift: "0.048", j: "1.40", f1: "0.907", deg: "0.943", st: "trained" },
-    { m: "500k · xl",    arch: "spingraph_decoder · xl",     data: "500k PubChem", p: "57M",  shift: "—", j: "—", f1: "—", deg: "—", st: "running" },
-    { m: "3M · xxl",     arch: "spingraph_decoder · xxl",    data: "3M PubChem",   p: "137M", shift: "—", j: "—", f1: "—", deg: "—", st: "running" },
-  ];
+  // ====================== 2. COMPARISON TABLE (validation) =================
+  // Data-driven from data/test_eval.json (the corrected-data fleet). Validation metrics;
+  // auto-fills as tiers finish (running tiers show "—"). The held-out TEST view is below.
+  const RECIPE_DESC = { "025": "matrix (shift 2×)", "026": "+ peak-channel + soft-equiv",
+    "027": "+ focal loss", "028": "+ cum-integral channel", "029": "026 + focal" };
+  const FLEET_ORDER = ["64k_025", "64k_026", "64k_027", "64k_028", "64k_029", "500k_026", "3M_026"];
   function initTable() {
     const host = $("#cmpTable"); if (!host) return;
-    const cols = [["m", "model"], ["arch", "architecture / recipe"], ["data", "data"], ["p", "params"],
-      ["shift", "shift↓"], ["j", "J↓"], ["f1", "F1↑"], ["deg", "deg↑"], ["st", "status"]];
-    let sortK = null, asc = true;
-    const numK = new Set(["shift", "j", "f1", "deg"]);
-    const lowerBetter = new Set(["shift", "j"]);   // others (f1, deg) higher = better
-    // best value per metric column (across all rows) -> highlighted bold + gradient
-    const best = {};
-    numK.forEach(k => {
-      const vals = RUNS.map(r => parseFloat(r[k])).filter(v => !isNaN(v));
-      if (vals.length) best[k] = (lowerBetter.has(k) ? Math.min : Math.max).apply(null, vals);
-    });
-    function render() {
-      let rows = RUNS.slice();
-      if (sortK) rows.sort((a, b) => {
-        let x = a[sortK], y = b[sortK];
-        if (numK.has(sortK)) { x = parseFloat(x) || 1e9; y = parseFloat(y) || 1e9; }
-        return (x < y ? -1 : x > y ? 1 : 0) * (asc ? 1 : -1);
+    fetch("data/test_eval.json").then(r => r.json()).then(d => {
+      const fmt = (v, n) => (v == null ? "—" : (+v).toFixed(n));
+      const RUNS = [{ m: "CNN baseline", arch: "ResNet-1D + typed heads", data: "ChEMBL", p: "5.0M",
+                      shift: "—", j: "—", f1: "—", deg: "—", st: "floor" }];
+      FLEET_ORDER.forEach(k => { const e = d[k]; if (!e) return;
+        const fin = e.state === "finished" && e.val;
+        RUNS.push({ m: e.tier + " · " + e.recipe,
+          arch: "spingraph_decoder · " + (RECIPE_DESC[e.recipe] || e.recipe),
+          data: e.tier + " PubChem", p: e.params,
+          shift: fin ? fmt(e.val.shift_mae_ppm, 3) : "—", j: fin ? fmt(e.val.j_mae_hz, 2) : "—",
+          f1: fin ? fmt(e.val.presence_f1, 3) : "—", deg: fin ? fmt(e.val.deg_acc_balanced, 3) : "—",
+          st: fin ? "trained" : "running" }); });
+      const cols = [["m", "model"], ["arch", "architecture / recipe"], ["data", "data"], ["p", "params"],
+        ["shift", "shift↓"], ["j", "J↓"], ["f1", "F1↑"], ["deg", "deg↑"], ["st", "status"]];
+      let sortK = null, asc = true;
+      const numK = new Set(["shift", "j", "f1", "deg"]);
+      const lowerBetter = new Set(["shift", "j"]);   // others (f1, deg) higher = better
+      const best = {};
+      numK.forEach(k => {
+        const vals = RUNS.map(r => parseFloat(r[k])).filter(v => !isNaN(v));
+        if (vals.length) best[k] = (lowerBetter.has(k) ? Math.min : Math.max).apply(null, vals);
       });
-      host.innerHTML = `<table class="cmp"><thead><tr>${cols.map(c =>
-        `<th data-k="${c[0]}"${c[0] === sortK ? ` class="srt ${asc ? 'a' : 'd'}"` : ''}>${c[1]}</th>`).join("")}</tr></thead><tbody>${
-        rows.map(r => `<tr class="st-${r.st}">${cols.map(c => {
-          const isBest = numK.has(c[0]) && parseFloat(r[c[0]]) === best[c[0]];
-          return `<td${numK.has(c[0]) ? ` class="num${isBest ? ' best' : ''}"` : ''}>${r[c[0]]}</td>`;
-        }).join("")}</tr>`).join("")}</tbody></table>`;
-      host.querySelectorAll("th").forEach(th => th.onclick = () => {
-        const k = th.dataset.k; if (sortK === k) asc = !asc; else { sortK = k; asc = !numK.has(k); } render();
-      });
-    }
-    render();
+      function render() {
+        let rows = RUNS.slice();
+        if (sortK) rows.sort((a, b) => {
+          let x = a[sortK], y = b[sortK];
+          if (numK.has(sortK)) { x = parseFloat(x) || 1e9; y = parseFloat(y) || 1e9; }
+          return (x < y ? -1 : x > y ? 1 : 0) * (asc ? 1 : -1);
+        });
+        host.innerHTML = `<table class="cmp"><thead><tr>${cols.map(c =>
+          `<th data-k="${c[0]}"${c[0] === sortK ? ` class="srt ${asc ? 'a' : 'd'}"` : ''}>${c[1]}</th>`).join("")}</tr></thead><tbody>${
+          rows.map(r => `<tr class="st-${r.st}">${cols.map(c => {
+            const isBest = numK.has(c[0]) && parseFloat(r[c[0]]) === best[c[0]];
+            return `<td${numK.has(c[0]) ? ` class="num${isBest ? ' best' : ''}"` : ''}>${r[c[0]]}</td>`;
+          }).join("")}</tr>`).join("")}</tbody></table>`;
+        host.querySelectorAll("th").forEach(th => th.onclick = () => {
+          const k = th.dataset.k; if (sortK === k) asc = !asc; else { sortK = k; asc = !numK.has(k); } render();
+        });
+      }
+      render();
+    }).catch(e => { host.innerHTML = "<p class='muted'>comparison unavailable</p>"; console.error(e); });
   }
 
   // ====================== 3. TEST-MOLECULE EXPLORER ========================
   function initExplorer() {
     const host = $("#txViewer"); if (!host) return;
     fetch("data/test_explorer.json").then(r => r.json()).then(data => {
-      const ppm = data.ppm, mols = data.molecules; let idx = 0;
+      const mols = data.molecules; let idx = 0;
+      // per-molecule ppm axis: each molecule stores its own [x0,x1] window (higher resolution
+      // than a shared 0-12 axis). ppmOf(m) reconstructs the axis from the window + sample count.
+      const winOf = (m) => [m.x0 != null ? m.x0 : 0, m.x1 != null ? m.x1 : 12];
+      const ppmOf = (m) => { const [a, b] = winOf(m), n = m.input.length;
+        return m.input.map((_, i) => a + i * (b - a) / (n - 1)); };
       if (!mols || !mols.length) {          // held-out explorer not generated yet (tier still training)
         host.innerHTML = '<p class="muted">' + (data.note ||
           "The held-out test-molecule explorer is generated once a tier finishes training — coming shortly.") + '</p>';
@@ -215,13 +228,13 @@
       let xr0 = 0, xr1 = 12, yZoom = 1;
       const PADL = 16, PADR = 14, PADT = 12, PADB = 30;   // mirror linePlot's noY paddings
       function drawSpec() {
-        const m = mols[idx], P = predOf(m), c = C();
+        const m = mols[idx], P = predOf(m), c = C(), px = ppmOf(m);
         // target-spectrum colour encodes test membership: teal = held-out test for this model, amber = out-of-distribution
         const tgt = inTest(m) ? (css("--accent-2") || "#34e3c4") : "#f5a623";
         const dmax = Math.max(1e-6, ...m.input, ...P.rendered);   // full-scale peak; yZoom shrinks the window -> taller peaks
         linePlot(spec, [
-          { color: tgt, width: 1.8, pts: m.input.map((v, i) => [ppm[i], v]) },
-          { color: c.accent, width: 2, pts: P.rendered.map((v, i) => [ppm[i], v]) },
+          { color: tgt, width: 1.8, pts: m.input.map((v, i) => [px[i], v]) },
+          { color: c.accent, width: 2, pts: P.rendered.map((v, i) => [px[i], v]) },
         ], { xlabel: "ppm", x0: xr0, x1: xr1, y0: 0, y1: dmax / yZoom, invertX: true, noY: true,
              xdp: (xr1 - xr0) < 6 ? 1 : 0 });
       }
@@ -235,7 +248,8 @@
       };
       spec.addEventListener("wheel", (e) => {                                // scroll -> stretch the intensity axis
         e.preventDefault();
-        yZoom = Math.max(1, Math.min(60, yZoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15)));
+        // gentle, proportional to scroll delta (handles wheel notches + trackpads); was too sensitive
+        yZoom = Math.max(1, Math.min(60, yZoom * Math.exp(-e.deltaY * 0.0006)));
         drawSpec();
       }, { passive: false });
       let dragX0 = null;
@@ -260,7 +274,7 @@
       };
       spec.addEventListener("mouseup", endDrag);
       spec.addEventListener("mouseleave", endDrag);
-      spec.addEventListener("dblclick", () => { xr0 = 0; xr1 = 12; yZoom = 1; drawSpec(); });
+      spec.addEventListener("dblclick", () => { [xr0, xr1] = winOf(mols[idx]); yZoom = 1; drawSpec(); });
       spec.style.cursor = "ew-resize";
       { const lg = $(".tx-legend", host);
         if (lg) lg.insertAdjacentHTML("beforeend",
@@ -288,6 +302,7 @@
       }
       function show() {
         const m = mols[idx], P = predOf(m); sel.value = idx;
+        [xr0, xr1] = winOf(m); yZoom = 1;          // reset zoom to this molecule's window on navigation
         if (statusEl) {
           statusEl.className = "tx-status is-test";
           statusEl.innerHTML = `● held-out test molecule — no model trained on it · predictions from <b>${labelOf(mkey)}</b>`;
@@ -555,32 +570,60 @@
       });
   }
 
-  // ====================== 5. HELD-OUT TEST EVAL (val vs test) ==============
+  // ============= 5. HELD-OUT TEST EVAL (toggle: by recipe / by size) =======
+  // Held-out TEST metrics on the leakage-controlled split, two comparison axes:
+  //   · by recipe (64k):  025 / 026 / 027 / 028 / 029  (fixed size, vary architecture)
+  //   · by model size (026): 64k(10M) / 500k(57M) / 3M(137M)  (fixed recipe, vary scale)
   function initTestEval() {
     const host = $("#testEval"); if (!host) return;
     fetch("data/test_eval.json").then(r => r.json()).then(d => {
-      const models = Object.keys(d).filter(k => k !== "_meta");
-      if (!models.length) {                 // held-out eval not computed yet (tier still training)
-        const meta = d._meta || {};
+      const meta = d._meta || {};
+      const done = (k) => d[k] && d[k].state === "finished" && d[k].test;
+      if (!Object.keys(d).some(k => k !== "_meta" && done(k))) {     // nothing finished yet
         host.innerHTML = '<p class="muted" style="font-size:13px">' +
-          (meta.note || "Held-out test evaluation is computed once a tier finishes training.") + '</p>';
+          (meta.note || "Held-out test evaluation is computed once a model finishes training.") + '</p>';
         return;
       }
-      const rows = [["shift_mae_ppm", "shift MAE (ppm) ↓"], ["j_mae_hz", "J MAE (Hz) ↓"],
-        ["presence_f1", "presence F1 ↑"], ["deg_acc_balanced", "deg balanced-acc ↑"]];
-      let h = '<table class="cmp"><thead><tr><th>metric</th>';
-      models.forEach(m => { h += '<th class="num">' + m + ' val</th><th class="num">' + m + ' test</th>'; });
-      h += '</tr></thead><tbody>';
-      rows.forEach(function (rk) {
-        h += '<tr><td>' + rk[1] + '</td>';
-        models.forEach(m => { h += '<td class="num">' + d[m].val[rk[0]] + '</td><td class="num tval">' + d[m].test[rk[0]] + '</td>'; });
-        h += '</tr>';
-      });
-      h += '</tbody></table>';
-      const meta = d._meta || {};
-      host.innerHTML = h + '<p class="muted" style="font-size:12px;margin-top:8px">' +
-        (meta.note || "") + ' Test eval: ' + (meta.test_n_eval || "?") + ' of ' + (meta.test_n_total || "?") +
-        ' held-out molecules. <b>Test ≈ validation → no overfitting.</b></p>';
+      const VIEWS = {
+        recipe: { btn: "by recipe (64k)", blurb: "fixed size (64k · 10M) · varying recipe",
+                  keys: ["64k_025", "64k_026", "64k_027", "64k_028", "64k_029"], col: e => e.recipe },
+        size:   { btn: "by model size (026)", blurb: "fixed recipe (026) · varying capacity",
+                  keys: ["64k_026", "500k_026", "3M_026"], col: e => e.params + " · " + e.tier },
+      };
+      const rows = [["shift_mae_ppm", "shift MAE (ppm) ↓", true], ["j_mae_hz", "J MAE (Hz) ↓", true],
+        ["presence_f1", "presence F1 ↑", false], ["deg_acc_balanced", "deg balanced-acc ↑", false]];
+      let view = "recipe";   // default to the fully-finished 64k architecture sweep
+      host.innerHTML =
+        '<style>.te-toggle button{padding:4px 11px;border-radius:7px;border:1px solid var(--line-strong);' +
+        'background:var(--panel);color:var(--ink-soft);font:600 12px/1.2 inherit;cursor:pointer}' +
+        '.te-toggle button.on{border-color:var(--accent);color:var(--ink)}</style>' +
+        '<div class="te-toggle" style="display:flex;gap:6px;margin-bottom:12px"></div><div class="te-body"></div>';
+      const bar = $(".te-toggle", host), body = $(".te-body", host);
+      function render() {
+        const V = VIEWS[view], cols = V.keys.filter(k => d[k]);     // fleet members present in the data
+        let h = '<table class="cmp"><thead><tr><th>metric</th>';
+        cols.forEach(k => { const e = d[k], tr = e.state !== "finished";
+          h += '<th class="num">' + V.col(e) +
+            (tr ? ' <span style="color:var(--ink-faint);font-weight:400">· training</span>' : '') + '</th>'; });
+        h += '</tr></thead><tbody>';
+        rows.forEach(([mk, lbl, lower]) => {
+          const vals = cols.map(k => done(k) ? d[k].test[mk] : null);
+          const fin = vals.filter(v => v != null);
+          const best = fin.length ? (lower ? Math.min : Math.max).apply(null, fin) : null;
+          h += '<tr><td>' + lbl + '</td>' + vals.map(v =>
+            '<td class="num' + (v != null && v === best ? ' best' : '') + '">' +
+            (v == null ? '—' : (+v).toFixed(4)) + '</td>').join("") + '</tr>';
+        });
+        h += '</tbody></table>';
+        body.innerHTML = h + '<p class="muted" style="font-size:12px;margin-top:8px">' + V.blurb +
+          '. ' + (meta.note || "") + ' Test eval: ' + (meta.test_n_eval || "?") + ' of ' +
+          (meta.test_n_total || "?") + ' held-out molecules. <b>Test ≈ validation → no overfitting.</b></p>';
+        bar.querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.v === view));
+      }
+      bar.innerHTML = Object.keys(VIEWS).map(v =>
+        '<button data-v="' + v + '"' + (v === view ? ' class="on"' : '') + '>' + VIEWS[v].btn + '</button>').join("");
+      bar.querySelectorAll("button").forEach(b => b.onclick = () => { view = b.dataset.v; render(); });
+      render();
     }).catch(e => { host.innerHTML = "<p class='muted'>test eval unavailable</p>"; console.error(e); });
   }
 

@@ -32,12 +32,21 @@ TEST = REB + "/records_3M_test.json.gz"
 PARTS = REB + "/parts"
 OUT = sys.argv[1] if len(sys.argv) > 1 else "docs/data/test_explorer.json"
 N = int(sys.argv[2]) if len(sys.argv) > 2 else 80
-DS, G, P = 16, 8, 16384
+G, P = 8, 16384
 
 
 def best_ckpt(name):
-    g = sorted(glob.glob(f"{RUNS}/*_{name}_*/checkpoints/best.pt"))
-    return g[-1] if g else None
+    # newest FINISHED run for this tier (skip still-training runs so the explorer never
+    # shows undertrained predictions, e.g. a 500k at epoch 3).
+    for d in sorted(glob.glob(f"{RUNS}/*_{name}_*"), reverse=True):
+        p = os.path.join(d, "checkpoints", "best.pt")
+        try:
+            st = json.load(open(os.path.join(d, "status.json"))).get("state")
+        except Exception:
+            st = None
+        if st in ("finished", "completed") and os.path.exists(p):
+            return p
+    return None
 
 # The corrected-data REBUILD fleet (one run per tier) + the CNN baseline. Each model
 # is included only once its best.pt exists, so this is turnkey: re-run as checkpoints
@@ -69,9 +78,34 @@ for k, p in MODELS.items():
     loaded[k] = (m, std); print(" loaded", k, flush=True)
 
 
-def dsamp(y):
-    n = (len(y) // DS) * DS
-    return y[:n].reshape(-1, DS).max(1)
+PPM_MAX = 12.0
+MARGIN = 0.4        # ppm padding on each side of the active region
+MIN_WIN = 1.5       # don't over-zoom narrow spectra
+N_OUT = 1024        # output points across the (smaller) window -> higher effective resolution
+
+
+def active_window(shifts):
+    """[lo, hi] ppm window covering the spin groups (+margin), like the hero zoom."""
+    lo = max(0.0, float(np.min(shifts)) - MARGIN)
+    hi = min(PPM_MAX, float(np.max(shifts)) + MARGIN)
+    if hi - lo < MIN_WIN:                       # widen tight windows, keep centred + clamped
+        c = (lo + hi) / 2.0
+        lo = max(0.0, c - MIN_WIN / 2.0); hi = min(PPM_MAX, lo + MIN_WIN)
+        lo = max(0.0, hi - MIN_WIN)
+    return lo, hi
+
+
+def window_pool(y, lo, hi):
+    """Crop a full 0-PPM_MAX spectrum to [lo, hi] and max-pool to ~N_OUT points.
+    Sampling stays bounded (<=~2*N_OUT) but the window is smaller -> finer ppm resolution."""
+    i0 = max(0, int(round(lo / PPM_MAX * P)))
+    i1 = min(P, int(round(hi / PPM_MAX * P)))
+    seg = y[i0:i1]
+    if seg.size == 0:
+        return np.zeros(1, np.float32)
+    k = max(1, seg.size // N_OUT)
+    m = (seg.size // k) * k
+    return seg[:m].reshape(-1, k).max(1)
 
 
 def xyz_of(smi):
@@ -104,6 +138,7 @@ iu = np.triu_indices(G, 1)
 
 def emit(rid, smi, sh, cp, dg, spec):
     sc = float(spec.max()) or 1.0
+    lo, hi = active_window(sh)                  # zoom to the molecule's actual peaks (+margin)
     to = np.argsort(-sh); tsh, tdg = sh[to], dg[to]; tJ = cp[np.ix_(to, to)]
     preds = {}
     for k, (m, std) in loaded.items():
@@ -116,11 +151,12 @@ def emit(rid, smi, sh, cp, dg, spec):
         mm = np.abs(tJ[iu]) > 0.5
         preds[k] = {"pred_shift": [round(float(x), 3) for x in psh2], "pred_deg": [int(x) for x in pdg2],
                     "pred_J": [[round(float(pJ[i, j]), 2) for j in range(G)] for i in range(G)],
-                    "rendered": [round(float(v / sc), 4) for v in dsamp(rspec)],
+                    "rendered": [round(float(v / sc), 4) for v in window_pool(rspec, lo, hi)],
                     "shift_mae": round(float(np.mean(np.abs(tsh - psh2))), 4),
                     "j_mae": round(float(np.mean(np.abs(tJ[iu][mm] - pJ[iu][mm]))) if mm.any() else 0.0, 3)}
     return {"id": rid, "smiles": smi or "", "n_spins": int(np.sum(dg)), "src": "pubchem",
-            "input": [round(float(v / sc), 4) for v in dsamp(spec)],
+            "x0": round(lo, 3), "x1": round(hi, 3),
+            "input": [round(float(v / sc), 4) for v in window_pool(spec, lo, hi)],
             "true_shift": [round(float(x), 3) for x in tsh], "true_deg": [int(x) for x in tdg],
             "true_J": [[round(float(tJ[i, j]), 2) for j in range(G)] for i in range(G)],
             "xyz": xyz_of(smi), "preds": preds}
@@ -137,7 +173,8 @@ for r in recs:
     if len(mols) % 20 == 0:
         print(" ", len(mols), "/", len(recs), flush=True)
 
-out = {"ppm": [round(float(x), 3) for x in np.linspace(0, 12, P // DS)],
-       "models": [{"key": k, "label": l} for k, l in MODEL_LABELS], "molecules": mols}
+# Each molecule carries its own [x0, x1] ppm window; the viewer derives a per-molecule
+# ppm axis from it (no shared global axis), so spectra are stored at the window's resolution.
+out = {"models": [{"key": k, "label": l} for k, l in MODEL_LABELS], "molecules": mols}
 json.dump(out, open(OUT, "w"), separators=(",", ":"))
 print("WROTE", OUT, round(os.path.getsize(OUT) / 1024, 1), "KB |", len(mols), "mols", flush=True)
