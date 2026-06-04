@@ -215,6 +215,28 @@ OOMs a 16 GB box (fine at 64k) — use `num_workers≤2` or a big-RAM node; the 
 3.2M needs ≥32 GB RAM. The 90 MHz-only input constraint still holds (600 MHz shards
 exist for comparison but are never a model input).
 
+### 12. Test-time spectral refinement (analysis-by-synthesis) — **decode-time, input-only** ✅ implemented
+The inverse map (90 MHz → spin system) is under-determined, but the *forward* map is exact and
+differentiable. So after the network predicts a spin system, we **polish only the chemical shifts**
+by gradient descent through the exact differentiable simulator to better match the molecule's own
+**input 90 MHz spectrum** — couplings and degeneracy stay fixed (the network identifies the discrete
+structure well; the residual error is mostly small shift offsets). This is the Family-M idea
+(`docs/IDEAS.md`) made concrete: `model/inference/refine.py` (`refine_shifts`), eval harness
+`model/experiments/refine_eval.py`.
+
+- **Why it's "legal":** it is a *decode-time* step — no retraining, and it consumes only the
+  90 MHz input we are already given (no 600 MHz, no labels). It honours the 90 MHz-only constraint.
+- **Objective:** Wasserstein-1 + (1−cosine) of the rendered-vs-input spectrum (the same self-
+  consistency signal as the Stage-2 spectral loss, Decision 6).
+- **Identifiability guard (Decision 6's caution applies):** a **trust region** (hard ppm box
+  around the prediction) + a soft L2 pull toward the prediction keep refinement inside the correct
+  basin so it can't drift to a spectrum-equivalent but chemically wrong solution. It is
+  **non-regressing** — reverts to the prediction if it fails to lower the spectral loss.
+- **Hardening:** early-stop on a loss plateau, a per-molecule wall-clock budget, and an
+  **eigh-cost guard** that skips dense/high-symmetry systems too expensive to polish cheaply.
+- **Result:** shift-MAE on the refined molecules improves **+43%** (64k·029: 0.0517→0.0295 ppm)
+  and **+77%** (500k·025: 0.0247→0.0056 ppm); sanity cos(true, target) = 1.0000. See `RESULTS.md`.
+
 ## Implementation status & file map
 
 Build order from DESIGN; ✅ = built, 🔬 = numeric core verified in numpy here,
@@ -223,6 +245,7 @@ Build order from DESIGN; ✅ = built, 🔬 = numeric core verified in numpy here
 | File | Role | Status |
 |---|---|---|
 | `model/renderers/` (`exact`, `surrogate`) | torch renderers + `RegularizedEigh`, registry-selected | ✅ (see `model/tests/test_renderers.py`) |
+| `model/inference/refine.py` | test-time shift refinement (analysis-by-synthesis, Dec 12) | ✅ (`model/experiments/refine_eval.py`) |
 | `splits.py` / `test_splits.py` | scaffold split + matrix dedup (Dec 8) | ✅ 🔬 (zero leakage, ratios ~0.69/0.21/0.10) |
 | `targets.py` / `test_targets.py` | target encode/standardize/augment (Dec 3,4) | ✅ 🔬 |
 | `dataset.py` | torch Dataset + bucketed sampler (Dec 7) | ✅ ⏳ (`-m model.dataset` smoke) |
