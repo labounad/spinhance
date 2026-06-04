@@ -57,6 +57,7 @@ FLEET = [("64k_025", "rebuild_64k_025",     "64k · 025 (matrix)"),
          ("64k_028", "rebuild_64k_028",     "64k · 028 (cum-integral)"),
          ("64k_029", "rebuild_64k_029",     "64k · 029 (026+focal)"),
          ("64k_030", "rebuild_64k_030",     "64k · 030 (super)"),
+         ("500k_025", "rebuild_500k_xl_025", "500k · 025 (57M, best)"),
          ("500k",    "rebuild_500k_xl_026", "500k · 026 (57M)"),
          ("3M",      "rebuild_3M_xxl_026",  "3M · 026 (137M)")]
 MODELS, MODEL_LABELS = {}, []
