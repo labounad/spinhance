@@ -102,7 +102,7 @@ MIN_WIN = 1.5       # don't over-zoom narrow spectra
 # to its endpoints; points cluster around peaks where the curve actually bends. Each
 # spectrum carries its own mesh (x, y), so the plotter just interpolates between them.
 PPM_FULL = np.linspace(0.0, PPM_MAX, P)          # full-res ppm grid (0..12), the sample source
-EPS = 0.004                                      # max linear-interp error, fraction of input peak
+EPS = 0.002                                      # max linear-interp error, fraction of input peak
 SNAP = 7.5e-4                                    # values below this (normalized) snap to 0 (cheap baseline)
 
 
