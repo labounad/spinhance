@@ -1,5 +1,12 @@
 # SpinHance Model Results
 
+> ⚠️ **The results below predate the Audit-2 regeneration.** They were trained on the
+> first-pass data (64k ChEMBL / early 500k–1M PubChem) before the spin-equivalence fix.
+> The **current** corrected-data fleet is the 026 recipe at three sizes (10M/57M/137M) +
+> 64k ablations 025/027/028/029; the finished **64k·026** scores held-out **test 0.0452 ppm /
+> 1.38 Hz / F1 0.909 / deg 0.950**. Live numbers are on the website (Explore the Models) and
+> tracked in [PIPELINE_AUDIT_2.md](../PIPELINE_AUDIT_2.md). Treat the table below as history.
+
 ## Training history (2026-06-01) — presentation summary
 
 Metrics throughout are **`shift_mae_ppm / j_mae_hz / presence_f1 / deg_balanced_acc`**

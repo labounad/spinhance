@@ -1,9 +1,14 @@
 # mol_to_spin_system — setup
 
-Chemical-shift prediction (`shifts.py`) shells out to the standalone
+> ⚠️ **The production shift engine is now `shifts_pretsch.py`** — a pure-Python Pretsch
+> additive model, **no Java/NMRShiftDB required** (the whole HPC rebuild runs predictor-free).
+> The Java setup below is for the **legacy** `shifts.py` HOSE path only — optional/historical.
+
+Chemical-shift prediction's legacy path (`shifts.py`) shells out to the standalone
 **NMRShiftDB2 predictor JARs** (Java + CDK), which are **not** part of this repo.
-Follow these steps once after cloning. Coupling/grouping code needs only RDKit,
-so you can skip this if you only run those.
+Follow these steps once after cloning *only if you need the old HOSE predictor*.
+Coupling/grouping code needs only RDKit, and production Pretsch shifts need only Python,
+so most workflows skip this.
 
 ## 1. Prerequisites
 
