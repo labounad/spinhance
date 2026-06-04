@@ -32,7 +32,7 @@ from model.training.seed import seed_everything
 
 
 # Coarse next-experiment hints keyed by the dominant failure tag (mirrors
-# autoai/run_reader); surfaced in summary.json for the dashboard + AutoAI.
+# model/diagnostics/run_reader); surfaced in summary.json for the dashboard.
 _FAILURE_HINTS = {
     "large_shift_error": "Increase shift loss weight or use the Hungarian graph loss",
     "false_negative_couplings": "Increase presence_pos_weight",

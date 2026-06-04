@@ -21,7 +21,7 @@ N_PAIRS = N_GROUPS * (N_GROUPS - 1) // 2   # 28 for G=8
 # future optimization).
 DEFAULT_DEG_VOCAB = (1, 2, 3, 4, 6, 9, 12, 18)
 
-# Canonical run-directory artifact names (the diagnostics contract). AutoAI and
+# Canonical run-directory artifact names (the diagnostics contract). Monitoring agents and
 # the dashboard read these names; do not rename without updating both.
 RUN_CONFIG = "config.json"
 RUN_STATUS = "status.json"

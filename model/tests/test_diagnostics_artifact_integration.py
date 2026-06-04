@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from autoai.run_reader import (
+from model.diagnostics.run_reader import (
     analyze_artifact_paths,
     infer_run_dir_from_artifacts,
     latest_probe_epoch,
@@ -113,7 +113,7 @@ def test_analyze_artifact_paths_reads_canonical_diagnostics(tmp_path):
 
 def test_analyze_artifact_paths_reports_missing_diagnostics(tmp_path):
     analysis = analyze_artifact_paths(
-        {"metrics": "autoai/runs/run_001/metrics.json"},
+        {"metrics": "model/runs/run_001/metrics.json"},
         repo_root=tmp_path,
     )
     assert analysis["available"] is False

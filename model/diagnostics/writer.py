@@ -3,7 +3,7 @@ model.diagnostics
 ==================
 Structured run-artifact writer. Produces append-only JSONL metrics, atomic
 JSON status, and a final summary.json — consumed by the live dashboard,
-autoai/run_reader.py, and any external monitoring tool.
+model/diagnostics/run_reader.py, and any external monitoring tool.
 
 Supports both local-filesystem runs (run_dir is a local path) and S3-backed
 runs (run_dir is an ``s3://`` URI).  The backend is selected automatically

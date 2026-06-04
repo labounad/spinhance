@@ -2,7 +2,7 @@
 model.evaluation.failure_analysis
 =================================
 Per-sample validation evaluation + worst-case failure tables (ported, adapted to
-the typed contract). Saved alongside probe artifacts so the dashboard and AutoAI
+the typed contract). Saved alongside probe artifacts so the dashboard and monitoring agents
 can diagnose WHY a run underperforms, not just HOW MUCH. Filesystem-only.
 """
 from __future__ import annotations

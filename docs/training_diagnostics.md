@@ -1,6 +1,6 @@
 # SpinHance Training Diagnostics
 
-SpinHance model training writes a durable, S3-backed diagnostics bundle for every run. This bundle is the canonical interface between human debugging, the Streamlit live dashboard, probe/failure analysis, and AutoAI experiment selection.
+SpinHance model training writes a durable, S3-backed diagnostics bundle for every run. This bundle is the canonical interface between human debugging, the Streamlit live dashboard, probe/failure analysis, and monitoring agents experiment selection.
 
 The source of truth is the S3 session, not stdout, screenshots, or prose summaries.
 
@@ -174,7 +174,7 @@ Example row:
 }
 ~~~
 
-AutoAI should read this file directly rather than scraping stdout.
+monitoring agents should read this file directly rather than scraping stdout.
 
 ### `events.jsonl`
 
@@ -213,7 +213,7 @@ Important files:
 - `worst_deg_cases.json`
 - `matrix_*.png`
 
-The latest probe epoch is usually the most useful for AutoAI.
+The latest probe epoch is usually the most useful for monitoring agents.
 
 ## Resetting a session
 
@@ -232,7 +232,7 @@ probes/   (entire prefix deleted from S3)
 
 Checkpoint files are **not** proactively deleted.
 
-For production AutoAI runs, prefer unique session IDs:
+For production monitoring agents runs, prefer unique session IDs:
 
 ~~~text
 session_<timestamp>_<experiment_name>_<seed>
@@ -250,7 +250,7 @@ false_negative_couplings
 bad_j_magnitude
 ~~~
 
-AutoAI should use these categories to guide the next experiment.
+monitoring agents should use these categories to guide the next experiment.
 
 | Dominant failure | Suggested next direction |
 |---|---|
@@ -260,7 +260,7 @@ AutoAI should use these categories to guide the next experiment.
 | `false_positive_couplings` | tune coupling threshold; add sparsity prior |
 | `bad_j_magnitude` | adjust J regression loss; add peak-shape features |
 
-## AutoAI contract
+## monitoring agents contract
 
 Workers that launch `model.run_experiment` should return a `WorkerResult`
 whose `artifact_paths` include:
@@ -289,7 +289,7 @@ PYTHONPATH=. pytest -q \
   model/test_checkpoint_saving.py \
   model/test_failure_analysis.py \
   model/test_train_infra.py \
-  autoai/test_run_reader.py
+  model/tests/test_run_reader.py
 ~~~
 
 All tests use local `tmp_path` fixtures and exercise the local-filesystem code

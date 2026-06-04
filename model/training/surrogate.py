@@ -7,7 +7,7 @@ with a Wasserstein-1 (+ MSE) spectral loss. Field is alternated per batch (90 /
 600 MHz) so the one field-conditioned model learns both.
 
 Writes the canonical run-dir artifact contract (config/status/metrics/events/
-summary + checkpoints) so the live dashboard + AutoAI work unchanged. Validation
+summary + checkpoints) so the live dashboard + monitoring agents work unchanged. Validation
 reports W1 / MSE / cosine vs the ground-truth spectra on held-out molecules — the
 fidelity bar the surrogate must clear before it can teach the matrix model.
 """
