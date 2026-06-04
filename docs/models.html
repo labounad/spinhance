@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Spinhance — the models, explained</title>
+<meta name="description" content="A grounded, accessible walkthrough of every Spinhance ¹H-NMR inverse model: the shared spin-graph decoder backbone, the 025–030 recipes (peak channel, soft-equivalence, focal loss, cumulative-integral), and how they scale." />
+<link rel="icon" type="image/svg+xml" href="favicon.svg" />
+<style>
+  :root{
+    --mono:"SF Mono",ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace;
+    --bg:#fafafa; --bg-soft:#f0f1f3; --panel:#ffffff; --panel-2:#f5f6f8;
+    --ink:#15171c; --ink-soft:#4a4f5a; --ink-faint:#8a909c;
+    --line:#e3e6ea; --line-strong:#cdd2da;
+    --accent:#3b6ef5; --accent-2:#22c1a5; --accent-3:#9b5cf6;
+    --shadow:0 1px 2px rgba(16,24,40,.06),0 8px 28px rgba(16,24,40,.06);
+  }
+  [data-theme="dark"]{
+    --bg:#07090d; --bg-soft:#0c0f15; --panel:#0f131b; --panel-2:#121826;
+    --ink:#eef1f6; --ink-soft:#aab2c2; --ink-faint:#6a7385;
+    --line:#1c2330; --line-strong:#2a3344;
+    --accent:#5b8cff; --accent-2:#34e3c4; --accent-3:#b07bff;
+    --shadow:0 1px 2px rgba(0,0,0,.5),0 16px 48px rgba(0,0,0,.45);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0; background:var(--bg); color:var(--ink);
+    font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; transition:background .4s ease,color .4s ease;}
+  a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+  h1,h2,h3{line-height:1.15;letter-spacing:-.02em;margin:0}
+  .mono{font-family:var(--mono)}
+
+  nav{position:sticky;top:0;z-index:50;backdrop-filter:saturate(140%) blur(12px);
+    background:color-mix(in srgb,var(--bg) 70%,transparent);
+    border-bottom:1px solid color-mix(in srgb,var(--line) 60%,transparent)}
+  .nav-in{display:flex;align-items:center;gap:18px;height:60px;max-width:1080px;margin:0 auto;padding:0 24px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:-.02em;font-size:18px;color:var(--ink)}
+  .brand:hover{text-decoration:none}
+  .brand .dot{width:18px;height:18px;border-radius:50%;
+    background:radial-gradient(circle at 35% 30%,var(--accent-2),var(--accent));
+    box-shadow:0 0 8px color-mix(in srgb,var(--accent) 70%,transparent)}
+  .nav-links{display:flex;gap:22px;margin-left:auto;align-items:center}
+  .nav-links a{color:var(--ink-soft);font-size:14px;font-weight:500}
+  .nav-links a:hover{color:var(--ink);text-decoration:none}
+  .toggle{cursor:pointer;border:1px solid var(--line-strong);background:var(--panel);
+    color:var(--ink);width:40px;height:34px;border-radius:9px;display:grid;place-items:center;transition:.2s;font-size:16px}
+  .toggle:hover{border-color:var(--accent)}
+
+  .hero{padding:64px 0 22px}
+  .kicker{font:600 12px/1 var(--mono);letter-spacing:.2em;text-transform:uppercase;color:var(--accent-2);margin-bottom:14px}
+  .hero h1{font-size:clamp(30px,5vw,46px)}
+  .grad{background:linear-gradient(90deg,var(--accent),var(--accent-3));
+    -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
+  .hero p{color:var(--ink-soft);max-width:680px;margin-top:16px;font-size:17px}
+
+  .sec{padding:26px 0 10px}
+  .sec h2{font-size:24px;margin-bottom:6px}
+  .sec .lead{color:var(--ink-faint);font-size:14px;margin-bottom:20px;max-width:720px}
+  .prose{color:var(--ink-soft);font-size:15.5px;max-width:760px}
+  .prose b{color:var(--ink)}
+
+  /* numbered backbone steps */
+  .steps{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;margin-top:8px}
+  .step{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:15px 17px;box-shadow:var(--shadow)}
+  .step .n{font:700 12px var(--mono);color:var(--accent);letter-spacing:.12em}
+  .step h3{font-size:15px;margin:6px 0 5px}
+  .step p{color:var(--ink-soft);font-size:13.5px;margin:0}
+
+  /* recipe cards */
+  .recipes{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:16px}
+  .rec{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px 20px;box-shadow:var(--shadow);position:relative}
+  .rec .tag{display:inline-block;font:700 12px var(--mono);letter-spacing:.06em;color:var(--accent-3);
+    border:1px solid color-mix(in srgb,var(--accent-3) 45%,transparent);border-radius:7px;padding:2px 9px}
+  .rec.super{border-color:color-mix(in srgb,var(--accent) 55%,var(--line))}
+  .rec.super .tag{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 55%,transparent)}
+  .rec h3{font-size:17px;margin:11px 0 7px}
+  .rec p{color:var(--ink-soft);font-size:14px;margin:0 0 9px}
+  .rec .builds{font:600 12px var(--mono);color:var(--ink-faint);margin-bottom:9px}
+  .rec ul{margin:0 0 9px;padding-left:18px;color:var(--ink-soft);font-size:13.7px}
+  .rec li{margin:4px 0}
+  .rec .res{display:block;border-top:1px solid var(--line);margin-top:11px;padding-top:9px;
+    font:12px var(--mono);color:var(--ink-faint)}
+  .rec .res b{color:var(--accent-2)}
+
+  table.tiers{width:100%;border-collapse:collapse;font:14px var(--mono);margin-top:6px}
+  table.tiers th,table.tiers td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line)}
+  table.tiers th{color:var(--ink-soft);font-weight:700;border-bottom:2px solid var(--line-strong)}
+  table.tiers td{color:var(--ink-soft)} table.tiers b{color:var(--ink)}
+
+  .cta{margin:30px 0 10px}
+  .grad-link{font-weight:600;background:linear-gradient(90deg,var(--accent),var(--accent-3));
+    -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
+  .grad-link:hover{text-decoration:underline}
+
+  footer{padding:30px 0 60px;border-top:1px solid var(--line);margin-top:40px}
+  .foot-note{color:var(--ink-faint);font-size:13px}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-in">
+    <a class="brand" href="index.html"><span class="dot"></span>Spinhance</a>
+    <div class="nav-links">
+      <a href="index.html">← Back to site</a>
+      <a href="index.html#explore">Explore the models</a>
+      <a href="dataset.html">Dataset</a>
+      <button class="toggle" id="themeBtn" title="Toggle light / dark" aria-label="Toggle theme">☀️</button>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="kicker">The models</div>
+    <h1>How each model <span class="grad">works.</span></h1>
+    <p>Every Spinhance model solves the same inverse problem — read a blurry 90&nbsp;MHz ¹H spectrum and
+       recover the molecule's spin system: each proton group's chemical shift (δ), its scalar couplings (J),
+       and how many equivalent protons it holds. They all share one neural-network <b>backbone</b> and differ
+       only in two things: what extra hints we feed in, and how we shape the training loss. This page explains
+       each, plainly.</p>
+  </div>
+</header>
+
+<!-- ============ BACKBONE ============ -->
+<section class="sec">
+  <div class="wrap">
+    <h2>The shared backbone — the spin-graph decoder</h2>
+    <div class="lead">Every recipe below is the same network. The output isn't a picture or a number — it's a
+      small graph (8 proton-group nodes + the couplings between them), so the network is built to emit exactly that.</div>
+    <div class="steps">
+      <div class="step"><div class="n">1 · READ</div><h3>Convolutional stem</h3>
+        <p>A 1-D CNN scans the 16,384-point spectrum and turns local stretches of it into features — the rough "shapes" present at each chemical shift.</p></div>
+      <div class="step"><div class="n">2 · RELATE</div><h3>Transformer encoder</h3>
+        <p>Self-attention lets every part of the spectrum inform every other part, so a multiplet at 7&nbsp;ppm can be interpreted in light of one at 2&nbsp;ppm.</p></div>
+      <div class="step"><div class="n">3 · ASK</div><h3>Eight group queries</h3>
+        <p>Eight learned "spin-group" queries — one per proton group — attend back into the spectrum through a Transformer decoder, each gathering the evidence for its own group.</p></div>
+      <div class="step"><div class="n">4 · ANSWER</div><h3>Node + edge heads</h3>
+        <p>Per-group heads read off the shift and degeneracy; a symmetric pair-wise edge head reads off the coupling between every pair of groups (and, in some recipes, whether two groups are equivalent).</p></div>
+    </div>
+    <p class="prose" style="margin-top:18px">This <b>set-structured</b> design fits the answer — eight unordered groups and a
+      symmetric coupling matrix — far better than a plain CNN with fixed output slots, and it's why it beats the
+      earlier CNN baseline several-fold on every metric. The recipes <b>025–030</b> all use this exact backbone.</p>
+  </div>
+</section>
+
+<!-- ============ RECIPES ============ -->
+<section class="sec">
+  <div class="wrap">
+    <h2>The recipes</h2>
+    <div class="lead">Each recipe is the backbone plus a specific, motivated change. Numbers below are held-out
+      test error at the 64k scale (lower shift/J is better; higher F1/degeneracy is better).</div>
+    <div class="recipes">
+
+      <div class="rec">
+        <span class="tag">025</span>
+        <h3>The baseline</h3>
+        <p>Predict the spin-system matrix straight from the spectrum, with the <b>chemical-shift error weighted 2×</b>
+          because shifts are the hardest and most valuable target. No extra inputs, no special handling — this is the
+          control every other recipe is measured against.</p>
+        <span class="res">64k held-out: shift <b>0.048</b> ppm · J 1.39 Hz · F1 0.908 · deg 0.938</span>
+      </div>
+
+      <div class="rec">
+        <span class="tag">026</span>
+        <h3>A peak map + equivalence</h3>
+        <div class="builds">= 025 + two architecture ideas</div>
+        <ul>
+          <li><b>Peak channel.</b> A second input channel — computed from the spectrum inside the model — that
+            highlights local maxima. A "where are the peaks?" hint, so the CNN doesn't rediscover them from scratch.</li>
+          <li><b>Soft-equivalence.</b> Groups that are equivalent by molecular symmetry (e.g. two methoxys on a
+            symmetric ring, or an AA′BB′ pair) must share one shift. The model flags such pairs, is penalized when
+            their shifts drift apart, and averages them on output — so a degenerate pair renders as <b>one clean
+            peak, not a fake split doublet</b>.</li>
+        </ul>
+        <span class="res">64k held-out: shift <b>0.045</b> ppm · J 1.38 Hz · F1 <b>0.909</b> · deg <b>0.950</b></span>
+      </div>
+
+      <div class="rec">
+        <span class="tag">027</span>
+        <h3>Focus on the hard cases</h3>
+        <div class="builds">= 025 + focal loss</div>
+        <p>The data is lopsided: most groups are common (CH, CH₃) and most group-pairs aren't coupled, so a model can
+          score well while being lazy on the rare cases. <b>Focal loss</b> down-weights the examples already predicted
+          confidently, redirecting effort toward rare degeneracies (6H, 9H <i>tert</i>-butyls) and the sparse real
+          couplings. Only the loss changes — same inputs as 025.</p>
+        <span class="res">64k held-out: shift <b>0.041</b> ppm · J <b>1.32</b> Hz · F1 0.898 · deg 0.946</span>
+      </div>
+
+      <div class="rec">
+        <span class="tag">028</span>
+        <h3>Count protons by area</h3>
+        <div class="builds">= 025 + cumulative-integral channel</div>
+        <p>A bedrock NMR fact: a peak's <b>area</b> is proportional to the number of protons — exactly the degeneracy
+          we want. But a local convolution sees peak <i>shapes</i>, not areas; it can't integrate. So we feed a second
+          input channel — the spectrum's <b>running integral</b> — letting the model read relative areas directly and
+          untangle the 2H-vs-1H confusion that shape alone can't.</p>
+        <span class="res">64k held-out: shift 0.048 ppm · J 1.39 Hz · F1 0.907 · deg 0.949</span>
+      </div>
+
+      <div class="rec">
+        <span class="tag">029</span>
+        <h3>Structure + focus</h3>
+        <div class="builds">= 026 + 027</div>
+        <p>The peak channel and soft-equivalence of <b>026</b> together with the <b>focal loss</b> of 027 — testing
+          whether sharpening the hard cases stacks on top of the structural priors. At 64k it gave the lowest shift
+          error of the five.</p>
+        <span class="res">64k held-out: shift <b>0.039</b> ppm · J 1.32 Hz · F1 0.891 · deg 0.944</span>
+      </div>
+
+      <div class="rec super">
+        <span class="tag">030 · super model</span>
+        <h3>Everything, together</h3>
+        <div class="builds">= 026 + 027 + 028</div>
+        <p>All four ideas at once: the <b>peak channel</b> and <b>soft-equivalence</b> (026), the <b>focal loss</b>
+          (027), and the <b>cumulative-integral channel</b> (028). Each targets a different weakness — peak
+          localization, symmetry, class imbalance, and proton-counting — so combining them should give the strongest
+          model. Currently training at all three sizes.</p>
+        <span class="res">64k / 500k / 3M — training now</span>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ============ SCALING ============ -->
+<section class="sec">
+  <div class="wrap">
+    <h2>Three sizes, three data scales</h2>
+    <div class="lead">Each recipe is trained at a matched model capacity and dataset size, so we can watch accuracy
+      improve as both grow — the same network, just wider and deeper, on more molecules.</div>
+    <table class="tiers">
+      <thead><tr><th>tier</th><th>model capacity</th><th>training molecules</th></tr></thead>
+      <tbody>
+        <tr><td><b>64k</b></td><td>medium · ~10M params</td><td>64,000 (fast turnaround)</td></tr>
+        <tr><td><b>500k</b></td><td>xl · ~57M params</td><td>500,000 PubChem</td></tr>
+        <tr><td><b>3M</b></td><td>xxl · ~137M params</td><td>full 3.13M PubChem</td></tr>
+      </tbody>
+    </table>
+    <p class="prose" style="margin-top:16px">Every model — every recipe at every size — is scored on the <b>same
+      leakage-controlled held-out test set</b> (a global 10% of PubChem that no model trained on), so the comparisons
+      are honest and directly readable.</p>
+    <div class="cta">
+      <a class="grad-link" href="index.html#explore">See the live numbers in Explore the Models →</a>
+    </div>
+  </div>
+</section>
+
+<footer><div class="wrap">
+  <div class="foot-note">Spinhance · the inverse model, explained. All recipes share the <span class="mono">spingraph_decoder</span> backbone; they differ in inputs and loss, and are trained at three scales on the corrected PubChem 8-spin dataset.</div>
+</div></footer>
+
+<script>
+  // theme toggle — shares the site's localStorage key
+  (function () {
+    var root = document.documentElement, btn = document.getElementById("themeBtn");
+    var saved = localStorage.getItem("spinhance-theme");
+    if (saved) root.setAttribute("data-theme", saved);
+    var sync = function () { btn.textContent = root.getAttribute("data-theme") === "dark" ? "☀️" : "🌙"; };
+    sync();
+    btn.addEventListener("click", function () {
+      var next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next); localStorage.setItem("spinhance-theme", next); sync();
+    });
+  })();
+</script>
+</body>
+</html>
