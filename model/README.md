@@ -134,7 +134,7 @@ The three swappable layers are name-registered; build by string key
   copies OOM; COW is broken by Python refcounting); full 3M needs ≥32 GB RAM.
 
 On the **Garibaldi HPC**, the training-generated data lives in the group filesystem at
-`/gpfs/group/shenvi/Users/labounader/spinsolve/` — `rebuild3M/` (the 3M PubChem dataset +
+`/gpfs/group/shenvi/Users/labounader/spinhance/` — `rebuild3M/` (the 3M PubChem dataset +
 stacked spectra parts), `rebuild500k/` (the 500k tier), `runs/` (checkpoints — `model/runs` is
 a **symlink** into here), `ckpts/` (CNN baseline), `spectra_run/` (90 MHz spectra), and
 `legacy/bundle_{500k_s0,1M_s0,600_2p16}/`. The repo checkout and conda env stay in `$HOME`.
