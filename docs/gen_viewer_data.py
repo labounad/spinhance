@@ -26,7 +26,11 @@ FLEET = [
     ("64k_027",  "rebuild_64k_027",     "64k · 027", "64k",  "027", "10M"),
     ("64k_028",  "rebuild_64k_028",     "64k · 028", "64k",  "028", "10M"),
     ("64k_029",  "rebuild_64k_029",     "64k · 029", "64k",  "029", "10M"),
+    ("500k_025", "rebuild_500k_xl_025", "500k · 025", "500k", "025", "57M"),
     ("500k_026", "rebuild_500k_xl_026", "500k · 026", "500k", "026", "57M"),
+    ("500k_027", "rebuild_500k_xl_027", "500k · 027", "500k", "027", "57M"),
+    ("500k_028", "rebuild_500k_xl_028", "500k · 028", "500k", "028", "57M"),
+    ("500k_029", "rebuild_500k_xl_029", "500k · 029", "500k", "029", "57M"),
     ("3M_026",   "rebuild_3M_xxl_026",  "3M · 026",   "3M",   "026", "137M"),
 ]
 KEYS = ["shift_mae_ppm", "j_mae_hz", "presence_f1", "deg_acc_balanced"]
@@ -55,18 +59,18 @@ def val_series(d):
 
 lc, te, n_eval = {}, {}, 0
 for key, name, label, tier, recipe, params in FLEET:
-    d = latest_run(name)
-    if not d:
-        continue
-    finished = rr.read_status(d).get("state", "") in ("finished", "completed")
     meta = {"tier": tier, "recipe": recipe, "params": params}
-
-    s = val_series(d)
-    if s:
-        lc[key] = {"label": label + ("" if finished else " · training"),
-                   "series": s, **meta}
-
-    h = rr.read_heldout_eval(d)
+    d = latest_run(name)
+    finished, h = False, None
+    if d:
+        finished = rr.read_status(d).get("state", "") in ("finished", "completed")
+        s = val_series(d)
+        if s:                                      # only plot a curve when val rows exist
+            lc[key] = {"label": label + ("" if finished else " · training"),
+                       "series": s, **meta}
+        h = rr.read_heldout_eval(d)
+    # every FLEET member gets a test_eval entry (so the grid shows all submitted combos);
+    # finished+evaluated -> numbers, otherwise a 'training' stub (column shown, no values).
     if finished and h and h.get("metrics"):
         bm = (rr.analyze_run(d).get("best_metrics", {}) or {})
         m = h["metrics"]
@@ -74,7 +78,7 @@ for key, name, label, tier, recipe, params in FLEET:
                    "val":  {k: round(bm.get(k, 0), 4) for k in KEYS},
                    "test": {k: round(m.get(k, 0), 4) for k in KEYS}}
         n_eval = h.get("n_test", n_eval)
-    else:                                          # known fleet member, not yet evaluable
+    else:
         te[key] = {**meta, "state": "training"}
 
 te["_meta"] = {

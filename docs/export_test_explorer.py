@@ -51,9 +51,13 @@ def best_ckpt(name):
 # The corrected-data REBUILD fleet (one run per tier) + the CNN baseline. Each model
 # is included only once its best.pt exists, so this is turnkey: re-run as checkpoints
 # land and the explorer gains tiers without edits.
-FLEET = [("64k",  "rebuild_64k_026",     "64k · medium (10M)"),
-         ("500k", "rebuild_500k_xl_026", "500k · xl (57M)"),
-         ("3M",   "rebuild_3M_xxl_026",  "3M · xxl (137M)")]
+FLEET = [("64k_025", "rebuild_64k_025",     "64k · 025 (matrix)"),
+         ("64k_026", "rebuild_64k_026",     "64k · 026 (peak+soft-eq)"),
+         ("64k_027", "rebuild_64k_027",     "64k · 027 (focal)"),
+         ("64k_028", "rebuild_64k_028",     "64k · 028 (cum-integral)"),
+         ("64k_029", "rebuild_64k_029",     "64k · 029 (026+focal)"),
+         ("500k",    "rebuild_500k_xl_026", "500k · 026 (57M)"),
+         ("3M",      "rebuild_3M_xxl_026",  "3M · 026 (137M)")]
 MODELS, MODEL_LABELS = {}, []
 # CNN baseline (trained on ChEMBL, but handles PubChem fine) — reference floor.
 BASELINE = "/gpfs/home/labounader/ckpts/baseline_best.pt"
