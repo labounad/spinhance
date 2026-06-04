@@ -23,7 +23,7 @@ ulimit -n 16384 2>/dev/null || true
 ENVPY=/gpfs/home/labounader/micromamba/envs/spinhance/bin/python
 
 DATA_OV="--set data.records=/gpfs/home/yimingzhang/hackathon-shared/spin_systems_pubchem.json.gz \
- --set data.parts=/gpfs/home/yimingzhang/hackathon-shared/spectra_run/out/90MHz \
+ --set data.parts=/gpfs/group/shenvi/Users/labounader/spinhance/spectra_run/out/90MHz \
  --set data.max_mol=0 --set data.sample_n=0 --set data.preload=false \
  --set training.batch_size=256 --set training.num_workers=4"
 

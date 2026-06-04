@@ -14,7 +14,7 @@ Two visualization aids on top of the basic depiction:
 
 Runs on the HPC where the PubChem bundle lives:
     PYTHONPATH=. python docs/build_spin_viewer_pubchem.py \
-        /gpfs/home/labounader/bundle_1M_s0/records.json.gz /tmp/spin_viewer.json
+        /gpfs/group/shenvi/Users/labounader/spinhance/legacy/bundle_1M_s0/records.json.gz /tmp/spin_viewer.json
 """
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ from rdkit.Chem.Draw import rdMolDraw2D                          # noqa: E402
 RDLogger.DisableLog("rdApp.*")
 from generate.spin_equivalence import classify_spin_groups       # noqa: E402
 
-SRC = sys.argv[1] if len(sys.argv) > 1 else "/gpfs/home/labounader/bundle_1M_s0/records.json.gz"
+SRC = sys.argv[1] if len(sys.argv) > 1 else "/gpfs/group/shenvi/Users/labounader/spinhance/legacy/bundle_1M_s0/records.json.gz"
 OUT = sys.argv[2] if len(sys.argv) > 2 else "docs/data/spin_viewer.json"
 N, SEED, W, H = 100, 7, 198, 120
 random.seed(SEED)

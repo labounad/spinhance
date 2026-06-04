@@ -14,8 +14,8 @@ set -e
 cd /gpfs/home/labounader/code/spinhance
 export PYTHONPATH=.
 ENVPY=/gpfs/home/labounader/micromamba/envs/spinhance/bin/python
-SRC_BUNDLE="${SRC_BUNDLE:-/gpfs/home/labounader/bundle_500k_s0}"
-OUT="${OUT:-/gpfs/home/labounader/bundle_600_2p16}"
+SRC_BUNDLE="${SRC_BUNDLE:-/gpfs/group/shenvi/Users/labounader/spinhance/legacy/bundle_500k_s0}"
+OUT="${OUT:-/gpfs/group/shenvi/Users/labounader/spinhance/legacy/bundle_600_2p16}"
 
 echo "host $(hostname) | shard $SLURM_ARRAY_TASK_ID | src $SRC_BUNDLE | out $OUT"
 "$ENVPY" -m model.scripts.gen_600_shards \

@@ -12,8 +12,8 @@ of the JSONL bundle, in order, and writes part_{k:05d}.npy. On the rare
 per-molecule failure a zero row is written so row alignment is preserved.
 
     python -m model.scripts.gen_600_shards \
-        --records /gpfs/home/labounader/bundle_500k_s0/records.json.gz \
-        --out /gpfs/home/labounader/bundle_600_2p16 \
+        --records /gpfs/group/shenvi/Users/labounader/spinhance/legacy/bundle_500k_s0/records.json.gz \
+        --out /gpfs/group/shenvi/Users/labounader/spinhance/legacy/bundle_600_2p16 \
         --shard-index $SLURM_ARRAY_TASK_ID --chunk 50000 \
         --field 600 --points 65536 --linewidth 0.35 --workers 8
 """

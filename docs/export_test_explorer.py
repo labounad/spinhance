@@ -27,8 +27,8 @@ from model.architectures import build_architecture
 from model.evaluation.metrics import decode, _np_pred
 from model.inference.refine import refine_shifts
 
-REB = "/gpfs/home/labounader/rebuild3M"
-RUNS = "/gpfs/home/labounader/code/spinhance/model/runs"
+REB = "/gpfs/group/shenvi/Users/labounader/spinhance/rebuild3M"
+RUNS = "/gpfs/group/shenvi/Users/labounader/spinhance/runs"
 TEST = REB + "/records_3M_test.json.gz"
 PARTS = REB + "/parts"
 OUT = sys.argv[1] if len(sys.argv) > 1 else "docs/data/test_explorer.json"
@@ -67,7 +67,7 @@ FLEET = [("64k_025", "rebuild_64k_025",     "64k · 025 (matrix)"),
          ("3M",      "rebuild_3M_xxl_026",  "3M · 026 (137M)")]
 MODELS, MODEL_LABELS = {}, []
 # CNN baseline (trained on ChEMBL, but handles PubChem fine) — reference floor.
-BASELINE = "/gpfs/home/labounader/ckpts/baseline_best.pt"
+BASELINE = "/gpfs/group/shenvi/Users/labounader/spinhance/ckpts/baseline_best.pt"
 if os.path.exists(BASELINE):
     MODELS["baseline"] = BASELINE
     MODEL_LABELS.append(("baseline", "CNN baseline · ResNet-1D"))

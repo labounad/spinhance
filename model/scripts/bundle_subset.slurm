@@ -20,6 +20,6 @@ ENVPY=/gpfs/home/labounader/micromamba/envs/spinhance/bin/python
 
 "$ENVPY" -m model.scripts.bundle_subset \
   --records /gpfs/home/yimingzhang/hackathon-shared/spin_systems_pubchem.json.gz \
-  --parts   /gpfs/home/yimingzhang/hackathon-shared/spectra_run/out/90MHz \
-  --out     /gpfs/home/labounader/bundle_500k_s0 \
+  --parts   /gpfs/group/shenvi/Users/labounader/spinhance/spectra_run/out/90MHz \
+  --out     /gpfs/group/shenvi/Users/labounader/spinhance/legacy/bundle_500k_s0 \
   --sample_n 500000 --seed 0

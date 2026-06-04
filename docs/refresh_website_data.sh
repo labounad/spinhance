@@ -10,7 +10,7 @@
 # you can run it repeatedly as 64k -> 500k -> 3M finish and the viewers gain tiers.
 set -e
 C=/gpfs/home/labounader/code/spinhance
-REB=/gpfs/home/labounader/rebuild3M
+REB=/gpfs/group/shenvi/Users/labounader/spinhance/rebuild3M
 PY=/gpfs/home/labounader/micromamba/envs/spinhance/bin/python
 cd "$C"; export PYTHONPATH=.
 RUNS="$C/model/runs"
