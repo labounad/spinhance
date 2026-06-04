@@ -239,6 +239,7 @@
   .lc-legend button:not(.on){opacity:.38}
   .lc-legend button.pinned{border-color:var(--c);font-weight:600;box-shadow:inset 0 0 0 1px var(--c)}
   .vb-canvas{width:100%;height:300px;display:block}
+  #txSpec{height:450px}   /* explorer spectrum: taller (1.5x) than the shared .vb-canvas default */
   .cmp-wrap{overflow-x:auto}
   table.cmp{width:100%;border-collapse:collapse;font-size:13px}
   table.cmp th{text-align:left;padding:8px 10px;border-bottom:2px solid var(--line-strong);color:var(--ink-soft);font-weight:700;cursor:pointer;white-space:nowrap;user-select:none}
@@ -921,6 +922,7 @@
       <div class="vb-head"><h3>Held-out test-molecule explorer <span class="split-tag split-test">test</span></h3>
         <div class="tx-nav">
           <label class="tx-modlabel">model <select id="txModel" class="tx-sel"></select></label>
+          <label class="spin-toggle tx-reftoggle"><input type="checkbox" id="txRefine" checked><span class="switch"></span>refine</label>
           <span class="tx-navgrp">
             <button class="car-btn car-prev" id="txPrev" aria-label="Previous molecule"></button>
             <select id="txSel" class="tx-sel"></select>
@@ -932,6 +934,7 @@
       <div class="tx-legend">
         <span><i class="sw" style="background:var(--accent-2)"></i>target — held-out test spectrum</span>
         <span><i class="sw" style="background:var(--accent)"></i>rendered from prediction</span>
+        <span id="txRefLeg"><i class="sw" style="background:#b07bff"></i>refined — shifts polished vs the input</span>
       </div>
       <canvas id="txSpec" class="vb-canvas"></canvas>
       <div class="tx-lower">
