@@ -127,7 +127,7 @@
   // now; metrics ("—") fill in from gen_viewer_data.py once their checkpoints land.
   const RUNS = [
     { m: "CNN baseline", arch: "ResNet-1D + typed heads", data: "ChEMBL",       p: "5.0M", shift: "—", j: "—", f1: "—", deg: "—", st: "floor" },
-    { m: "64k · 026",    arch: "spingraph_decoder · medium", data: "64k PubChem",  p: "10M",  shift: "0.057", j: "1.42", f1: "0.901", deg: "0.944", st: "running" },
+    { m: "64k · 026",    arch: "spingraph_decoder · medium", data: "64k PubChem",  p: "10M",  shift: "0.048", j: "1.40", f1: "0.907", deg: "0.943", st: "trained" },
     { m: "500k · xl",    arch: "spingraph_decoder · xl",     data: "500k PubChem", p: "57M",  shift: "—", j: "—", f1: "—", deg: "—", st: "running" },
     { m: "3M · xxl",     arch: "spingraph_decoder · xxl",    data: "3M PubChem",   p: "137M", shift: "—", j: "—", f1: "—", deg: "—", st: "running" },
   ];
