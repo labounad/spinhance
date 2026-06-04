@@ -35,18 +35,27 @@ N = int(sys.argv[2]) if len(sys.argv) > 2 else 80
 DS, G, P = 16, 8, 16384
 
 
-def best64k(cfg):
-    g = sorted(glob.glob(f"{RUNS}/*_v2_{cfg}_64k_*/checkpoints/best.pt"))
+def best_ckpt(name):
+    g = sorted(glob.glob(f"{RUNS}/*_{name}_*/checkpoints/best.pt"))
     return g[-1] if g else None
 
-# CNN baseline (trained on ChEMBL, but handles PubChem fine) + the 64k configs.
-MODELS = {"baseline": "/gpfs/home/labounader/ckpts/baseline_best.pt"}
-for cfg in ["025", "026", "027", "028", "029"]:
-    p = best64k(cfg)
+# The corrected-data REBUILD fleet (one run per tier) + the CNN baseline. Each model
+# is included only once its best.pt exists, so this is turnkey: re-run as checkpoints
+# land and the explorer gains tiers without edits.
+FLEET = [("64k",  "rebuild_64k_026",     "64k · medium (10M)"),
+         ("500k", "rebuild_500k_xl_026", "500k · xl (57M)"),
+         ("3M",   "rebuild_3M_xxl_026",  "3M · xxl (137M)")]
+MODELS, MODEL_LABELS = {}, []
+# CNN baseline (trained on ChEMBL, but handles PubChem fine) — reference floor.
+BASELINE = "/gpfs/home/labounader/ckpts/baseline_best.pt"
+if os.path.exists(BASELINE):
+    MODELS["baseline"] = BASELINE
+    MODEL_LABELS.append(("baseline", "CNN baseline · ResNet-1D"))
+for key, name, label in FLEET:
+    p = best_ckpt(name)
     if p:
-        MODELS[cfg] = p
-MODEL_LABELS = [("baseline", "CNN baseline · ResNet-1D")] + \
-    [(c, f"64k · {c}" + (" · best" if c == "027" else "")) for c in ["025", "026", "027", "028", "029"] if c in MODELS]
+        MODELS[key] = p
+        MODEL_LABELS.append((key, label))
 
 vocab = DegeneracyVocab()
 print("loading models...", flush=True)
