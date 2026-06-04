@@ -49,7 +49,7 @@
     }
     // x ticks
     ctx.textAlign = "center";
-    for (let i = 0; i <= 4; i++) { const xv = x0 + (x1 - x0) * i / 4; ctx.fillText(Math.round(xv), X(xv), H - padB + 16); }
+    for (let i = 0; i <= 4; i++) { const xv = x0 + (x1 - x0) * i / 4; ctx.fillText(opts.xdp != null ? xv.toFixed(opts.xdp) : Math.round(xv), X(xv), H - padB + 16); }
     ctx.fillStyle = c.soft; ctx.fillText(opts.xlabel || "epoch", (padL + W - padR) / 2, H - 4);
     // series
     series.forEach(s => {
@@ -211,15 +211,60 @@
           } catch (e) { if (load3d) { load3d.textContent = "3D unavailable"; load3d.style.opacity = "1"; } console.error(e); }
         });
       }
+      // Interactive zoom state for the spectrum plot: x-range (ppm) + y-stretch factor.
+      let xr0 = 0, xr1 = 12, yZoom = 1;
+      const PADL = 16, PADR = 14, PADT = 12, PADB = 30;   // mirror linePlot's noY paddings
       function drawSpec() {
         const m = mols[idx], P = predOf(m), c = C();
         // target-spectrum colour encodes test membership: teal = held-out test for this model, amber = out-of-distribution
         const tgt = inTest(m) ? (css("--accent-2") || "#34e3c4") : "#f5a623";
+        const dmax = Math.max(1e-6, ...m.input, ...P.rendered);   // full-scale peak; yZoom shrinks the window -> taller peaks
         linePlot(spec, [
           { color: tgt, width: 1.8, pts: m.input.map((v, i) => [ppm[i], v]) },
           { color: c.accent, width: 2, pts: P.rendered.map((v, i) => [ppm[i], v]) },
-        ], { xlabel: "ppm", x0: 0, x1: 12, y0: 0, invertX: true, noY: true });
+        ], { xlabel: "ppm", x0: xr0, x1: xr1, y0: 0, y1: dmax / yZoom, invertX: true, noY: true,
+             xdp: (xr1 - xr0) < 6 ? 1 : 0 });
       }
+
+      // --- plot interactions: scroll = stretch Y, click-drag horizontally = zoom X, dbl-click = reset ---
+      const evX = (e) => e.clientX - spec.getBoundingClientRect().left;       // client x within the canvas
+      const pxToPpm = (px) => {                                              // invert linePlot's invertX mapping
+        const plotW = spec.clientWidth - PADL - PADR;
+        const f = Math.max(0, Math.min(1, 1 - (px - PADL) / (plotW || 1)));
+        return xr0 + f * (xr1 - xr0);
+      };
+      spec.addEventListener("wheel", (e) => {                                // scroll -> stretch the intensity axis
+        e.preventDefault();
+        yZoom = Math.max(1, Math.min(60, yZoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15)));
+        drawSpec();
+      }, { passive: false });
+      let dragX0 = null;
+      spec.addEventListener("mousedown", (e) => { dragX0 = evX(e); });
+      spec.addEventListener("mousemove", (e) => {                            // live selection band while dragging
+        if (dragX0 == null) return;
+        drawSpec();
+        const x = evX(e), ctx = spec.getContext("2d");
+        ctx.save(); ctx.fillStyle = "rgba(91,140,255,0.18)";
+        ctx.fillRect(Math.min(dragX0, x), PADT, Math.abs(x - dragX0), spec.clientHeight - PADT - PADB);
+        ctx.restore();
+      });
+      const endDrag = (e) => {
+        if (dragX0 == null) return;
+        const x = evX(e);
+        if (Math.abs(x - dragX0) > 4) {                                      // ignore tiny drags (treat as clicks)
+          let a = pxToPpm(dragX0), b = pxToPpm(x);
+          xr0 = Math.min(a, b); xr1 = Math.max(a, b);
+          if (xr1 - xr0 < 0.05) xr1 = xr0 + 0.05;                            // floor the zoom width
+        }
+        dragX0 = null; drawSpec();
+      };
+      spec.addEventListener("mouseup", endDrag);
+      spec.addEventListener("mouseleave", endDrag);
+      spec.addEventListener("dblclick", () => { xr0 = 0; xr1 = 12; yZoom = 1; drawSpec(); });
+      spec.style.cursor = "ew-resize";
+      { const lg = $(".tx-legend", host);
+        if (lg) lg.insertAdjacentHTML("beforeend",
+          '<span style="color:var(--ink-faint);font-size:11px">scroll: stretch Y · drag: zoom X · dbl-click: reset</span>'); }
       function drawMatrix() {
         const m = mols[idx], P = predOf(m); const G = 8;
         const cell = (t, p, unit) => { const d = Math.abs((+t) - (+p)); const bad = unit === "ppm" ? d > 0.1 : d > 1.5;
