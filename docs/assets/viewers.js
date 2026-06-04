@@ -189,7 +189,7 @@
       }
       // per-model predictions + per-model test-split membership
       const models = data.models || [{ key: "_", label: "model" }];
-      let mkey = (models.find(x => x.key === "64k") || models[0]).key;   // default: 64k tier (first to finish)
+      let mkey = (models.find(x => x.key === "64k_026") || models[0]).key;   // default: 64k·026 (production recipe)
       const labelOf = (k) => (models.find(x => x.key === k) || {}).label || k;
       const inTest = () => true;   // every molecule is in the shared global held-out set
       const predOf = (m) => (m.preds ? m.preds[mkey] : m);
@@ -570,10 +570,11 @@
       });
   }
 
-  // ============= 5. HELD-OUT TEST EVAL (toggle: by recipe / by size) =======
-  // Held-out TEST metrics on the leakage-controlled split, two comparison axes:
-  //   · by recipe (64k):  025 / 026 / 027 / 028 / 029  (fixed size, vary architecture)
-  //   · by model size (026): 64k(10M) / 500k(57M) / 3M(137M)  (fixed recipe, vary scale)
+  // ============= 5. HELD-OUT TEST EVAL (2-D: columns axis + ‹ › fixed axis) =
+  // The fleet is a recipe × size grid. Pick which axis is the COLUMNS:
+  //   · by recipe → columns = 025…029; ‹ › steps the fixed model SIZE (64k/500k/3M)
+  //   · by model size → columns = 64k/500k/3M; ‹ › steps the fixed RECIPE (025…029)
+  // So you can compare recipes at each size, or sizes at each recipe.
   function initTestEval() {
     const host = $("#testEval"); if (!host) return;
     fetch("data/test_eval.json").then(r => r.json()).then(d => {
@@ -584,30 +585,33 @@
           (meta.note || "Held-out test evaluation is computed once a model finishes training.") + '</p>';
         return;
       }
-      const VIEWS = {
-        recipe: { btn: "by recipe (64k)", blurb: "fixed size (64k · 10M) · varying recipe",
-                  keys: ["64k_025", "64k_026", "64k_027", "64k_028", "64k_029"], col: e => e.recipe },
-        size:   { btn: "by model size (026)", blurb: "fixed recipe (026) · varying capacity",
-                  keys: ["64k_026", "500k_026", "3M_026"], col: e => e.params + " · " + e.tier },
-      };
+      const RECIPES = ["025", "026", "027", "028", "029"];
+      const SIZES = [["64k", "10M"], ["500k", "57M"], ["3M", "137M"]];
       const rows = [["shift_mae_ppm", "shift MAE (ppm) ↓", true], ["j_mae_hz", "J MAE (Hz) ↓", true],
         ["presence_f1", "presence F1 ↑", false], ["deg_acc_balanced", "deg balanced-acc ↑", false]];
-      let view = "recipe";   // default to the fully-finished 64k architecture sweep
+      let mode = "recipe", si = 0, ri = 1;   // columns=recipes, fixed size=64k / fixed recipe=026
       host.innerHTML =
-        '<style>.te-toggle button{padding:4px 11px;border-radius:7px;border:1px solid var(--line-strong);' +
+        '<style>.te-bar{display:flex;gap:6px;align-items:center;margin-bottom:12px;flex-wrap:wrap}' +
+        '.te-bar button{padding:4px 11px;border-radius:7px;border:1px solid var(--line-strong);' +
         'background:var(--panel);color:var(--ink-soft);font:600 12px/1.2 inherit;cursor:pointer}' +
-        '.te-toggle button.on{border-color:var(--accent);color:var(--ink)}</style>' +
-        '<div class="te-toggle" style="display:flex;gap:6px;margin-bottom:12px"></div><div class="te-body"></div>';
-      const bar = $(".te-toggle", host), body = $(".te-body", host);
+        '.te-bar button.on{border-color:var(--accent);color:var(--ink)}' +
+        '.te-nav{display:inline-flex;gap:6px;align-items:center;margin-left:10px}' +
+        '.te-nav .te-fixed{font:600 12px inherit;color:var(--ink-soft);min-width:118px;text-align:center}</style>' +
+        '<div class="te-bar"></div><div class="te-body"></div>';
+      const bar = $(".te-bar", host), body = $(".te-body", host);
+      function cols() {
+        if (mode === "recipe") return RECIPES.map(r => ({ k: `${SIZES[si][0]}_${r}`, lbl: r }))
+          .filter(c => d[c.k]);
+        return SIZES.map(([t, p]) => ({ k: `${t}_${RECIPES[ri]}`, lbl: `${p} · ${t}` })).filter(c => d[c.k]);
+      }
       function render() {
-        const V = VIEWS[view], cols = V.keys.filter(k => d[k]);     // fleet members present in the data
+        const cs = cols();
         let h = '<table class="cmp"><thead><tr><th>metric</th>';
-        cols.forEach(k => { const e = d[k], tr = e.state !== "finished";
-          h += '<th class="num">' + V.col(e) +
-            (tr ? ' <span style="color:var(--ink-faint);font-weight:400">· training</span>' : '') + '</th>'; });
+        cs.forEach(c => h += '<th class="num">' + c.lbl + (d[c.k].state !== "finished" ?
+          ' <span style="color:var(--ink-faint);font-weight:400">· training</span>' : '') + '</th>');
         h += '</tr></thead><tbody>';
         rows.forEach(([mk, lbl, lower]) => {
-          const vals = cols.map(k => done(k) ? d[k].test[mk] : null);
+          const vals = cs.map(c => done(c.k) ? d[c.k].test[mk] : null);
           const fin = vals.filter(v => v != null);
           const best = fin.length ? (lower ? Math.min : Math.max).apply(null, fin) : null;
           h += '<tr><td>' + lbl + '</td>' + vals.map(v =>
@@ -615,14 +619,27 @@
             (v == null ? '—' : (+v).toFixed(4)) + '</td>').join("") + '</tr>';
         });
         h += '</tbody></table>';
-        body.innerHTML = h + '<p class="muted" style="font-size:12px;margin-top:8px">' + V.blurb +
-          '. ' + (meta.note || "") + ' Test eval: ' + (meta.test_n_eval || "?") + ' of ' +
+        const fixed = mode === "recipe" ? `size: ${SIZES[si][0]} · ${SIZES[si][1]}` : `recipe: ${RECIPES[ri]}`;
+        const blurb = mode === "recipe" ? "recipes at a fixed model size — ‹ › changes the size"
+                                        : "model sizes at a fixed recipe — ‹ › changes the recipe";
+        body.innerHTML = h + '<p class="muted" style="font-size:12px;margin-top:8px">' + blurb + '. ' +
+          (meta.note || "") + ' Test eval: ' + (meta.test_n_eval || "?") + ' of ' +
           (meta.test_n_total || "?") + ' held-out molecules. <b>Test ≈ validation → no overfitting.</b></p>';
-        bar.querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.v === view));
+        bar.innerHTML =
+          '<button data-m="recipe"' + (mode === "recipe" ? ' class="on"' : '') + '>by recipe</button>' +
+          '<button data-m="size"' + (mode === "size" ? ' class="on"' : '') + '>by model size</button>' +
+          '<span class="te-nav"><button data-nav="-1" title="previous">‹</button>' +
+          '<span class="te-fixed">' + fixed + '</span>' +
+          '<button data-nav="1" title="next">›</button></span>';
+        bar.querySelector('[data-m="recipe"]').onclick = () => { mode = "recipe"; render(); };
+        bar.querySelector('[data-m="size"]').onclick = () => { mode = "size"; render(); };
+        bar.querySelectorAll("[data-nav]").forEach(b => b.onclick = () => {
+          const s = +b.dataset.nav;
+          if (mode === "recipe") si = (si + s + SIZES.length) % SIZES.length;
+          else ri = (ri + s + RECIPES.length) % RECIPES.length;
+          render();
+        });
       }
-      bar.innerHTML = Object.keys(VIEWS).map(v =>
-        '<button data-v="' + v + '"' + (v === view ? ' class="on"' : '') + '>' + VIEWS[v].btn + '</button>').join("");
-      bar.querySelectorAll("button").forEach(b => b.onclick = () => { view = b.dataset.v; render(); });
       render();
     }).catch(e => { host.innerHTML = "<p class='muted'>test eval unavailable</p>"; console.error(e); });
   }
