@@ -15,22 +15,24 @@ PY=/gpfs/home/labounader/micromamba/envs/spinhance/bin/python
 cd "$C"; export PYTHONPATH=.
 RUNS="$C/model/runs"
 
-# latest run dir per tier (exact names skip the cancelled rebuild_3M_xl)
-d64=$(ls -dt $RUNS/*_rebuild_64k_026_* 2>/dev/null | head -1)
-d500=$(ls -dt $RUNS/*_rebuild_500k_xl_026_* 2>/dev/null | head -1)
-d3m=$(ls -dt $RUNS/*_rebuild_3M_xxl_026_* 2>/dev/null | head -1)
-echo "run dirs:"; printf '  %s\n' "$d64" "$d500" "$d3m"
+# The full fleet: 64k architecture sweep (025-029) + the 026 size tiers (500k xl, 3M xxl).
+# Exact names skip the cancelled rebuild_3M_xl / rebuild_500k_030.
+FLEET_NAMES="rebuild_64k_025 rebuild_64k_026 rebuild_64k_027 rebuild_64k_028 rebuild_64k_029 rebuild_500k_xl_026 rebuild_3M_xxl_026"
 
 # 1. standardized held-out eval on the leakage-controlled 10% PubChem test split.
-#    All available tiers in one process (the held-out spectra are preloaded ONCE and
+#    Every run with a best.pt, in ONE process (the held-out spectra are preloaded ONCE and
 #    shared); writes <run_dir>/heldout_eval.json that gen_viewer_data.py reads.
-ARGS=""
-for d in "$d64" "$d500" "$d3m"; do
-  [ -n "$d" ] && [ -f "$d/checkpoints/best.pt" ] && ARGS="$ARGS --run-dir $d"
+DIRS=""   # collected for a SINGLE --run-dir flag (it is nargs='+'; repeating the flag keeps only the last)
+echo "run dirs (finished only — avoids reading a checkpoint mid-write):"
+for nm in $FLEET_NAMES; do
+  d=$(ls -dt $RUNS/*_${nm}_* 2>/dev/null | head -1)
+  [ -n "$d" ] && [ -f "$d/checkpoints/best.pt" ] || continue
+  st=$($PY -c "import json,sys;print(json.load(open(sys.argv[1])).get('state',''))" "$d/status.json" 2>/dev/null)
+  if [ "$st" = "finished" ] || [ "$st" = "completed" ]; then printf '  %s (%s)\n' "$d" "$st"; DIRS="$DIRS $d"; fi
 done
-if [ -n "$ARGS" ]; then
+if [ -n "$DIRS" ]; then
   echo "== held-out eval =="
-  $PY -m model.experiments.eval_heldout $ARGS \
+  $PY -m model.experiments.eval_heldout --run-dir $DIRS \
       --test-records "$REB/records_3M_test.json.gz" --parts "$REB/parts" \
       --device "${DEVICE:-cuda}" --limit "${LIMIT:-50000}"
 else
