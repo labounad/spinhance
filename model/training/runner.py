@@ -29,7 +29,8 @@ def run_from_config(cfg: Config):
             raise ValueError(f"record row {max_row} >= stacked spectra "
                              f"({len(spectra_source)}) — order/count mismatch")
         if cfg.data.preload:     # RAM-resident (fast on GPFS); needs the rows to fit memory
-            spectra_source.preload([r["row"] for r in recs])
+            spectra_source.preload([r["row"] for r in recs],
+                                   cache=(cfg.data.preload_cache or None))
     else:
         recs = load_records(cfg.data.records, cfg.data.spectra, fields=(cfg.data.field,))
         if cfg.data.max_mol:
