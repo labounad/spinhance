@@ -53,19 +53,19 @@ def best_ckpt(name):
 # The corrected-data REBUILD fleet (one run per tier) + the CNN baseline. Each model
 # is included only once its best.pt exists, so this is turnkey: re-run as checkpoints
 # land and the explorer gains tiers without edits.
-FLEET = [("64k_025", "rebuild_64k_025",     "64k · 025 (matrix)"),
-         ("64k_026", "rebuild_64k_026",     "64k · 026 (peak+soft-eq)"),
-         ("64k_027", "rebuild_64k_027",     "64k · 027 (focal)"),
-         ("64k_028", "rebuild_64k_028",     "64k · 028 (cum-integral)"),
-         ("64k_029", "rebuild_64k_029",     "64k · 029 (026+focal)"),
-         ("64k_030", "rebuild_64k_030",     "64k · 030 (super)"),
-         ("500k_025", "rebuild_500k_025", "500k · 025 (matrix, 57M)"),
-         ("500k_026", "rebuild_500k_026", "500k · 026 (peak+soft-eq, 57M)"),
-         ("500k_027", "rebuild_500k_027", "500k · 027 (focal, 57M)"),
-         ("500k_028", "rebuild_500k_028", "500k · 028 (cum-integral, 57M)"),
-         ("500k_029", "rebuild_500k_029", "500k · 029 (026+focal, 57M, best)"),
-         ("500k_030", "rebuild_500k_030", "500k · 030 (super, 57M)"),
-         ("3M",      "rebuild_3M_026",  "3M · 026 (137M)")]
+FLEET = [("64k_025", "rebuild_64k_025_sym",     "64k · 025 (matrix)"),
+         ("64k_026", "rebuild_64k_026_sym",     "64k · 026 (peak+soft-eq)"),
+         ("64k_027", "rebuild_64k_027_sym",     "64k · 027 (focal)"),
+         ("64k_028", "rebuild_64k_028_sym",     "64k · 028 (cum-integral)"),
+         ("64k_029", "rebuild_64k_029_sym",     "64k · 029 (026+focal)"),
+         ("64k_030", "rebuild_64k_030_sym",     "64k · 030 (super)"),
+         ("500k_025", "rebuild_500k_025_sym", "500k · 025 (matrix, 57M)"),
+         ("500k_026", "rebuild_500k_026_sym", "500k · 026 (peak+soft-eq, 57M)"),
+         ("500k_027", "rebuild_500k_027_sym", "500k · 027 (focal, 57M)"),
+         ("500k_028", "rebuild_500k_028_sym", "500k · 028 (cum-integral, 57M)"),
+         ("500k_029", "rebuild_500k_029_sym", "500k · 029 (026+focal, 57M, best)"),
+         ("500k_030", "rebuild_500k_030_sym", "500k · 030 (super, 57M)"),
+         ("3M",      "rebuild_3M_026_sym",  "3M · 026 (137M)")]
 MODELS, MODEL_LABELS = {}, []
 # CNN baseline (trained on ChEMBL, but handles PubChem fine) — reference floor.
 BASELINE = "/gpfs/group/shenvi/Users/labounader/spinhance/ckpts/baseline_best.pt"
