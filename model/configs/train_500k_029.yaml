@@ -1,8 +1,8 @@
-# 030 "super model" at xl (57M) — the 500k-tier super model. = 029 (026 peak-channel +
-# soft-equivalence + 027 focal) PLUS 028's cumulative-integral input channel. Every winning
-# ingredient combined. Used for the 500k tier via SAMPLE_N=500000. 90 MHz; xl stability tuning.
+# 500k tier — "med 029": the 500k companion to train_64k_029. = the 026 base
+# (peak-channel + soft-equivalence) PLUS 027's focal modulation. model size=med (~57M). 90 MHz only.
+
 run:
-  name: spingraph_xl_030
+  name: spingraph_med_029_500k
   output_dir: model/runs
 
 data:
@@ -15,15 +15,10 @@ data:
 
 model:
   name: spingraph_decoder
-  size: xl
-  dim: 512
-  enc_layers: 4
-  dec_layers: 6
-  n_heads: 8
+  size: med                # model tier: 500k ~57M (TIER_PRESETS: stem deep, dim512/enc4/dec6)
   dropout: 0.1
   use_peak_channel: true        # 026 Idea 1
   use_soft_equiv: true          # 026 Idea 2
-  use_cumint_channel: true      # 028: cumulative-integral input channel
 
 loss:
   name: composite
@@ -36,8 +31,8 @@ loss:
         jmag: 1.0
         presence: 0.5
         deg: 0.5
-      deg_focal_gamma: 2.0       # 027: focal CE on degeneracy
-      presence_focal_gamma: 2.0  # 027: focal BCE on presence
+      deg_focal_gamma: 2.0       # 027 augmentation: focal CE on degeneracy
+      presence_focal_gamma: 2.0  # 027 augmentation: focal BCE on presence
     - name: soft_equiv          # 026 Idea 2
       weight: 0.5
       tol_ppm: 0.03

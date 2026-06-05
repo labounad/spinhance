@@ -15,11 +15,7 @@ data:
 
 model:
   name: spingraph_decoder
-  size: medium
-  dim: 256
-  enc_layers: 2
-  dec_layers: 4
-  n_heads: 8
+  size: light              # model tier: 64k ~10M (TIER_PRESETS: stem medium, dim256/enc2/dec4)
   dropout: 0.1
   use_peak_channel: true     # 026 Idea 1
   use_soft_equiv: true       # 026 Idea 2 — expose soft_equiv_logits for the loss + decode

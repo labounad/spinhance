@@ -1,8 +1,9 @@
-# 028 recipe at xl (57M) — the 500k-tier companion to train_64k_028. = the 025 base
+# 500k tier — "med 028": the 500k companion to train_64k_028. = the 025 base
 # (matrix, shift 2x) PLUS a cumulative-integral input channel (use_cumint_channel).
-# Used for the 500k tier via SAMPLE_N=500000. 90 MHz only; xl stability tuning kept.
+# model size=med (~57M). 90 MHz only.
+
 run:
-  name: spingraph_xl_028
+  name: spingraph_med_028_500k
   output_dir: model/runs
 
 data:
@@ -15,11 +16,7 @@ data:
 
 model:
   name: spingraph_decoder
-  size: xl
-  dim: 512
-  enc_layers: 4
-  dec_layers: 6
-  n_heads: 8
+  size: med                # model tier: 500k ~57M (TIER_PRESETS: stem deep, dim512/enc4/dec6)
   dropout: 0.1
   use_cumint_channel: true     # the experiment: cumulative-integral 2nd input channel
 

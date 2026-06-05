@@ -5,7 +5,7 @@
 # Effective batch = batch_size (per-GPU) x ntasks; lr is scaled for the large batch.
 #
 # Submit (4-GPU, 2-node, full 3M):
-#   sbatch --export=ALL,CONFIG=model/configs/train_3M_spingraph_xl_025.yaml,RUN_NAME=xl025_3M_ddp \
+#   sbatch --export=ALL,CONFIG=model/configs/train_500k_025.yaml,RUN_NAME=med025_500k_ddp \
 #          -J xl025ddp model/scripts/train_hpc_ddp.slurm
 # 2-GPU single-node smoke (validate DDP logic first):
 #   sbatch --nodes=1 --ntasks-per-node=2 --gres=gpu:rtxa6000:2 \

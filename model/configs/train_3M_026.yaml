@@ -1,16 +1,14 @@
-# 3M "xxl 026": the capacity top of the data×capacity scaling sweep — the same
-# spingraph_decoder + 026 ideas (peak-channel input + soft-equivalence) as the 64k
-# (medium, ~10M) and 500k (xl, ~57M) tiers, widened + deepened to ~137M params so the
-# largest-data tier also gets the largest model. Trained on the FULL corrected 2.81M
-# train split (records_3M_train.json.gz) from the Audit-2 regeneration.
-#   model : spingraph_decoder dim768 enc6 dec8  -> 137.4M params
+# 3M tier — "xl 026": the capacity top of the data x capacity scaling sweep — the same
+# spingraph_decoder + 026 ideas (peak-channel + soft-equivalence) as the 64k/light (~10M) and
+# 500k/med (~57M) tiers, widened + deepened to ~137M so the largest-data tier gets the largest
+# model. Trained on the FULL corrected 2.81M train split (records_3M_train.json.gz).
+#   model : spingraph_decoder size=xl (TIER_PRESETS: deep conv stem + dim768/enc6/dec8, ~137M)
 #   loss  : matrix (shift-2x) + soft_equiv (Idea 2)
-#   data  : PubChem 90 MHz stacked shards, full train split (streamed; preload=false)
-# Stability: the 57M xl decoder diverged at ep7 on the 1M set at the old LR; this 2.4x
-# larger model keeps the xl's tighter regime (warmup 0.05, grad_clip 0.5) and drops the
-# LR further to 1.5e-4. Batch 256 (the slurm launcher's 512 is overridden at submit).
+# Stability: the med (~57M) decoder diverged at ep7 on the 1M set; this larger model keeps the
+# tighter regime (warmup 0.05, grad_clip 0.5) and drops LR to 1.5e-4. NOTE: 3M tier is paused.
+
 run:
-  name: spingraph_xxl_026_3M
+  name: spingraph_xl_026_3M
   output_dir: model/runs
 
 data:
@@ -23,11 +21,7 @@ data:
 
 model:
   name: spingraph_decoder
-  size: xl                  # CNN-encoder preset (SIZE_PRESETS); transformer is scaled via dim/enc/dec below
-  dim: 768
-  enc_layers: 6
-  dec_layers: 8
-  n_heads: 8
+  size: xl                 # model tier: 3M ~137M (TIER_PRESETS: stem deep, dim768/enc6/dec8)
   dropout: 0.1
   use_peak_channel: true        # Idea 1
   use_soft_equiv: true          # Idea 2 — expose soft_equiv_logits for the loss + decode

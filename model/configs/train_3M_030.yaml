@@ -1,9 +1,9 @@
-# 030 "super model" at xxl (137M) — the 3M-tier super model. = the xxl 137M scale-up with
-# every winning ingredient: 026 peak-channel + soft-equivalence, 027 focal modulation, and
-# 028's cumulative-integral input channel. Full corrected 2.81M train split (preload=false →
-# overridden to preload on a big-RAM node at submit). xxl stability tuning (lr 1.5e-4).
+# 3M tier — "xl 030" super model: the ~137M scale-up with every winning ingredient —
+# 026 peak-channel + soft-equivalence, 027 focal modulation, and 028's cumulative-integral
+# input channel. Full corrected 2.81M train split. Stability tuning (lr 1.5e-4). NOTE: 3M tier is paused.
+
 run:
-  name: spingraph_xxl_030_3M
+  name: spingraph_xl_030_3M
   output_dir: model/runs
 
 data:
@@ -16,11 +16,7 @@ data:
 
 model:
   name: spingraph_decoder
-  size: xl                  # CNN-encoder preset; transformer scaled via dim/enc/dec below
-  dim: 768
-  enc_layers: 6
-  dec_layers: 8
-  n_heads: 8
+  size: xl                 # model tier: 3M ~137M (TIER_PRESETS: stem deep, dim768/enc6/dec8)
   dropout: 0.1
   use_peak_channel: true        # 026 Idea 1
   use_soft_equiv: true          # 026 Idea 2
@@ -46,7 +42,7 @@ loss:
 training:
   epochs: 60
   batch_size: 256
-  lr: 0.00015               # the 137M decoder is divergence-prone; match xxl_026
+  lr: 0.00015               # the 137M decoder is divergence-prone; match train_3M_026
   weight_decay: 0.01
   amp: bf16
   warmup_frac: 0.05

@@ -1,12 +1,11 @@
-# PRELIMINARY 3M+ run — "xl 026": session027's xl scale-up PLUS the two session026
-# architecture ideas (peak-channel input + soft-equivalence flag/loss/averaging).
-# Queued in parallel with xl_025 (session027) BEFORE 026's 64k results are in — the
-# pair isolates whether the 026 features still help at xl scale on more data.
-#   model : spingraph_decoder size=xl + dim512 enc4 dec6 + use_peak_channel (Idea 1)
+# 500k tier — "med 026": the 025 scale-up PLUS the two 026 architecture ideas
+# (peak-channel input + soft-equivalence flag/loss/averaging). Pairs with med_025 to
+# isolate whether the 026 features still help at med (~57M) capacity on 500k data.
+#   model : spingraph_decoder size=med + use_peak_channel (Idea 1)
 #   loss  : matrix (shift-2x) + soft_equiv (Idea 2)
-#   data  : PubChem 90 MHz stacked shards (subset via --set data.max_mol / MAX_PARTS)
+
 run:
-  name: spingraph_xl_026_3M
+  name: spingraph_med_026_500k
   output_dir: model/runs
 
 data:
@@ -19,11 +18,7 @@ data:
 
 model:
   name: spingraph_decoder
-  size: xl
-  dim: 512
-  enc_layers: 4
-  dec_layers: 6
-  n_heads: 8
+  size: med                # model tier: 500k ~57M (TIER_PRESETS: stem deep, dim512/enc4/dec6)
   dropout: 0.1
   use_peak_channel: true        # Idea 1
   use_soft_equiv: true          # Idea 2 — expose soft_equiv_logits for the loss + decode
@@ -55,7 +50,7 @@ training:
   lr_min_factor: 0.30
   grad_clip: 0.5            # tighter (was 1.0) to clamp the gradient spike that blew up ep7
   patience: 8
-  # see train_3M_spingraph_xl_025.yaml — low workers to avoid the per-worker
+  # see train_500k_025.yaml — low workers to avoid the per-worker
   # 500k-record copy thrashing a 16GB g6.xlarge. Full 3.2M needs a big-RAM box.
   num_workers: 2
   val_every: 1

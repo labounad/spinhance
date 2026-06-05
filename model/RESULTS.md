@@ -9,9 +9,10 @@
 ## Current fleet (2026-06-04)
 
 The fleet is the shared `spingraph_decoder` backbone trained at two finished tiers — **64k**
-(medium, ~10M params) and **500k** (xl, ~57M params) — across the **025–030 recipe ladder**.
-A third **3M** tier (~137M params) is **paused / under revision** (architectural + training
+(`light`, ~10M params) and **500k** (`med`, ~57M params) — across the **025–030 recipe ladder**.
+A third **3M** tier (`xl`, ~137M params) is **paused / under revision** (architectural + training
 issues to resolve before the next 3M run), so it is not in the tables below.
+(Model-size tiers `light`/`med`/`xl` are defined by `TIER_PRESETS` in `model/architectures/resnet1d.py`.)
 
 **Recipe ladder** (see `docs/models.html` / `RECIPE_DESC` in `docs/assets/viewers.js`):
 
@@ -29,7 +30,7 @@ held-out test split** (leakage-controlled global 10% PubChem, union-find on matr
 + InChIKey; 312,682 held-out molecules, 30,000 scored; every model evaluated on identical
 molecules). Source of truth: `docs/data/test_eval.json`.
 
-**64k tier (medium ~10M) — held-out test:**
+**64k tier (`light` ~10M) — held-out test:**
 
 | recipe | shift (ppm) | J (Hz) | presence F1 | deg bal-acc |
 |---|---|---|---|---|
@@ -40,7 +41,7 @@ molecules). Source of truth: `docs/data/test_eval.json`.
 | **029** | **0.0390** | 1.318 | 0.891 | 0.944 |
 | 030 | 0.0415 | 1.342 | 0.891 | 0.951 |
 
-**500k tier (xl ~57M) — held-out test:**
+**500k tier (`med` ~57M) — held-out test:**
 
 | recipe | shift (ppm) | J (Hz) | presence F1 | deg bal-acc |
 |---|---|---|---|---|
@@ -90,6 +91,11 @@ Metrics throughout are **`shift_mae_ppm / j_mae_hz / presence_f1 / deg_balanced_
 (physical units, held-out val). Lower shift/J is better; higher F1/deg is better.
 All models are the `spingraph_decoder` (structured query decoder).
 
+> **Note on naming:** the size labels in this *history* section (`medium`, `light`, `xl`)
+> predate the current tier convention and do **not** map to it. The current tiers are
+> `light` (64k, ~10M) · `med` (500k, ~57M) · `xl` (3M, ~137M) — see the Current-fleet section
+> and `TIER_PRESETS`. (Historically "light" meant a medium-size model on a 500k-random sample.)
+
 | session | model | data | recipe | result (shift/J/F1/deg) | status |
 |---|---|---|---|---|---|
 | CNN baseline | resnet1d | 64k ChEMBL | matrix | 0.279 / 1.80 / 0.807 / 0.732 | floor |
@@ -124,7 +130,7 @@ are on track to beat it once they finish.
   **0.118 ppm / 0.86 Hz / F1 0.934 at epoch 6** before a hard divergence at ep7
   (val shift → ~13 ppm, F1 → 0.46) — a classic DETR-decoder LR/gradient spike.
   Both xl runs relaunched with a **stabilized recipe**: `lr` 4e-4→**2e-4**,
-  `warmup_frac` 0.02→**0.05**, `grad_clip` 1.0→**0.5** (`train_3M_spingraph_xl_{025,026}.yaml`).
+  `warmup_frac` 0.02→**0.05**, `grad_clip` 1.0→**0.5** (now `train_500k_{025,026}.yaml`).
 
 ### The story in three arcs
 
@@ -150,7 +156,7 @@ shift again to **0.037 ppm / 0.59 Hz** — the production model.
 **3. Data scaling — 64k ChEMBL → 3.2M PubChem.** New stacked-shard data path: `StackedSpectra`
 mmaps `part_NNNNN.npy` shards (1000 spectra each, 90 MHz only) keyed by record order to
 `spin_systems_pubchem.json.gz`; `data.parts` selects it, `data.sample_n` draws a uniform random
-subset (reservoir sampling). `SIZE_PRESETS['xl']` (~57M params) for the larger regime. Two scales
+subset (reservoir sampling). The `med`/`xl` tiers (~57M/~137M params, `TIER_PRESETS`) for the larger regimes. Two scales
 in flight on the HPC: a fast **medium / 500k-random "light"** A/B and the full **xl / 3.2M** A/B.
 
 ### Hard-won lessons (worth a slide)

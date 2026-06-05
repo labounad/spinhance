@@ -254,7 +254,7 @@ warranted (not a full rewrite — the dataset path's core is sound).
   - **Merged + leakage-split**: `records_3M.json.gz` = **3,126,829** molecules (spectra rows
     ALIGNED); cluster split → **train 2,814,147 / test 312,682** (10.00%, leakage-controlled).
   - **Fleet retraining** on corrected data — the data×capacity sweep at the **026 recipe**:
-    64k=medium **10.05M**, 500k=xl **56.6M**, 3M=xxl **137.4M** (`train_3M_spingraph_xxl_026`
+    64k=`light` **10.05M**, 500k=`med` **56.6M**, 3M=`xl` **137.4M** (`train_3M_026`
     created). Plus the **64k ablation sweep** 025 (matrix-only) / 027 (focal) / 028 (cum-integral)
     / 029 (026+focal). **64k·026 finished** (early-stop ep98): held-out **test 0.0452 ppm /
     1.38 Hz / F1 0.909 / deg 0.950 ≥ val** → no overfitting.
