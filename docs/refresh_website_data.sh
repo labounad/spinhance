@@ -11,6 +11,7 @@
 set -e
 C=/gpfs/home/labounader/code/spinhance
 REB=/gpfs/group/shenvi/Users/labounader/spinhance/rebuild3M
+CONSOL_TEST=/gpfs/group/shenvi/Users/labounader/spinhance/consolidated_test  # contiguous held-out shards (fast eval)
 PY=/gpfs/home/labounader/micromamba/envs/spinhance/bin/python
 cd "$C"; export PYTHONPATH=.
 RUNS="$C/model/runs"
@@ -35,7 +36,7 @@ done
 if [ -n "$DIRS" ]; then
   echo "== held-out eval =="
   $PY -m model.experiments.eval_heldout --run-dir $DIRS \
-      --test-records "$REB/records_3M_test.json.gz" --parts "$REB/parts" \
+      --test-records "$CONSOL_TEST/records_test_consol.json.gz" --parts "$CONSOL_TEST/parts" \
       --device "${DEVICE:-cuda}" --limit "${LIMIT:-50000}"
 else
   echo "WARN: no best.pt checkpoints yet — skipping held-out eval"

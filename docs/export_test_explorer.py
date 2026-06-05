@@ -30,8 +30,8 @@ from model.inference.refine import refine_shifts
 
 REB = "/gpfs/group/shenvi/Users/labounader/spinhance/rebuild3M"
 RUNS = "/gpfs/group/shenvi/Users/labounader/spinhance/runs"
-TEST = REB + "/records_3M_test.json.gz"
-PARTS = REB + "/parts"
+TEST = "/gpfs/group/shenvi/Users/labounader/spinhance/consolidated_test/records_test_consol.json.gz"   # consolidated (contiguous) held-out
+PARTS = "/gpfs/group/shenvi/Users/labounader/spinhance/consolidated_test/parts"
 OUT = sys.argv[1] if len(sys.argv) > 1 else "docs/data/test_explorer.json"
 N = int(sys.argv[2]) if len(sys.argv) > 2 else 80
 G, P = 8, 16384
