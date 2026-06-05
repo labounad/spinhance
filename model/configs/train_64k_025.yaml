@@ -1,5 +1,5 @@
 # 025 recipe at 64k, on the CORRECTED (Audit-2) data — the ablation baseline for the
-# rebuild fleet: spingraph_decoder medium (~10M), matrix loss with shift weighted 2x,
+# rebuild fleet: spingraph_decoder size=light (~10M), matrix loss with shift weighted 2x,
 # WSD LR, 100 ep. NO peak channel, NO soft-equivalence. Identical to
 # train_64k_026_peaks_softequiv.yaml EXCEPT the two 026 ideas are removed, so
 # rebuild_64k_025 vs rebuild_64k_026 is a clean A/B on Idea 1 + Idea 2. 90 MHz only;
@@ -16,11 +16,7 @@ data:
 
 model:
   name: spingraph_decoder
-  size: medium
-  dim: 256
-  enc_layers: 2
-  dec_layers: 4
-  n_heads: 8
+  size: light              # model tier: 64k ~10M (TIER_PRESETS: stem medium, dim256/enc2/dec4)
   dropout: 0.1
 
 loss:

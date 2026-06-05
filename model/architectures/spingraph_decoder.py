@@ -31,7 +31,7 @@ import torch.nn as nn
 
 from model.architectures.base import SpinArchitecture
 from model.architectures.registry import ARCHITECTURES
-from model.architectures.resnet1d import SIZE_PRESETS, ResNet1DEncoder
+from model.architectures.resnet1d import SIZE_PRESETS, TIER_PRESETS, ResNet1DEncoder
 from model.heads.node_head import NodeHead
 from model.heads.pairwise_edge_head import PairwiseEdgeHead
 from model.schemas import ModelOutput, SpinBatch
@@ -59,10 +59,11 @@ def _sinusoidal_pe(length: int, dim: int) -> torch.Tensor:
 
 @ARCHITECTURES.register("spingraph_decoder")
 class SpinGraphDecoderModel(SpinArchitecture):
-    def __init__(self, size: str = "medium", n_groups: int = N_GROUPS,
+    def __init__(self, size: str = "light", n_groups: int = N_GROUPS,
                  n_deg_classes: int = len(DEFAULT_DEG_VOCAB),
-                 dim: int = 256, enc_layers: int = 2, dec_layers: int = 4,
-                 n_heads: int = 8, ffn_mult: int = 4, dropout: float = 0.1,
+                 dim: int | None = None, enc_layers: int | None = None,
+                 dec_layers: int | None = None,
+                 n_heads: int | None = None, ffn_mult: int = 4, dropout: float = 0.1,
                  node_hidden: int = 256, edge_hidden: int = 256,
                  region_feat_dim: int = 80, use_peak_channel: bool = False,
                  peak_min_frac: float = 0.01, peak_sigma: float = 2.0,
@@ -80,10 +81,27 @@ class SpinGraphDecoderModel(SpinArchitecture):
         # random groups and wreck the decoded shifts. Gate it here.
         self.use_soft_equiv = use_soft_equiv
         self.peak_min_frac = peak_min_frac
+        # Resolve the model tier. `size` is either a production tier name
+        # (light/med/xl — the single source of truth, see TIER_PRESETS) or, for
+        # back-compat, a raw conv-stem preset (tiny/small/medium/large/deep). An
+        # explicit dim/enc_layers/dec_layers/n_heads overrides the tier value.
+        tier = TIER_PRESETS.get(size)
+        if tier is not None:
+            stem_preset = tier["stem"]
+            dim = tier["dim"] if dim is None else dim
+            enc_layers = tier["enc_layers"] if enc_layers is None else enc_layers
+            dec_layers = tier["dec_layers"] if dec_layers is None else dec_layers
+            n_heads = tier["n_heads"] if n_heads is None else n_heads
+        else:
+            stem_preset = size
+            dim = 256 if dim is None else dim
+            enc_layers = 2 if enc_layers is None else enc_layers
+            dec_layers = 4 if dec_layers is None else dec_layers
+            n_heads = 8 if n_heads is None else n_heads
         in_channels = 1 + int(use_peak_channel) + int(use_cumint_channel)
         if use_peak_channel:
             self.register_buffer("peak_kernel", _gaussian_kernel(peak_sigma))
-        stem, stages, blocks = SIZE_PRESETS[size]
+        stem, stages, blocks = SIZE_PRESETS[stem_preset]
         self.encoder = ResNet1DEncoder(stem_channels=stem, stage_channels=stages,
                                        blocks_per_stage=blocks, in_channels=in_channels,
                                        **encoder_overrides)

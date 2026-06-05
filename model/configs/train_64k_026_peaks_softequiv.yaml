@@ -1,6 +1,6 @@
 # session026 — 025 recipe + two new architecture ideas, on the 64k ChEMBL set.
 # Base = train_64k_spingraph_shift2x_matrixonly.yaml (production 025: spingraph_decoder
-# medium, matrix loss with shift weighted 2x, WSD LR, 100 ep). Adds:
+# light (~10M), matrix loss with shift weighted 2x, WSD LR, 100 ep). Adds:
 #   Idea 1 — model.use_peak_channel: a 2nd conv input channel (peak-emphasis map
 #            derived in-model from the spectrum) as a shift-localization prior.
 #   Idea 2 — soft_equiv loss term: supervises the edge head's soft-equivalence flag
@@ -20,11 +20,7 @@ data:
 
 model:
   name: spingraph_decoder
-  size: medium
-  dim: 256
-  enc_layers: 2
-  dec_layers: 4
-  n_heads: 8
+  size: light              # model tier: 64k ~10M (TIER_PRESETS: stem medium, dim256/enc2/dec4)
   dropout: 0.1
   use_peak_channel: true     # Idea 1
   use_soft_equiv: true       # Idea 2 — expose soft_equiv_logits for the loss + decode

@@ -2,7 +2,7 @@
 REBUILD fleet (Audit-2). Two comparison axes the website toggles between:
 
     architecture sweep @ 64k :  025 / 026 / 027 / 028 / 029   (fixed size, vary recipe)
-    size sweep @ 026         :  64k(10M) / 500k(57M) / 3M(137M) (fixed recipe, vary size)
+    size sweep @ 026         :  64k/light(10M) / 500k/med(57M) / 3M/xl(137M) (fixed recipe, vary size)
 
 Each model carries `tier` + `recipe` + `params` so the viewers can build both views.
 Only FINISHED runs get held-out numbers; a still-training run is emitted as a 'training'
@@ -27,14 +27,14 @@ FLEET = [
     ("64k_028",  "rebuild_64k_028",     "64k · 028", "64k",  "028", "10M"),
     ("64k_029",  "rebuild_64k_029",     "64k · 029", "64k",  "029", "10M"),
     ("64k_030",  "rebuild_64k_030",     "64k · 030", "64k",  "030", "10M"),
-    ("500k_025", "rebuild_500k_xl_025", "500k · 025", "500k", "025", "57M"),
-    ("500k_026", "rebuild_500k_xl_026", "500k · 026", "500k", "026", "57M"),
-    ("500k_027", "rebuild_500k_xl_027", "500k · 027", "500k", "027", "57M"),
-    ("500k_028", "rebuild_500k_xl_028", "500k · 028", "500k", "028", "57M"),
-    ("500k_029", "rebuild_500k_xl_029", "500k · 029", "500k", "029", "57M"),
-    ("500k_030", "rebuild_500k_xl_030", "500k · 030", "500k", "030", "57M"),
-    ("3M_026",   "rebuild_3M_xxl_026",  "3M · 026",   "3M",   "026", "137M"),
-    ("3M_030",   "rebuild_3M_xxl_030",  "3M · 030",   "3M",   "030", "137M"),
+    ("500k_025", "rebuild_500k_025", "500k · 025", "500k", "025", "57M"),
+    ("500k_026", "rebuild_500k_026", "500k · 026", "500k", "026", "57M"),
+    ("500k_027", "rebuild_500k_027", "500k · 027", "500k", "027", "57M"),
+    ("500k_028", "rebuild_500k_028", "500k · 028", "500k", "028", "57M"),
+    ("500k_029", "rebuild_500k_029", "500k · 029", "500k", "029", "57M"),
+    ("500k_030", "rebuild_500k_030", "500k · 030", "500k", "030", "57M"),
+    ("3M_026",   "rebuild_3M_026",  "3M · 026",   "3M",   "026", "137M"),
+    ("3M_030",   "rebuild_3M_030",  "3M · 030",   "3M",   "030", "137M"),
 ]
 KEYS = ["shift_mae_ppm", "j_mae_hz", "presence_f1", "deg_acc_balanced"]
 

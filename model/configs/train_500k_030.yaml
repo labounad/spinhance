@@ -1,8 +1,8 @@
-# 027 recipe at xl (57M) — the 500k-tier companion to train_64k_027. = the 025 base
-# (matrix, shift 2x) PLUS focal modulation: focal CE on degeneracy + focal BCE on presence.
-# Used for the 500k tier via SAMPLE_N=500000. 90 MHz only; xl stability tuning kept.
+# 500k tier — "med 030" super model: = 029 (026 peak-channel + soft-equivalence + 027 focal)
+# PLUS 028's cumulative-integral input channel. Every winning ingredient. model size=med (~57M). 90 MHz.
+
 run:
-  name: spingraph_xl_027
+  name: spingraph_med_030_500k
   output_dir: model/runs
 
 data:
@@ -15,13 +15,11 @@ data:
 
 model:
   name: spingraph_decoder
-  size: xl
-  dim: 512
-  enc_layers: 4
-  dec_layers: 6
-  n_heads: 8
+  size: med                # model tier: 500k ~57M (TIER_PRESETS: stem deep, dim512/enc4/dec6)
   dropout: 0.1
-  # NO peak/soft-equiv — 027 is a 025-recipe + focal ablation.
+  use_peak_channel: true        # 026 Idea 1
+  use_soft_equiv: true          # 026 Idea 2
+  use_cumint_channel: true      # 028: cumulative-integral input channel
 
 loss:
   name: composite
@@ -34,8 +32,12 @@ loss:
         jmag: 1.0
         presence: 0.5
         deg: 0.5
-      deg_focal_gamma: 2.0       # focal CE on degeneracy (rare-class)
-      presence_focal_gamma: 2.0  # focal BCE on coupling presence
+      deg_focal_gamma: 2.0       # 027: focal CE on degeneracy
+      presence_focal_gamma: 2.0  # 027: focal BCE on presence
+    - name: soft_equiv          # 026 Idea 2
+      weight: 0.5
+      tol_ppm: 0.03
+      consistency_weight: 1.0
 
 training:
   epochs: 60

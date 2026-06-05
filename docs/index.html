@@ -838,7 +838,7 @@
                   guiding rule being to increase model size as long as it isn&rsquo;t overfitting.</p>
                 <div class="stage-detail">
                   <div class="detail-row"><span class="dl">Data tiers:</span><span class="dv">64k &rarr; 500k &rarr; 3M training molecules, all evaluated on the same global held-out test set</span></div>
-                  <div class="detail-row"><span class="dl">Model size:</span><span class="dv">Capacity scaled with the data &mdash; ~10M params at 64k, ~57M at 500k, ~137M at 3M (same <code>spingraph_decoder</code>, wider + deeper)</span></div>
+                  <div class="detail-row"><span class="dl">Model size:</span><span class="dv">Capacity scaled with the data &mdash; ~10M params at 64k (<code>light</code>), ~57M at 500k (<code>med</code>), ~137M at 3M (<code>xl</code>) &mdash; same <code>spingraph_decoder</code>, wider + deeper</span></div>
                   <div class="detail-row"><span class="dl">Yardstick:</span><span class="dv">A standardized held-out evaluation &mdash; every model scored on identical molecules it never saw, so tiers are directly comparable</span></div>
                 </div>
                 <div class="insight-box">

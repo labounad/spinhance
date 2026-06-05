@@ -7,7 +7,7 @@
 #   - batch 256: xl (57M) fits the A5000's 24GB at 256 (512 would OOM).
 # So this RUNS without crashing nodes, but is slow — it won't converge quickly; it's a
 # background "let it cook" run, not a fast result.
-#   sbatch --export=ALL,CONFIG=model/configs/train_3M_spingraph_xl_025.yaml,RUN_NAME=xl025_3M_a5000 -J xl025_3m model/scripts/train_hpc_3M.slurm
+#   sbatch --export=ALL,CONFIG=model/configs/train_3M_026.yaml,RUN_NAME=xl026_3M_a5000 -J xl026_3m model/scripts/train_hpc_3M.slurm
 #SBATCH -p alphafold
 #SBATCH --gres=gpu:rtxa5000:1
 #SBATCH --cpus-per-task=8

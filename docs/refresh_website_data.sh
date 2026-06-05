@@ -18,8 +18,8 @@ RUNS="$C/model/runs"
 # The full fleet: 64k + 500k recipe sweeps (025-030) and the 3M tiers (026/030).
 # Exact names skip the cancelled rebuild_3M_xl / rebuild_500k_030(legacy). Finished-only guard below.
 FLEET_NAMES="rebuild_64k_025 rebuild_64k_026 rebuild_64k_027 rebuild_64k_028 rebuild_64k_029 rebuild_64k_030 \
-rebuild_500k_xl_025 rebuild_500k_xl_026 rebuild_500k_xl_027 rebuild_500k_xl_028 rebuild_500k_xl_029 rebuild_500k_xl_030 \
-rebuild_3M_xxl_026 rebuild_3M_xxl_030"
+rebuild_500k_025 rebuild_500k_026 rebuild_500k_027 rebuild_500k_028 rebuild_500k_029 rebuild_500k_030 \
+rebuild_3M_026 rebuild_3M_030"
 
 # 1. standardized held-out eval on the leakage-controlled 10% PubChem test split.
 #    Every run with a best.pt, in ONE process (the held-out spectra are preloaded ONCE and

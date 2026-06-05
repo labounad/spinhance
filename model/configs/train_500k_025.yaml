@@ -1,15 +1,11 @@
-# PRELIMINARY 3M+ run — "xl 025": session025's recipe at xl scale, on the full
-# PubChem set. Deliberately NOT the 026 features (peak channel / soft-equiv are
-# still being validated in session026) so this isolates the effect of MORE DATA +
-# a BIGGER MODEL on the proven 025 matrix recipe.
-#   model : spingraph_decoder size=xl (deeper/wider conv stem) + dim512 enc4 dec6
-#           => ~57M params, ~5.6x the 10M medium production model.
-#   data  : PubChem 3.2M, 90 MHz ONLY (hard input constraint), stacked part_<k>.npy
-#           shards (data.parts) keyed to spin_systems_pubchem.json.gz by record order.
-#   loss  : matrix only, shift weighted 2x (identical to 025).
-# Fewer epochs than the 64k runs: 50x more data converges in far fewer passes.
+# 500k tier — "med 025": the 025 matrix recipe at the med (~57M) capacity on the
+# 500k-molecule data tier. Isolates more-data + bigger-model vs the 64k/light 025 run.
+#   model : spingraph_decoder size=med (TIER_PRESETS: deep conv stem + dim512/enc4/dec6, ~57M)
+#   data  : PubChem 90 MHz ONLY (hard input constraint), stacked part_<k>.npy shards.
+#   loss  : matrix only, shift weighted 2x (identical recipe to the 64k 025).
+
 run:
-  name: spingraph_xl_025_3M
+  name: spingraph_med_025_500k
   output_dir: model/runs
 
 data:
@@ -22,11 +18,7 @@ data:
 
 model:
   name: spingraph_decoder
-  size: xl
-  dim: 512
-  enc_layers: 4
-  dec_layers: 6
-  n_heads: 8
+  size: med                # model tier: 500k ~57M (TIER_PRESETS: stem deep, dim512/enc4/dec6)
   dropout: 0.1
   # NO use_peak_channel here — keep this a clean 025-recipe scale-up.
 

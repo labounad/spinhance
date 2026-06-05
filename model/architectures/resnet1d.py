@@ -26,10 +26,32 @@ SIZE_PRESETS = {
     "small":  (24, (32, 64, 128, 192), (1, 1, 1, 1)),
     "medium": (32, (64, 128, 256, 512), (2, 2, 2, 2)),
     "large":  (48, (96, 192, 384, 768), (2, 2, 3, 2)),
-    # xl: deeper/wider conv stem for the 3M+ PubChem regime. Paired with the
-    # transformer at dim=512, enc=4, dec=6 this lands at ~50M params (the "48M
-    # tier") — ~5x the medium production model, justified by 50x more data.
-    "xl":     (64, (128, 256, 512, 768), (2, 3, 4, 3)),
+    # "deep": deeper/wider conv stem for the 500k/3M PubChem regimes (the `med`
+    # and `xl` model tiers below). Both tiers share this stem and differ only in
+    # the transformer width/depth.
+    "deep":   (64, (128, 256, 512, 768), (2, 3, 4, 3)),
+}
+
+# ---------------------------------------------------------------------------
+# Model tiers — the SINGLE SOURCE OF TRUTH for the data-scaling fleet.
+#
+# A *tier* fully defines a production model size: the conv-stem preset (above)
+# PLUS the transformer width/depth. Configs select a tier via `model.size` and
+# normally specify nothing else size-related; the values here are authoritative.
+#
+#   tier   data tier   params   stem      dim / enc / dec
+#   ----   ---------   ------   -------    ---------------
+#   light  64k         ~10M     medium     256 / 2 / 4
+#   med    500k        ~57M     deep       512 / 4 / 6
+#   xl     3M          ~137M    deep       768 / 6 / 8
+#
+# (`tiny`/`small`/`medium`/`large`/`deep` above remain available as raw conv-stem
+#  presets for back-compat / experiments; tier names take precedence.)
+# ---------------------------------------------------------------------------
+TIER_PRESETS = {
+    "light": {"stem": "medium", "dim": 256, "enc_layers": 2, "dec_layers": 4, "n_heads": 8},
+    "med":   {"stem": "deep",   "dim": 512, "enc_layers": 4, "dec_layers": 6, "n_heads": 8},
+    "xl":    {"stem": "deep",   "dim": 768, "enc_layers": 6, "dec_layers": 8, "n_heads": 8},
 }
 
 

@@ -3,7 +3,7 @@
 # (~33GB) contiguous stacked-shard dir, so we preload it into RAM (fast: a few big
 # sequential reads, not 3200 random ones) with modest --mem — no GPFS I/O storm, no
 # 210GB array. Submit:
-#   sbatch --export=ALL,CONFIG=model/configs/train_500k_light_025.yaml,RUN_NAME=light_025_bundle,BUNDLE=/gpfs/group/shenvi/Users/labounader/spinhance/legacy/bundle_500k_s0 \
+#   sbatch --export=ALL,CONFIG=model/configs/train_500k_025.yaml,RUN_NAME=med_025_bundle,BUNDLE=/gpfs/group/shenvi/Users/labounader/spinhance/legacy/bundle_500k_s0 \
 #          -J light025b model/scripts/train_hpc_bundle.slurm
 #SBATCH -p alphafold
 #SBATCH --gres=gpu:rtxa5000:1

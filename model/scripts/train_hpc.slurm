@@ -1,7 +1,7 @@
 #!/bin/bash
 # Garibaldi HPC GPU training for SpinHance (PubChem 3M+, 90 MHz).
 # Submit:
-#   sbatch --export=ALL,CONFIG=model/configs/train_3M_spingraph_xl_025.yaml,RUN_NAME=xl025_3M_hpc \
+#   sbatch --export=ALL,CONFIG=model/configs/train_500k_025.yaml,RUN_NAME=med025_500k_hpc \
 #          -J xl025 model/scripts/train_hpc.slurm
 # Data lives ON the HPC (no transfer); metrics write locally to model/runs/<id>/
 # (no live S3 dashboard — pull metrics.jsonl down to view). The CONFIG's data paths
