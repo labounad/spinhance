@@ -160,7 +160,7 @@
         <p>Predict the spin-system matrix straight from the spectrum, with the <b>chemical-shift error weighted 2×</b>
           because shifts are the hardest and most valuable target. No extra inputs, no special handling — this is the
           control every other recipe is measured against.</p>
-        <span class="res">64k held-out: shift <b>0.048</b> ppm · J 1.39 Hz · F1 0.908 · deg 0.938</span>
+        <span class="res">64k held-out: shift 0.047 ppm · J 1.07 Hz · F1 <b>0.911</b> · deg 0.944</span>
       </div>
 
       <div class="rec">
@@ -175,7 +175,7 @@
             their shifts drift apart, and averages them on output — so a degenerate pair renders as <b>one clean
             peak, not a fake split doublet</b>.</li>
         </ul>
-        <span class="res">64k held-out: shift <b>0.045</b> ppm · J 1.38 Hz · F1 <b>0.909</b> · deg <b>0.950</b></span>
+        <span class="res">64k held-out: shift <b>0.046</b> ppm · J <b>1.06</b> Hz · F1 <b>0.909</b> · deg <b>0.949</b></span>
       </div>
 
       <div class="rec">
@@ -186,7 +186,7 @@
           score well while being lazy on the rare cases. <b>Focal loss</b> down-weights the examples already predicted
           confidently, redirecting effort toward rare degeneracies (6H, 9H <i>tert</i>-butyls) and the sparse real
           couplings. Only the loss changes — same inputs as 025.</p>
-        <span class="res">64k held-out: shift <b>0.041</b> ppm · J <b>1.32</b> Hz · F1 0.898 · deg 0.946</span>
+        <span class="res">64k held-out: shift <b>0.037</b> ppm · J <b>0.97</b> Hz · F1 0.902 · deg 0.929</span>
       </div>
 
       <div class="rec">
@@ -197,7 +197,7 @@
           we want. But a local convolution sees peak <i>shapes</i>, not areas; it can't integrate. So we feed a second
           input channel — the spectrum's <b>running integral</b> — letting the model read relative areas directly and
           untangle the 2H-vs-1H confusion that shape alone can't.</p>
-        <span class="res">64k held-out: shift 0.048 ppm · J 1.39 Hz · F1 0.907 · deg 0.949</span>
+        <span class="res">64k held-out: shift 0.048 ppm · J 1.07 Hz · F1 0.907 · deg 0.941</span>
       </div>
 
       <div class="rec">
@@ -205,9 +205,8 @@
         <h3>Structure + focus</h3>
         <div class="builds">= 026 + 027</div>
         <p>The peak channel and soft-equivalence of <b>026</b> together with the <b>focal loss</b> of 027 — testing
-          whether sharpening the hard cases stacks on top of the structural priors. At 64k it gave the lowest shift
-          error of the five.</p>
-        <span class="res">64k held-out: shift <b>0.039</b> ppm · J 1.32 Hz · F1 0.891 · deg 0.944</span>
+          whether sharpening the hard cases stacks on top of the structural priors. it posts the best degeneracy balanced-accuracy of the five (0.955).</p>
+        <span class="res">64k held-out: shift <b>0.039</b> ppm · J 1.01 Hz · F1 0.889 · deg <b>0.955</b></span>
       </div>
 
       <div class="rec super">
