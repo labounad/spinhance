@@ -188,19 +188,25 @@ contains the peaks, so the gain is a convergence/robustness prior rather than ne
 information — kept default-off.
 
 ### 10. Soft-equivalence — **learned edge flag + shift averaging, not free regression**
-Accidentally-degenerate groups (same shift δ, different couplings → distinct groups)
-were drifting to e.g. 3.59/3.61, rendering a spurious split doublet instead of one
-peak — a *qualitative* failure that mean shift-MAE hides. Decision: encode it as a
-**symmetric per-edge binary flag** (3rd `PairwiseEdgeHead` logit →
-`ModelOutput.auxiliary`), supervised by `SoftEquivLoss` = BCE vs the on-the-fly label
-`|δᵢ−δⱼ|≤tol` (tol in standardized space via injected `shift_std`) **plus** a
-differentiable consistency penalty pulling flagged pairs' predicted shifts together;
-at decode, flagged groups are clustered and **hard-averaged** to a shared shift.
-Rejected alternatives: (a) hard-average only (a false-positive flag would wrongly
-merge two genuinely-different shifts — so we also train the soft penalty and gate
-averaging on the predicted flag); (b) a separate "merge head" over nodes (edges
-compose naturally with the existing symmetric edge head and the triu matrix order).
-Label is derived in the loss from `batch.shifts` — no schema/dataset change.
+Chemically-equivalent groups kept as distinct nodes (same canonical **symmetry orbit**
+— identical shift δ but different coupling rows, e.g. AA'BB') were drifting to e.g.
+3.59/3.61, rendering a spurious split doublet instead of one peak — a *qualitative*
+failure that mean shift-MAE hides. Decision: encode it as a **symmetric per-edge binary
+flag** (3rd `PairwiseEdgeHead` logit → `ModelOutput.auxiliary`), supervised by
+`SoftEquivLoss` = BCE vs the **symmetry-orbit** label `batch.soft_equiv_target` (a
+`(G,G)` boolean built in the dataset from `equiv_orbit`: 1 iff two distinct groups share
+an orbit — determined purely by molecular symmetry, **NOT** a shift-proximity threshold,
+so the head learns the real, learnable equivalence signal rather than "shifts are close")
+**plus** a differentiable consistency penalty pulling flagged pairs' predicted shifts
+together; at decode, groups whose *predicted* flag fires are clustered and **hard-averaged**
+to a shared shift. Rejected alternatives: (a) **shift-proximity label** `|δᵢ−δⱼ|≤tol` — the
+original design; replaced because it conflates genuine symmetry with accidental overlap and
+isn't a clean learnable target (`tol_ppm` lingers as an ignored legacy kwarg); (b) hard-average
+only (a false-positive flag would wrongly merge two genuinely-different shifts — so we also
+train the soft penalty and gate averaging on the predicted flag); (c) a separate "merge head"
+over nodes (edges compose naturally with the existing symmetric edge head and the triu matrix
+order). Label is the symmetry orbit, carried as `batch.soft_equiv_target` (a schema/dataset
+addition) — deliberately independent of the predicted/actual shift values.
 
 ### 11. Large-corpus data path — **stacked shards + lazy mmap** (PubChem 3M+)
 ChEMBL 64k uses one `.npy` per molecule; PubChem 3.2M would be millions of tiny

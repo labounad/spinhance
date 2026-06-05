@@ -4,9 +4,11 @@
 #   Idea 1 — model.use_peak_channel: a 2nd conv input channel (peak-emphasis map
 #            derived in-model from the spectrum) as a shift-localization prior.
 #   Idea 2 — soft_equiv loss term: supervises the edge head's soft-equivalence flag
-#            (|delta_i - delta_j| <= 0.03 ppm) and pulls those predicted shifts
-#            together; decode averages flagged groups so a degenerate pair renders
-#            as one peak, not a split doublet.
+#            against the canonical SYMMETRY-ORBIT label (chemically-equivalent groups
+#            kept as distinct nodes, e.g. AA'BB' — determined by molecular symmetry,
+#            NOT a shift-proximity threshold) and pulls those pairs' predicted shifts
+#            together; decode averages the groups whose PREDICTED flag fires so a
+#            degenerate pair renders as one peak, not a split doublet.
 # Everything else identical to 025 for an apples-to-apples comparison.
 run:
   name: spingraph_026_peaks_softequiv
@@ -36,10 +38,11 @@ loss:
         jmag: 1.0
         presence: 0.5
         deg: 0.5
-    - name: soft_equiv          # Idea 2
+    - name: soft_equiv          # Idea 2: BCE on the edge equivalence flag vs the canonical
+                                #   SYMMETRY-ORBIT label (chemically-equivalent groups kept as
+                                #   distinct nodes; NOT shift proximity) + a shift-consistency pull.
       weight: 0.5
-      tol_ppm: 0.03             # groups within 0.03 ppm are soft-equivalent
-      consistency_weight: 1.0   # pull predicted shifts of soft-equiv pairs together
+      consistency_weight: 1.0   # pull orbit-equivalent pairs' predicted shifts together
 
 training:
   epochs: 100
