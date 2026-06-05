@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import numpy as np
 
+from model.evaluation.symmetry import align_pred_couplings
+
 __all__ = ["decode", "compute_metrics", "evaluate_output"]
 
 _TRIU_CACHE: dict[int, tuple] = {}
@@ -97,9 +99,25 @@ def compute_metrics(pred, target, standardizer, vocab, presence_thresh=0.5):
     shift_mae = float(np.abs(dec["shifts"] - tgt_shifts).mean())
 
     iu = _triu(G)
-    pred_jmag_ut = dec["couplings"][:, iu[0], iu[1]]
-    m = tgt_present
-    j_mae = float(np.abs(pred_jmag_ut[m] - tgt_jmag[m]).mean()) if m.any() else 0.0
+    # symmetry-aware J-MAE: align the predicted coupling matrix to the target under the
+    # canonical-sort tie-break group (equal shift+degeneracy) before scoring, so a valid
+    # relabeling of chemically-equivalent groups is not penalized. See model.evaluation.symmetry.
+    if "cm_full" in target:
+        tgt_cm = standardizer.inverse_j(target["cm_full"]) * target["mask_full"]   # (B,G,G) Hz
+        tmask = target["mask_full"]
+        pred_cm = dec["couplings"]                                                 # (B,G,G) Hz
+        deg_cls = target["deg_class"]
+        num = den = 0.0
+        for b in range(pred_cm.shape[0]):
+            ap = align_pred_couplings(pred_cm[b], tgt_cm[b], tmask[b], tgt_shifts[b], deg_cls[b])
+            mb = tmask[b][iu[0], iu[1]]
+            num += float((np.abs(ap[iu[0], iu[1]] - tgt_cm[b][iu[0], iu[1]]) * mb).sum())
+            den += float(mb.sum())
+        j_mae = num / den if den > 0 else 0.0
+    else:                                                          # fallback: element-wise (no full matrices)
+        pred_jmag_ut = dec["couplings"][:, iu[0], iu[1]]
+        m = tgt_present
+        j_mae = float(np.abs(pred_jmag_ut[m] - tgt_jmag[m]).mean()) if m.any() else 0.0
 
     pp = dec["presence"] > 0.5
     tp = (pp & tgt_present).sum()
@@ -155,6 +173,8 @@ def _np_target(batch):
         "shifts": batch.shifts.detach().float().cpu().numpy(),
         "j_mag": cm[:, iu[0], iu[1]],
         "j_presence": mask[:, iu[0], iu[1]],
+        "cm_full": cm,                       # (B,G,G) full matrices for symmetry-aware J
+        "mask_full": mask,
         "deg_class": batch.degeneracy_classes.detach().cpu().numpy(),
     }
 
