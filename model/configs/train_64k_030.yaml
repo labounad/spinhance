@@ -30,6 +30,7 @@ loss:
   name: composite
   terms:
     - name: matrix
+      sym_jmag: true            # symmetry-aware (automorphism-invariant) coupling term
       weight: 1.0
       weights:                  # shift weighted 2x
         shift: 2.0

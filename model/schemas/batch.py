@@ -53,6 +53,12 @@ class SpinBatch:
     # NOT shift proximity. None for legacy batches (the soft-equiv loss then no-ops).
     soft_equiv_target: torch.Tensor | None = None
 
+    # (B, K, G) int: the within-symmetry-orbit node label permutations (row 0 = identity,
+    # padded with identity). The canonical shift-sort breaks ties among chemically-equivalent
+    # groups arbitrarily, so the symmetry-aware J-loss minimizes the coupling term over these
+    # relabelings (model.losses.matrix_loss, sym_jmag). None for legacy batches (no-op).
+    sym_perms: torch.Tensor | None = None
+
     region_tokens: RegionTokenBatch | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -101,6 +107,8 @@ class SpinBatch:
         assert self.degeneracy_values.shape == (B, G), self.degeneracy_values.shape
         if self.soft_equiv_target is not None:
             assert self.soft_equiv_target.shape == (B, G, G), self.soft_equiv_target.shape
+        if self.sym_perms is not None:
+            assert self.sym_perms.shape[0] == B and self.sym_perms.shape[2] == G, self.sym_perms.shape
         if self.spectrum_ref is not None:
             assert self.spectrum_ref.shape == (B, P), self.spectrum_ref.shape
         assert len(self.molecule_ids) == B, (len(self.molecule_ids), B)

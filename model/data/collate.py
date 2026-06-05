@@ -32,6 +32,7 @@ def collate_spin_batch(samples) -> SpinBatch:
         degeneracy_values=stack("degeneracy_values"),
         soft_equiv_target=(stack("soft_equiv_target")
                            if "soft_equiv_target" in samples[0] else None),
+        sym_perms=(stack("sym_perms") if "sym_perms" in samples[0] else None),
         molecule_ids=[s["mol_id"] for s in samples],
         smiles=[s.get("smiles") for s in samples],
         region_tokens=region_tokens,

@@ -11,6 +11,9 @@ built from the canonical-ordered upper-triangle encoding.
 """
 from __future__ import annotations
 
+import itertools
+import math
+
 import numpy as np
 import torch
 from torch.utils.data import Dataset
@@ -18,6 +21,44 @@ from torch.utils.data import Dataset
 from model.data.splits import canonical_order
 from model.data.standardization import DegeneracyVocab, Standardizer
 from model.data.transforms import augment_spectrum, bucket_key, encode_target
+
+#: max number of symmetry-orbit relabelings kept per sample for the symmetry-aware J-loss
+SYM_PERMS_MAX = 8
+
+
+def _orbit_perms(orbit, kmax=SYM_PERMS_MAX):
+    """(G,) per-group symmetry-orbit ids -> (kmax, G) int64 array of within-orbit node
+    relabelings (row 0 = identity, padded with identity). These are the canonical-sort's
+    arbitrary tie-breaks among chemically-equivalent groups; the symmetry-aware J-loss
+    minimizes the coupling term over them so a valid relabeling isn't penalized."""
+    orbit = np.asarray(orbit)
+    G = len(orbit)
+    ident = np.arange(G, dtype=np.int64)
+    classes = {}
+    for i, o in enumerate(orbit):
+        classes.setdefault(int(o), []).append(i)
+    multi = [idx for idx in classes.values() if len(idx) > 1]
+    perms = [ident]
+    if multi:
+        total = 1
+        for idx in multi:
+            total *= math.factorial(len(idx))
+        if total <= 64:                                  # cheap to enumerate; else identity-only
+            seen = {tuple(ident)}
+            per_class = [list(itertools.permutations(idx)) for idx in multi]
+            for combo in itertools.product(*per_class):
+                p = ident.copy()
+                for idx, order in zip(multi, combo):
+                    p[np.asarray(idx)] = np.asarray(order)
+                key = tuple(p)
+                if key not in seen:
+                    seen.add(key); perms.append(p)
+                if len(perms) >= kmax:
+                    break
+    perms = perms[:kmax]
+    while len(perms) < kmax:                             # pad with identity (harmless in the min)
+        perms.append(ident)
+    return np.stack(perms)                               # (kmax, G)
 
 # Worker-level RNG seed — set once per worker by worker_init_fn
 _WORKER_SEED: int = 0
@@ -102,12 +143,14 @@ class SpectrumMatrixDataset(Dataset):
         # canonical group order (same `order` as the shifts above). Zeros when the
         # record carries no equiv_orbit (legacy); the loss no-ops in that case.
         se_mat = np.zeros((G, G), dtype=np.float32)
+        sym_perms = np.tile(np.arange(G, dtype=np.int64), (SYM_PERMS_MAX, 1))   # identity-only (no-op)
         orb = r.get("equiv_orbit")
         if orb is not None and len(orb) == G:
             oc = np.asarray(orb, dtype=np.int64)[self._orders[i]]
             eq = oc[:, None] == oc[None, :]
             np.fill_diagonal(eq, False)
             se_mat = eq.astype(np.float32)
+            sym_perms = _orbit_perms(oc)                                        # (K,G) within-orbit relabelings
 
         item = {
             "spectrum":           torch.as_tensor(inp),                  # (P,)
@@ -118,6 +161,7 @@ class SpectrumMatrixDataset(Dataset):
             "degeneracy_classes": torch.from_numpy(t["deg_class"]),      # (G,) long
             "degeneracy_values":  torch.from_numpy(deg_values),          # (G,) long
             "soft_equiv_target":  torch.from_numpy(se_mat),              # (G,G) {0,1}
+            "sym_perms":          torch.from_numpy(sym_perms),           # (K,G) within-orbit relabelings
             "mol_id":             r["mol_id"],
             "smiles":             r.get("smiles"),
             "bucket_key":         self.bucket_keys[i],
