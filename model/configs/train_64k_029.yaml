@@ -33,10 +33,11 @@ loss:
         deg: 0.5
       deg_focal_gamma: 2.0       # 027 augmentation: focal CE on degeneracy
       presence_focal_gamma: 2.0  # 027 augmentation: focal BCE on presence
-    - name: soft_equiv          # 026 Idea 2
+    - name: soft_equiv          # Idea 2: BCE on the edge equivalence flag vs the canonical
+                                #   SYMMETRY-ORBIT label (chemically-equivalent groups kept as
+                                #   distinct nodes; NOT shift proximity) + a shift-consistency pull.
       weight: 0.5
-      tol_ppm: 0.03
-      consistency_weight: 1.0
+      consistency_weight: 1.0   # pull orbit-equivalent pairs' predicted shifts together
 
 training:
   epochs: 100

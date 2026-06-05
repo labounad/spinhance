@@ -31,8 +31,8 @@ The label comes from ``batch.soft_equiv_target`` (canonical symmetry orbit, buil
 in the dataset). Works only with architectures that emit
 ``auxiliary["soft_equiv_logits"]`` (the spingraph_decoder edge head) AND batches
 that carry ``soft_equiv_target``; a no-op zero loss otherwise so it stays
-composable. (``tol_ppm``/``shift_std`` are accepted for config compatibility but
-no longer used — the label is symmetry-derived, not a shift tolerance.)
+composable. (Legacy ``tol_ppm``/``shift_std`` kwargs are silently ignored via
+``**_ignore`` — the label is symmetry-derived, never a shift tolerance.)
 """
 from __future__ import annotations
 
@@ -48,9 +48,8 @@ from model.schemas import LossOutput, ModelOutput, SpinBatch
 class SoftEquivLoss(Loss):
     name = "soft_equiv"
 
-    def __init__(self, tol_ppm: float = 0.03, consistency_weight: float = 1.0,
-                 shift_std: float = 1.0, max_pos_weight: float = 50.0, **_ignore):
-        self.tol_std = float(tol_ppm) / float(shift_std)     # tolerance in standardized space
+    def __init__(self, consistency_weight: float = 1.0, max_pos_weight: float = 50.0,
+                 **_ignore):     # _ignore swallows legacy tol_ppm/shift_std (no longer used)
         self.consistency_weight = consistency_weight
         self.max_pos_weight = max_pos_weight
 

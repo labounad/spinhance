@@ -53,9 +53,11 @@ Two optional, default-off inductive biases (added in the 026 recipe):
   data-pipeline change. `ResNet1DEncoder` gains `in_channels`.
 - **`soft_equiv` loss** — `PairwiseEdgeHead` emits a 3rd per-edge logit
   (`ModelOutput.auxiliary["soft_equiv_logits"]`) flagging *soft-equivalent* groups
-  (same shift, different couplings — accidental degeneracy). `SoftEquivLoss`
-  supervises it (BCE vs `|δᵢ−δⱼ|≤tol`) + pulls those predicted shifts together;
-  `evaluation.metrics.decode` averages flagged groups so a degenerate pair renders
+  (chemically equivalent — same canonical symmetry orbit — but kept as distinct
+  nodes, e.g. AA'BB': identical shift, different coupling rows). `SoftEquivLoss`
+  supervises it (BCE vs the **symmetry-orbit** label `batch.soft_equiv_target`,
+  **not** shift proximity) + pulls those predicted shifts together;
+  `evaluation.metrics.decode` averages groups whose *predicted* flag fires so a degenerate pair renders
   as one peak, not a split doublet.
 
 ## Component registry
@@ -78,7 +80,7 @@ The three swappable layers are name-registered; build by string key
 | `matrix` | canonical supervised anchor: shift Huber + presence-masked J Huber + presence BCE + degeneracy CE (standardized space). Per-component `weights` (default `shift 1·jmag 1·presence .5·deg .5`; production overrides `shift: 2.0`). |
 | `hungarian` | permutation-invariant set-matched variant. **Hurts on this distinct-shift data — RESULTS §2; not used.** |
 | `surrogate_spectral` | renders the predicted matrix through the frozen `surrogate` renderer → `w1_weight·W1 + cosine_weight·(1−cos)` vs the (clean) target spectrum. Gradients flow through the frozen teacher; ramp in via `composite`. |
-| `soft_equiv` | edge-flag BCE (`\|δᵢ−δⱼ\|≤tol_ppm`) + shift-consistency penalty for accidental-degeneracy pairs. No-op unless the arch emits `auxiliary["soft_equiv_logits"]`. |
+| `soft_equiv` | edge-flag BCE vs the canonical **symmetry-orbit** label (`batch.soft_equiv_target`; chemically-equivalent groups, *not* shift proximity) + a shift-consistency penalty pulling those pairs together. No-op unless the arch emits `auxiliary["soft_equiv_logits"]`. |
 | `composite` | config-driven weighted sum of the above with per-term curriculum (`init_weight`→`weight` over `start_epoch`/`ramp_epochs`, optional `decay_start_epoch`/`decay_epochs`→`end_weight`). The trainer drives it via `set_epoch`. |
 
 **Renderers** (`model/renderers/`):
