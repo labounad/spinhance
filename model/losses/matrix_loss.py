@@ -48,7 +48,8 @@ class MatrixLoss(Loss):
 
     def __init__(self, weights=None, huber_beta: float = 1.0,
                  deg_class_weight=None, presence_pos_weight=None,
-                 deg_focal_gamma: float = 0.0, presence_focal_gamma: float = 0.0):
+                 deg_focal_gamma: float = 0.0, presence_focal_gamma: float = 0.0,
+                 sym_jmag: bool = False):
         self.w = dict(_DEFAULT_WEIGHTS)
         if weights:
             self.w.update(weights)
@@ -57,6 +58,9 @@ class MatrixLoss(Loss):
         self.presence_pos_weight = _as_tensor(presence_pos_weight)
         self.deg_focal_gamma = float(deg_focal_gamma)
         self.presence_focal_gamma = float(presence_focal_gamma)
+        # symmetry-aware coupling term: score J against the best within-orbit relabeling
+        # (batch.sym_perms), so swapping chemically-equivalent groups isn't penalized.
+        self.sym_jmag = bool(sym_jmag)
 
     def __call__(self, output: ModelOutput, batch: SpinBatch) -> LossOutput:
         device = output.shifts.device
@@ -70,8 +74,26 @@ class MatrixLoss(Loss):
 
         shift = F.smooth_l1_loss(output.shifts, batch.shifts, beta=self.huber_beta)
 
-        jmag_el = F.smooth_l1_loss(pred_j, tgt_j, beta=self.huber_beta, reduction="none")
-        jmag = (jmag_el * mask).sum() / mask.sum().clamp_min(1.0)
+        sym = getattr(batch, "sym_perms", None)
+        if self.sym_jmag and sym is not None:
+            # min the coupling term over the within-orbit label relabelings: permute the
+            # predicted coupling matrix by each perm, score vs the (fixed canonical) target,
+            # take the per-sample best. Identity is row 0, so it's never worse than plain J.
+            predC = output.coupling_matrix()                              # (B,G,G)
+            B, K, _ = sym.shape
+            bi = torch.arange(B, device=device)
+            per_k = []
+            for k in range(K):
+                pk = sym[:, k, :]                                          # (B,G)
+                predC_k = predC[bi[:, None, None], pk[:, :, None], pk[:, None, :]]  # (B,G,G)
+                el = F.smooth_l1_loss(predC_k[:, iu[0], iu[1]], tgt_j,
+                                      beta=self.huber_beta, reduction="none")       # (B,E)
+                per_k.append((el * mask).sum(dim=1))                       # (B,)
+            best = torch.stack(per_k, dim=1).min(dim=1).values            # (B,)
+            jmag = (best / mask.sum(dim=1).clamp_min(1.0)).mean()
+        else:
+            jmag_el = F.smooth_l1_loss(pred_j, tgt_j, beta=self.huber_beta, reduction="none")
+            jmag = (jmag_el * mask).sum() / mask.sum().clamp_min(1.0)
 
         ppw = self.presence_pos_weight
         if ppw is not None:
