@@ -127,9 +127,10 @@ with st.sidebar:
     runs_root = st.text_input("Runs directory", default_root,
                               help="Local path to the runs/ dir (rsync from HPC, or an s3:// session).")
     runs = rr.list_runs(runs_root)
-    flt = st.text_input("Filter", "rebuild", help="Substring match on run id (blank = all). "
-                        "Defaults to the corrected-data 'rebuild_*' fleet; use 'v2_' for the "
-                        "pre-regeneration runs.")
+    flt = st.text_input("Filter", "_sym", help="Substring match on run id (blank = all runs). "
+                        "Defaults to '_sym' = the current symmetry-aware retrain fleet on the "
+                        "consolidated data; clear it (or type 'rebuild' / 'v2_') to see the older, "
+                        "superseded runs.")
     if flt.strip():
         runs = [d for d in runs if flt.strip() in d.name]
     hide_cancelled = st.toggle("Hide cancelled", value=True,
