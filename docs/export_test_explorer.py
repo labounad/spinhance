@@ -26,7 +26,7 @@ from model.data.standardization import DegeneracyVocab, Standardizer
 from model.architectures import build_architecture
 from model.evaluation.metrics import decode, _np_pred
 from model.evaluation.symmetry import align_pred_couplings
-from model.inference.refine import refine_shifts
+from model.inference.refine import refine_system
 
 REB = "/gpfs/group/shenvi/Users/labounader/spinhance/rebuild3M"
 RUNS = "/gpfs/group/shenvi/Users/labounader/spinhance/runs"
@@ -90,6 +90,14 @@ for key, name, label in FLEET:
     if p:
         MODELS[key] = p
         MODEL_LABELS.append((key, label))
+
+# optional tier filter (env EXPLORER_TIERS="64k" -> baseline + 64k models only): focuses
+# the explorer + cuts per-task work. baseline is always kept as the reference floor.
+_tiers = os.environ.get("EXPLORER_TIERS")
+if _tiers:
+    keep = set(_tiers.split(","))
+    MODEL_LABELS = [(k, l) for k, l in MODEL_LABELS if k == "baseline" or k.split("_")[0] in keep]
+    MODELS = {k: v for k, v in MODELS.items() if k == "baseline" or k.split("_")[0] in keep}
 
 vocab = DegeneracyVocab()
 loaded = {}
@@ -209,10 +217,14 @@ def emit(rid, smi, sh, cp, dg, spec):
         # test-time refinement (analysis-by-synthesis): polish the predicted shifts to
         # match the INPUT spectrum (couplings/degeneracy fixed) — a "legal" correction
         # that uses only the 90 MHz input. Render + mesh the post-corrected spectrum.
-        refined, rinfo = refine_shifts(psh, pcp, pdg, spec, field_mhz=90.0, trust=0.3)
+        # test-time refinement (joint shift+J: graduated non-convexity + centroid coarse-fix).
+        # The refined overlay reflects BOTH corrected shifts AND corrected couplings.
+        refined, ref_cp, rinfo = refine_system(psh, pcp, pdg, spec, field_mhz=90.0)
         rsh = np.sort(refined)[::-1]
-        _, fspec = simulate_spectrum_composite(refined, pcp, pdg, 90.0, points=P)
+        _, fspec = simulate_spectrum_composite(refined, ref_cp, pdg, 90.0, points=P)
         fx, fy = rdp_curve(fspec, lo, hi, sc)
+        rpo = np.argsort(-refined)
+        rpJ_al = align_pred_couplings(ref_cp[np.ix_(rpo, rpo)], tJ, tmask, tsh, tdg)
         preds[k] = {"pred_shift": [round(float(x), 3) for x in psh2], "pred_deg": [int(x) for x in pdg2],
                     "pred_J": [[round(float(pJ[i, j]), 2) for j in range(G)] for i in range(G)],
                     "rx": rx, "rendered": ry,
@@ -220,7 +232,8 @@ def emit(rid, smi, sh, cp, dg, spec):
                     "ref_skipped": bool(rinfo.get("skipped", False)),
                     "shift_mae": round(float(np.mean(np.abs(tsh - psh2))), 4),
                     "ref_shift_mae": round(float(np.mean(np.abs(tsh - rsh))), 4),
-                    "j_mae": round(float(np.mean(np.abs(tJ[iu][mm] - pJ_al[iu][mm]))) if mm.any() else 0.0, 3)}
+                    "j_mae": round(float(np.mean(np.abs(tJ[iu][mm] - pJ_al[iu][mm]))) if mm.any() else 0.0, 3),
+                    "ref_j_mae": round(float(np.mean(np.abs(tJ[iu][mm] - rpJ_al[iu][mm]))) if mm.any() else 0.0, 3)}
     ix, iy = rdp_curve(spec, lo, hi, sc)                   # the input (target) adaptive mesh
     return {"id": rid, "smiles": smi or "", "n_spins": int(np.sum(dg)), "src": "pubchem",
             "x0": round(lo, 3), "x1": round(hi, 3),
