@@ -44,7 +44,7 @@ training:
   lr_stable_frac: 0.50
   lr_min_factor: 0.30
   grad_clip: 0.5            # tighter (was 1.0) to clamp the gradient spike that blew up ep7
-  patience: 8
+  patience: 30               # WSD: must bridge the peak-LR plateau into the decay (~ep30+); 8 stopped runs mid-plateau, undertrained
   # LOW worker count on purpose: each persistent DataLoader worker (train AND val)
   # forks a copy of the records list, and Python refcounting breaks copy-on-write,
   # so 8 workers x ~1GB/500k-record copy thrashes a 16GB g6.xlarge. 2 is plenty
