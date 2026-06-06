@@ -222,7 +222,7 @@ def emit(rid, smi, sh, cp, dg, spec):
         # that uses only the 90 MHz input. Render + mesh the post-corrected spectrum.
         # test-time refinement (joint shift+J: graduated non-convexity + centroid coarse-fix).
         # The refined overlay reflects BOTH corrected shifts AND corrected couplings.
-        refined, ref_cp, rinfo = refine_system(psh, pcp, pdg, spec, field_mhz=90.0)
+        refined, ref_cp, rinfo = refine_system(psh, pcp, pdg, spec, field_mhz=90.0, max_cost=5e10)  # raise guard above the explorer set's max eigh_cost (1.37e10; renders <=2.2s) so all refine
         rsh = np.sort(refined)[::-1]
         _, fspec = simulate_spectrum_composite(refined, ref_cp, pdg, 90.0, points=P)
         fx, fy = rdp_curve(fspec, lo, hi, sc)
