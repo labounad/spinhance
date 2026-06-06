@@ -842,15 +842,16 @@
                   <div class="detail-row"><span class="dl">Yardstick:</span><span class="dv">A standardized held-out evaluation &mdash; every model scored on identical molecules it never saw, so tiers are directly comparable</span></div>
                 </div>
                 <div class="insight-box">
-                  <b>Where we are:</b> the 64k tier is trained and scored on the held-out set; the 500k (57M) and
-                  3M (137M) models are training now on the Scripps HPC. Their curves and per-molecule predictions
-                  will populate the viewers below as they finish.
+                  <b>Where we are:</b> the 64k tier is trained and scored on the held-out set, and the first
+                  <b>500k (med, 57M)</b> model is in &mdash; it is the best yet (<b>0.025 ppm</b> shift &middot;
+                  <b>0.65 Hz</b> J held-out, well past the 64k tier). The rest of the 500k sweep and the 3M tier
+                  are training now; their curves and per-molecule predictions populate the viewers as they finish.
                 </div>
               </div>
               <div class="metrics-stack">
-                <div class="metric-row"><div class="metric-val">0.047</div><div class="metric-lbl">ppm shift MAE<br><span style="font-size:11px;color:var(--ink-faint)">64k tier &middot; held-out (best run)</span></div></div>
+                <div class="metric-row"><div class="metric-val">0.025</div><div class="metric-lbl">ppm shift MAE<br><span style="font-size:11px;color:var(--ink-faint)">500k &middot; held-out (best run)</span></div></div>
                 <div class="metric-row"><div class="metric-val">10&rarr;57&rarr;137M</div><div class="metric-lbl">params per tier<br><span style="font-size:11px;color:var(--ink-faint)">64k / 500k / 3M</span></div></div>
-                <div class="metric-row"><div class="metric-val">3</div><div class="metric-lbl">data tiers<br><span style="font-size:11px;color:var(--ink-faint)">500k &amp; 3M training now</span></div></div>
+                <div class="metric-row"><div class="metric-val">3</div><div class="metric-lbl">data tiers<br><span style="font-size:11px;color:var(--ink-faint)">64k + 500k scored &middot; 3M training</span></div></div>
               </div>
             </div>
           </div>
