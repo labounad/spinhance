@@ -78,6 +78,31 @@ def test_preload_serves_from_ram(tmp_path):
     assert np.array_equal(ss[3], flat[3])               # non-preloaded -> mmap fallback
 
 
+def test_preload_cache_mmap_roundtrip(tmp_path):
+    """A preload cache is written as a bare .npy (+ rows sidecar) and re-loaded via
+    mmap on the next run, so co-located ranks share one copy. Values must survive
+    the round-trip and the served array must be a memmap (shared), not a private copy."""
+    flat = _write_parts(tmp_path, sizes=[3, 4, 3])
+    cache = tmp_path / "preload.npy"
+    want = [0, 1, 5, 9]
+    ss = StackedSpectra(tmp_path)
+    ss.preload(want, cache=str(cache))                  # build path -> writes cache
+    assert cache.exists() and (tmp_path / "preload.npy.rows.npy").exists()
+
+    ss2 = StackedSpectra(tmp_path)                      # fresh source -> load path (mmap)
+    ss2.preload(want, cache=str(cache))
+    assert isinstance(ss2._ram, np.memmap)             # shared via page cache, not a copy
+    for i in want:
+        assert np.array_equal(ss2[i], flat[i])
+    # a cache missing a requested row is rejected as stale
+    ss3 = StackedSpectra(tmp_path)
+    try:
+        ss3.preload([0, 1, 5, 9, 2], cache=str(cache))
+        assert False, "expected stale-cache ValueError"
+    except ValueError as e:
+        assert "missing" in str(e)
+
+
 def test_parts_sorted_numerically_not_lexically(tmp_path):
     # 12 parts: lexical sort would put part_10 before part_2
     _write_parts(tmp_path, sizes=[1] * 12)

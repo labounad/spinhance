@@ -18,6 +18,14 @@ rows fit in RAM, call :meth:`preload` — it reads each shard **sequentially**
 (fast on GPFS) once and serves rows from a RAM array thereafter. The array is
 built in the main process before the DataLoader forks, so workers share it
 copy-on-write (read-only) without duplicating it.
+
+**Shared cache (multi-GPU on one node):** :meth:`preload` can persist/restore the
+materialized array via ``cache=<path>``. The cache is a bare ``.npy`` (+ a tiny
+``<path>.rows.npy`` sidecar), so a later run mmaps it (``mmap_mode='r'``) and the
+ranks co-located on a node share ONE copy through the OS page cache — vital for a
+2-GPU node, where two private ~184 GB arrays would OOM. On mmap load the pages are
+warmed in once (sequential read) so per-row access is RAM-speed, not random GPFS
+faults. Legacy ``.npz`` caches still load (full per-process read).
 """
 from __future__ import annotations
 
@@ -29,6 +37,20 @@ from pathlib import Path
 import numpy as np
 
 _PART_RE = re.compile(r"part_(\d+)\.npy$")
+
+
+def _warm_pagecache(arr, chunk: int = 8192) -> None:
+    """Sequentially touch every row of a memory-mapped array so its pages become
+    resident in the OS page cache. Random single-row faults on a memmap'd GPFS file
+    are catastrophic (the very thing :meth:`preload` exists to avoid), so when the
+    cache is served via mmap (to SHARE one copy across the ranks co-located on a
+    node) we pull it all in once, up front, with a sequential read. ``arr[i:j]`` is
+    a view (no large private copy), so this warms the *shared* page cache without
+    duplicating the array per process."""
+    n = int(arr.shape[0])
+    for i in range(0, n, chunk):
+        # .sum() forces the slice's pages to fault in; the scalar result is discarded
+        float(np.asarray(arr[i:i + chunk]).sum())
 
 
 class StackedSpectra:
@@ -73,16 +95,27 @@ class StackedSpectra:
         needed = sorted(set(int(r) for r in rows))
         if not needed:
             return
-        if cache and Path(cache).exists():       # load the pre-materialized subset (one f32 read)
-            z = np.load(cache)
-            self._ram = z["spectra"]
-            self._ram_index = {int(r): i for i, r in enumerate(z["rows"])}
+        if cache and Path(cache).exists():       # load the pre-materialized subset
+            rows_sidecar = str(cache) + ".rows.npy"
+            mmapped = False
+            try:                                  # preferred: mmap the .npy so the ranks
+                rows_arr = np.load(rows_sidecar)  # co-located on a node SHARE one copy
+                self._ram = np.load(cache, mmap_mode="r")   # via the OS page cache
+                mmapped = True
+            except Exception:                     # legacy npz cache (single full read)
+                z = np.load(cache)
+                self._ram = z["spectra"]
+                rows_arr = z["rows"]
+            self._ram_index = {int(r): i for i, r in enumerate(rows_arr)}
             miss = [r for r in needed if r not in self._ram_index]
             if miss:
                 raise ValueError(f"preload cache {cache} is missing {len(miss)} requested rows "
                                  f"(stale — delete it to rebuild)")
+            if mmapped:                           # pull all pages resident once (sequential);
+                _warm_pagecache(self._ram)        # random mmap faults on GPFS are catastrophic
             print(f"[stacked] preload from cache {cache} "
-                  f"({self._ram.shape[0]} rows, {self._ram.nbytes / 1e9:.1f} GB)", flush=True)
+                  f"({self._ram.shape[0]} rows, {self._ram.nbytes / 1e9:.1f} GB, "
+                  f"{'mmap-shared' if mmapped else 'in-RAM'})", flush=True)
             return
         P = int(np.load(self.files[0], mmap_mode="r").shape[1])
         self._ram_index = {r: i for i, r in enumerate(needed)}
@@ -117,10 +150,19 @@ class StackedSpectra:
                 print(f"[stacked]   {n + 1}/{len(by_shard)} shards", flush=True)
         print(f"[stacked] preload done ({n_full} full-read, {n_sparse} sparse-mmap shards)",
               flush=True)
-        if cache:                                 # persist for next run (atomic write)
-            tmp = str(cache) + ".tmp.npz"
-            np.savez(tmp, rows=np.asarray(needed, dtype=np.int64), spectra=self._ram)
+        if cache:                                 # persist for next run (atomic write).
+            # Save as a bare .npy (+ rows sidecar), NOT npz: a .npy is mmap-able, so a
+            # later run can share one copy across the ranks co-located on a node (npz is
+            # a zip — np.load always reads it fully into per-process RAM, which would
+            # double the ~184 GB footprint and OOM a 2-GPU node).
+            tmp = str(cache) + ".tmp"
+            with open(tmp, "wb") as fh:
+                np.save(fh, self._ram)            # file-object form: no ".npy" auto-suffix
             os.replace(tmp, cache)
+            rtmp = str(cache) + ".rows.tmp"
+            with open(rtmp, "wb") as fh:
+                np.save(fh, np.asarray(needed, dtype=np.int64))
+            os.replace(rtmp, str(cache) + ".rows.npy")
             print(f"[stacked] wrote preload cache -> {cache} ({self._ram.nbytes / 1e9:.1f} GB)", flush=True)
 
     def _part(self, k: int) -> np.ndarray:
