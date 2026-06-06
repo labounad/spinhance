@@ -51,14 +51,17 @@ G, P = 8, 16384
 
 
 def best_ckpt(name):
-    # newest FINISHED run for this tier (skip still-training runs so the explorer never
-    # shows undertrained predictions, e.g. a 500k at epoch 3).
+    # newest FINISHED run for this name. If the NEWEST run is still training, the model
+    # isn't ready -> return None rather than falling back to a SUPERSEDED older finished
+    # run (e.g. a prematurely early-stopped run that is being re-trained).
     for d in sorted(glob.glob(f"{RUNS}/*_{name}_*"), reverse=True):
         p = os.path.join(d, "checkpoints", "best.pt")
         try:
             st = json.load(open(os.path.join(d, "status.json"))).get("state")
         except Exception:
             st = None
+        if st == "running":
+            return None
         if st in ("finished", "completed") and os.path.exists(p):
             return p
     return None
