@@ -32,8 +32,21 @@ REB = "/gpfs/group/shenvi/Users/labounader/spinhance/rebuild3M"
 RUNS = "/gpfs/group/shenvi/Users/labounader/spinhance/runs"
 TEST = "/gpfs/group/shenvi/Users/labounader/spinhance/consolidated_test/records_test_consol.json.gz"   # consolidated (contiguous) held-out
 PARTS = "/gpfs/group/shenvi/Users/labounader/spinhance/consolidated_test/parts"
-OUT = sys.argv[1] if len(sys.argv) > 1 else "docs/data/test_explorer.json"
-N = int(sys.argv[2]) if len(sys.argv) > 2 else 80
+# CLI:  OUT.json [N]               -> render all N molecules, write OUT (serial)
+#       --only IDX FRAGDIR [N]     -> render ONE molecule -> FRAGDIR/mol_IDX.json (SLURM array task)
+#       --combine FRAGDIR OUT [N]  -> merge per-molecule fragments -> OUT (no model load)
+_a = sys.argv[1:]
+MODE, ONLY_IDX, FRAG_DIR = "all", None, None
+OUT = "docs/data/test_explorer.json"; N = 80
+if _a and _a[0] == "--only":
+    MODE = "only"; ONLY_IDX = int(_a[1]); FRAG_DIR = _a[2]
+    if len(_a) > 3: N = int(_a[3])
+elif _a and _a[0] == "--combine":
+    MODE = "combine"; FRAG_DIR = _a[1]; OUT = _a[2]
+    if len(_a) > 3: N = int(_a[3])
+else:
+    if _a: OUT = _a[0]
+    if len(_a) > 1: N = int(_a[1])
 G, P = 8, 16384
 
 
@@ -79,15 +92,16 @@ for key, name, label in FLEET:
         MODEL_LABELS.append((key, label))
 
 vocab = DegeneracyVocab()
-print("loading models...", flush=True)
 loaded = {}
-for k, p in MODELS.items():
-    ck = torch.load(p, map_location="cpu", weights_only=False)
-    std = Standardizer().load_state_dict(ck["standardizer"])
-    mc = dict(ck["cfg"]["model"]); nm = mc.pop("name")
-    m = build_architecture(nm, n_deg_classes=len(vocab), **mc).eval()
-    m.load_state_dict(ck["model"], strict=False)
-    loaded[k] = (m, std); print(" loaded", k, flush=True)
+if MODE != "combine":                       # --combine just merges fragments; no model load
+    print("loading models...", flush=True)
+    for k, p in MODELS.items():
+        ck = torch.load(p, map_location="cpu", weights_only=False)
+        std = Standardizer().load_state_dict(ck["standardizer"])
+        mc = dict(ck["cfg"]["model"]); nm = mc.pop("name")
+        m = build_architecture(nm, n_deg_classes=len(vocab), **mc).eval()
+        m.load_state_dict(ck["model"], strict=False)
+        loaded[k] = (m, std); print(" loaded", k, flush=True)
 
 
 PPM_MAX = 12.0
@@ -216,20 +230,45 @@ def emit(rid, smi, sh, cp, dg, spec):
             "xyz": xyz_of(smi), "preds": preds}
 
 
+def _models_block():
+    return [{"key": k, "label": l} for k, l in MODEL_LABELS]
+
+# --combine: merge per-molecule fragments (from the array tasks) into the final JSON.
+if MODE == "combine":
+    frags = sorted(glob.glob(os.path.join(FRAG_DIR, "mol_*.json")))
+    mols = [json.load(open(f)) for f in frags]
+    out = {"models": _models_block(), "molecules": mols}
+    json.dump(out, open(OUT, "w"), separators=(",", ":"))
+    print("COMBINED", OUT, round(os.path.getsize(OUT) / 1024, 1), "KB |", len(mols), "mols", flush=True)
+    sys.exit(0)
+
 print(f"held-out nested subset: first {N} by test_rank", flush=True)
-recs = load_pubchem_records(TEST)[:N]           # pre-sorted by test_rank -> nested subset
+recs = load_pubchem_records(TEST, max_mol=N)[:N]   # pre-sorted by test_rank -> nested subset
 src = StackedSpectra(PARTS)
-mols = []
-for r in recs:
+
+def _emit_one(r):
     sh = np.array(r["shifts"], float); cp = np.array(r["couplings"], float); dg = np.array(r["degeneracy"], int)
     spec = np.asarray(src[r["row"]], np.float32)
-    mols.append(emit(r["mol_id"], r.get("smiles"), sh, cp, dg, spec))
+    return emit(r["mol_id"], r.get("smiles"), sh, cp, dg, spec)
+
+# --only IDX: render ONE molecule to a fragment file (a SLURM array task; CPU-only, so it
+# backfills across the whole cluster and the 80 molecules finish in parallel in minutes).
+if MODE == "only":
+    os.makedirs(FRAG_DIR, exist_ok=True)
+    if ONLY_IDX >= len(recs):
+        print(f"idx {ONLY_IDX} >= {len(recs)} valid recs — nothing to do"); sys.exit(0)
+    mol = _emit_one(recs[ONLY_IDX])
+    fp = os.path.join(FRAG_DIR, f"mol_{ONLY_IDX:05d}.json")
+    json.dump(mol, open(fp, "w"), separators=(",", ":"))
+    print("WROTE FRAG", fp, "| mol", ONLY_IDX, mol.get("id"), flush=True)
+    sys.exit(0)
+
+# MODE == "all": serial render of every molecule (the original turnkey path).
+mols = []
+for r in recs:
+    mols.append(_emit_one(r))
     if len(mols) % 20 == 0:
         print(" ", len(mols), "/", len(recs), flush=True)
-
-# Each molecule carries its own [x0, x1] window + an adaptive peak mesh (mx); the viewer
-# plots input/render against mx (points clustered at peaks, sparse on baseline) and
-# interpolates linearly between them — far fewer stored points than a uniform axis.
-out = {"models": [{"key": k, "label": l} for k, l in MODEL_LABELS], "molecules": mols}
+out = {"models": _models_block(), "molecules": mols}
 json.dump(out, open(OUT, "w"), separators=(",", ":"))
 print("WROTE", OUT, round(os.path.getsize(OUT) / 1024, 1), "KB |", len(mols), "mols", flush=True)
