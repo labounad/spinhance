@@ -6,7 +6,7 @@ cost guards. Tiny 2-spin AX system so the exact simulator is cheap.
 import numpy as np
 import torch
 
-from model.inference.refine import refine_shifts, refine_system
+from model.inference.refine import refine_shifts, refine_system, equiv_classes_from_softequiv
 from model.renderers._torch_exact import simulate
 
 DEG = np.array([1, 1])
@@ -127,3 +127,23 @@ def test_refine_system_cost_guard_skips():
     nsh, ncp, info = refine_system(PRED_SH3, PRED_J3, DEG3, tgt, max_cost=1, **RS_KW)
     assert info["skipped"]
     assert np.allclose(nsh, PRED_SH3) and np.allclose(ncp, PRED_J3)
+
+
+def test_refine_system_ties_equivalent_groups():
+    """Groups in one equivalence class share ONE shift after refine (move together,
+    never split) — even when the prediction starts them apart."""
+    sh = np.array([6.40, 6.40, 6.30])                # groups 0,1 chemically equivalent
+    J = np.array([[0., 0., 8.], [0., 0., 2.], [8., 2., 0.]])  # AA'X: equal shift, different J
+    tgt = _target3(sh, J)
+    pred_sh = np.array([6.43, 6.37, 6.32])           # 0,1 split apart in the prediction
+    nsh, _, _ = refine_system(pred_sh, J, DEG3, tgt, equiv=[[0, 1], [2]], **RS_KW)
+    assert abs(nsh[0] - nsh[1]) < 1e-9               # exactly tied
+
+
+def test_equiv_classes_from_softequiv():
+    # edges in triu order (0,1),(0,2),(1,2); high prob on (0,1) -> class {0,1}
+    cls = equiv_classes_from_softequiv(np.array([0.99, 0.02, 0.03]), 3)
+    assert sorted(sorted(c) for c in cls) == [[0, 1], [2]]
+    # no equivalence -> all singletons
+    cls0 = equiv_classes_from_softequiv(np.array([0.0, 0.0, 0.0]), 3)
+    assert sorted(sorted(c) for c in cls0) == [[0], [1], [2]]

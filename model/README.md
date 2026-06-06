@@ -39,8 +39,8 @@ ResNet1D conv stem → ppm-positioned global tokens → pre-LN Transformer encod
 degeneracy) + symmetric `PairwiseEdgeHead`. Sizes via `model.size` — the three
 production **tiers** are `light` (64k, ~10M), `med` (500k, ~57M), and `xl`
 (3M, ~137M); see the tier table below (the single source of truth).
-See `RESULTS.md` for the full **025–030 recipe sweep**; the **fleet-best is 500k·026**
-(026 — peak channel + soft-equiv) at **0.025 ppm** (0.65 Hz J) held-out on the
+See `RESULTS.md` for the full **025–030 recipe sweep**; the **fleet-best is 500k·027**
+(027 — focal loss) at **0.022 ppm** (0.59 Hz J) held-out on the
 leakage-controlled global PubChem test split. The 3M (~137M) tier is **paused / under revision**.
 The model also supports a decode-time **test-time refinement** step
 (`model/inference/refine.py`) that polishes predicted shifts against the input 90 MHz spectrum
@@ -127,7 +127,7 @@ precedence** and is the convention for all production runs. Enforced by `model/t
 | `train_64k_spingraph_regions.yaml` | spingraph + region tokens · 64k — session 023 (abandoned, slower/no gain) |
 | `train_64k_026_peaks_softequiv.yaml` | spingraph(peak+soft-equiv) · matrix+soft_equiv · 64k — recipe 026 |
 | 64k recipes `025`–`030` (`train_64k_*`) | spingraph **light** (~10M) · the 025–030 ladder · 64k PubChem (the ablation tier) |
-| 500k recipes `025`–`030` (`train_500k_*`) | spingraph **med** (~57M) · the 025–030 ladder · 500k PubChem — **fleet-best = 026, 0.025 ppm** |
+| 500k recipes `025`–`030` (`train_500k_*`) | spingraph **med** (~57M) · the 025–030 ladder · 500k PubChem — **fleet-best = 027, 0.022 ppm** |
 | 3M recipes (`026`, `030`) (`train_3M_*`) | spingraph **xl** (~137M) · 3M PubChem — **paused / under revision** |
 
 ## Data paths

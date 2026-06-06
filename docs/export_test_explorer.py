@@ -26,7 +26,7 @@ from model.data.standardization import DegeneracyVocab, Standardizer
 from model.architectures import build_architecture
 from model.evaluation.metrics import decode, _np_pred
 from model.evaluation.symmetry import align_pred_couplings
-from model.inference.refine import refine_system
+from model.inference.refine import refine_system, equiv_classes_from_softequiv
 
 REB = "/gpfs/group/shenvi/Users/labounader/spinhance/rebuild3M"
 RUNS = "/gpfs/group/shenvi/Users/labounader/spinhance/runs"
@@ -207,7 +207,7 @@ def emit(rid, smi, sh, cp, dg, spec):
     for k, (m, std) in loaded.items():
         with torch.no_grad():
             o = m(torch.tensor(spec, dtype=torch.float32)[None])
-        pr = _np_pred(o); pr.pop("soft_equiv", None); dec = decode(pr, std, vocab)
+        pr = _np_pred(o); se = pr.get("soft_equiv"); pr.pop("soft_equiv", None); dec = decode(pr, std, vocab)
         psh, pcp, pdg = dec["shifts"][0], dec["couplings"][0], dec["degeneracy"][0]
         po = np.argsort(-psh); psh2, pdg2 = psh[po], pdg[po]; pJ = pcp[np.ix_(po, po)]
         _, rspec = simulate_spectrum_composite(psh, pcp, pdg, 90.0, points=P)
@@ -222,7 +222,8 @@ def emit(rid, smi, sh, cp, dg, spec):
         # that uses only the 90 MHz input. Render + mesh the post-corrected spectrum.
         # test-time refinement (joint shift+J: graduated non-convexity + centroid coarse-fix).
         # The refined overlay reflects BOTH corrected shifts AND corrected couplings.
-        refined, ref_cp, rinfo = refine_system(psh, pcp, pdg, spec, field_mhz=90.0, max_cost=5e10)  # raise guard above the explorer set's max eigh_cost (1.37e10; renders <=2.2s) so all refine
+        equiv = equiv_classes_from_softequiv(se[0], len(psh)) if se is not None else None  # tie chem-equiv shifts
+        refined, ref_cp, rinfo = refine_system(psh, pcp, pdg, spec, field_mhz=90.0, max_cost=5e10, equiv=equiv)  # raise guard above the explorer set's max eigh_cost (1.37e10; renders <=2.2s) so all refine
         rsh = np.sort(refined)[::-1]
         _, fspec = simulate_spectrum_composite(refined, ref_cp, pdg, 90.0, points=P)
         fx, fy = rdp_curve(fspec, lo, hi, sc)

@@ -192,7 +192,26 @@ def _coarse_centroid_fix(shifts0, sp_pred, tgt, ppm_from, ppm_to, gap_ppm=0.15, 
     return out
 
 
-def refine_system(shifts0, couplings, degeneracy, target, *, field_mhz=90.0,
+def equiv_classes_from_softequiv(se_prob, G, thresh=0.5):
+    """Union-find on the soft-equivalence edge probabilities (``se_prob``: (E,) upper-tri
+    order) -> list of group-index lists. Groups the model flags chemically equivalent end
+    up in one class (singletons for the rest). These classes share one shift in refinement."""
+    iu = np.triu_indices(G, 1)
+    parent = list(range(G))
+    def find(a):
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]; a = parent[a]
+        return a
+    for e, (i, j) in enumerate(zip(iu[0], iu[1])):
+        if se_prob[e] > thresh:
+            parent[find(int(i))] = find(int(j))
+    cl = {}
+    for n in range(G):
+        cl.setdefault(find(n), []).append(n)
+    return list(cl.values())
+
+
+def refine_system(shifts0, couplings, degeneracy, target, *, equiv=None, field_mhz=90.0,
                   points=16384, ppm_from=0.0, ppm_to=12.0,
                   scales_ppm=(0.05, 0.0), steps_per_scale=45,
                   lr_shift=0.02, lr_j=0.3, trust_shift=0.3, trust_j=4.0,
@@ -219,6 +238,19 @@ def refine_system(shifts0, couplings, degeneracy, target, *, field_mhz=90.0,
     dx = (ppm_to - ppm_from) / points
     ppm_per_pt = (ppm_to - ppm_from) / points
     struct = _structure(deg, s0.device, dt)
+
+    # equivalence classes: groups the model flags chemically-equivalent share ONE shift, so
+    # they move together and never split into the off-by-J artifact. equiv = list of group-
+    # index lists; default = each group its own class (no tying). Optimize one shift per class.
+    if equiv is None:
+        equiv = [[g] for g in range(G)]
+    cls_of = torch.zeros(G, dtype=torch.long)
+    for ci, members in enumerate(equiv):
+        for g in members:
+            cls_of[g] = ci
+    def expand(sf):                                     # (n_cls,) class shifts -> (G,) per-group
+        return sf[cls_of]
+    s0_free = torch.stack([s0[torch.tensor(m)].mean() for m in equiv])   # (n_cls,) class-mean of prediction
 
     iu = torch.triu_indices(G, G, 1, device=s0.device)
     j0 = C0[iu[0], iu[1]].clone()                       # (E,) upper-tri couplings
@@ -257,26 +289,27 @@ def refine_system(shifts0, couplings, degeneracy, target, *, field_mhz=90.0,
                  "reverted": False, "skipped": True, "steps": 0})
 
     # coarse basin-fix: jump each multiplet to its target centroid (gradient-free, no eigh),
-    # replacing the broad gradient scale. Clamp into the trust box around the prediction.
+    # then collapse to ONE shift per equivalence class (so equivalent groups stay locked together).
     if coarse_centroid:
         s_init = _coarse_centroid_fix(np.asarray(shifts0, float), sp0.cpu().numpy(),
                                       np.asarray(target, float), ppm_from, ppm_to, gap_ppm=coarse_gap_ppm)
-        sf = np.asarray(shifts0, float)
-        s_init = np.clip(s_init, sf - trust_shift, sf + trust_shift)
-        s = torch.as_tensor(s_init, dtype=dt).requires_grad_(True)
     else:
-        s = s0.clone().requires_grad_(True)
+        s_init = np.asarray(shifts0, float)
+    s_init_t = torch.as_tensor(s_init, dtype=dt)
+    sfree_init = torch.stack([s_init_t[torch.tensor(m)].mean() for m in equiv])     # per-class init
+    sfree_init = torch.min(torch.max(sfree_init, s0_free - trust_shift), s0_free + trust_shift)
+    sfree = sfree_init.clone().requires_grad_(True)    # ONE shift per equivalence class
     j = j0.clone().requires_grad_(True)
-    opt = torch.optim.Adam([{"params": [s], "lr": lr_shift}, {"params": [j], "lr": lr_j}])
-    slo, shi = s0 - trust_shift, s0 + trust_shift
+    opt = torch.optim.Adam([{"params": [sfree], "lr": lr_shift}, {"params": [j], "lr": lr_j}])
+    sflo, sfhi = s0_free - trust_shift, s0_free + trust_shift
     jlo, jhi = j0 - trust_j, j0 + trust_j
     t0 = time.time(); steps = 0
     for sc, lw in zip(scales_ppm, lws):
         best_sc, stale = float("inf"), 0
         for _ in range(steps_per_scale):
             opt.zero_grad()
-            loss = (loss_at(render(s, j, lw), sc)
-                    + reg_shift * ((s - s0) ** 2).mean()
+            loss = (loss_at(render(expand(sfree), j, lw), sc)
+                    + reg_shift * ((sfree - s0_free) ** 2).mean()
                     + reg_j * (((j - j0) * pres) ** 2).sum() / pres.sum().clamp_min(1))
             loss.backward()
             with torch.no_grad():
@@ -284,7 +317,7 @@ def refine_system(shifts0, couplings, degeneracy, target, *, field_mhz=90.0,
                     j.grad[~pres] = 0.0                 # never move an absent coupling
             opt.step()
             with torch.no_grad():
-                s.copy_(torch.min(torch.max(s, slo), shi))   # trust boxes
+                sfree.copy_(torch.min(torch.max(sfree, sflo), sfhi))   # trust boxes
                 j.copy_(torch.min(torch.max(j, jlo), jhi))
                 j[~pres] = j0[~pres]                    # keep absent couplings at 0
             steps += 1
@@ -299,10 +332,10 @@ def refine_system(shifts0, couplings, degeneracy, target, *, field_mhz=90.0,
             break
 
     with torch.no_grad():
-        sp1 = render(s, j, base_lw_hz)
+        sp1 = render(expand(sfree), j, base_lw_hz)
         loss1 = _spec_loss(sp1, tgt, dx, w1_w, cos_w).item()
         cos1 = cosine_similarity(sp1[None], tgt[None]).item()
-    s_out, j_out, reverted = s.detach(), j.detach(), False
+    s_out, j_out, reverted = expand(sfree).detach(), j.detach(), False
     if accept and loss1 > loss0:                        # non-regressing guard (sharp scale)
         s_out, j_out, loss1, cos1, reverted = s0, j0, loss0, cos0, True
     return (s_out.cpu().numpy(), build_C(j_out).cpu().numpy(),
