@@ -348,7 +348,10 @@
         const shiftTxt = hasRef
           ? `shift MAE <b>${P.shift_mae.toFixed(3)}</b> → <b style="color:#b07bff">${P.ref_shift_mae.toFixed(3)}</b> ppm <span class="mono" style="color:var(--ink-faint)">(refined)</span>`
           : `shift MAE <b>${P.shift_mae.toFixed(3)}</b> ppm`;
-        meta.innerHTML = `<span class="mono">${m.smiles || m.id}</span> · ${m.n_spins} protons · ${shiftTxt} · J MAE <b>${P.j_mae.toFixed(2)}</b> Hz`;
+        const jTxt = (hasRef && P.ref_j_mae != null)
+          ? `J MAE <b>${P.j_mae.toFixed(2)}</b> → <b style="color:#b07bff">${P.ref_j_mae.toFixed(2)}</b> Hz`
+          : `J MAE <b>${P.j_mae.toFixed(2)}</b> Hz`;
+        meta.innerHTML = `<span class="mono">${m.smiles || m.id}</span> · ${m.n_spins} protons · ${shiftTxt} · ${jTxt}`;
       }
       function show() {
         const m = mols[idx], P = predOf(m); sel.value = idx;
