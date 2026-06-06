@@ -157,12 +157,48 @@ def _gaussian_blur(y, sigma_pts):
     return F.conv1d(y.view(1, 1, -1), k.view(1, 1, -1), padding=r).view(-1)
 
 
+def _coarse_centroid_fix(shifts0, sp_pred, tgt, ppm_from, ppm_to, gap_ppm=0.15, thresh_frac=0.05):
+    """Gradient-free coarse shift fix via multiplet centroids. A multiplet is symmetric
+    about its chemical shift, so the intensity-weighted centroid of the multiplet IS the
+    shift — robust to the off-by-J sub-peak cross-alignment that traps gradient descent on
+    blurred spectra. We cluster the predicted groups by shift, split the ppm axis at the
+    midpoints between cluster centres (so each cluster owns a window), and shift each
+    cluster by (target_centroid − predicted_centroid) in its window. Returns new shifts.
+    No simulation: uses the already-rendered predicted spectrum + the target."""
+    shifts0 = np.asarray(shifts0, float)
+    sp_pred = np.asarray(sp_pred, float); tgt = np.asarray(tgt, float)
+    G, P = len(shifts0), len(sp_pred)
+    ppm = np.linspace(ppm_from, ppm_to, P)
+    order = np.argsort(shifts0); ss = shifts0[order]
+    clusters = [[order[0]]]
+    for k in range(1, G):
+        if ss[k] - ss[k - 1] <= gap_ppm:
+            clusters[-1].append(order[k])
+        else:
+            clusters.append([order[k]])
+    centers = np.array([shifts0[cl].mean() for cl in clusters])
+    bnd = np.concatenate([[ppm_from], (centers[:-1] + centers[1:]) / 2.0, [ppm_to]])
+    tp, tt = thresh_frac * sp_pred.max(), thresh_frac * tgt.max()
+    out = shifts0.copy()
+    for ci, cl in enumerate(clusters):
+        m = (ppm >= bnd[ci]) & (ppm < bnd[ci + 1])
+        wp = np.clip(sp_pred[m] - tp, 0, None); wt = np.clip(tgt[m] - tt, 0, None)
+        if wp.sum() <= 0 or wt.sum() <= 0:
+            continue                                    # empty window -> leave this cluster as predicted
+        c_pred = float((ppm[m] * wp).sum() / wp.sum())
+        c_tgt = float((ppm[m] * wt).sum() / wt.sum())
+        for g in cl:
+            out[g] += (c_tgt - c_pred)
+    return out
+
+
 def refine_system(shifts0, couplings, degeneracy, target, *, field_mhz=90.0,
                   points=16384, ppm_from=0.0, ppm_to=12.0,
-                  scales_ppm=(0.12, 0.05, 0.0), steps_per_scale=45,
+                  scales_ppm=(0.05, 0.0), steps_per_scale=45,
                   lr_shift=0.02, lr_j=0.3, trust_shift=0.3, trust_j=4.0,
                   reg_shift=2.0, reg_j=0.02, w1_w=1.0, cos_w=0.5, base_lw_hz=1.0,
                   presence_tol=0.5, patience=8, plateau_tol=1e-4,
+                  coarse_centroid=True, coarse_gap_ppm=0.15,
                   accept=True, max_seconds=15.0, max_cost=6e7):
     """Jointly refine shifts (ppm) + the predicted-nonzero couplings (Hz) to match
     ``target``, via graduated linewidth annealing. ``couplings`` (G,G) symmetric: only
@@ -220,7 +256,16 @@ def refine_system(shifts0, couplings, degeneracy, target, *, field_mhz=90.0,
                 {"loss0": loss0, "loss1": loss0, "cos0": cos0, "cos1": cos0,
                  "reverted": False, "skipped": True, "steps": 0})
 
-    s = s0.clone().requires_grad_(True)
+    # coarse basin-fix: jump each multiplet to its target centroid (gradient-free, no eigh),
+    # replacing the broad gradient scale. Clamp into the trust box around the prediction.
+    if coarse_centroid:
+        s_init = _coarse_centroid_fix(np.asarray(shifts0, float), sp0.cpu().numpy(),
+                                      np.asarray(target, float), ppm_from, ppm_to, gap_ppm=coarse_gap_ppm)
+        sf = np.asarray(shifts0, float)
+        s_init = np.clip(s_init, sf - trust_shift, sf + trust_shift)
+        s = torch.as_tensor(s_init, dtype=dt).requires_grad_(True)
+    else:
+        s = s0.clone().requires_grad_(True)
     j = j0.clone().requires_grad_(True)
     opt = torch.optim.Adam([{"params": [s], "lr": lr_shift}, {"params": [j], "lr": lr_j}])
     slo, shi = s0 - trust_shift, s0 + trust_shift
