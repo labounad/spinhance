@@ -1,4 +1,4 @@
-# SpinHance XYZ Format — Interface spec for Task 1 → Task 2
+# Spinhance XYZ Format — Interface spec for Task 1 → Task 2
 
 **For:** Yiming (mol_to_spin_system)  
 **From:** Sam (generate)  

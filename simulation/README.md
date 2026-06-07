@@ -1,4 +1,4 @@
-# SpinHance — Simulation (Task 3)
+# Spinhance — Simulation (Task 3)
 
 Turn spin-system parameters (chemical shifts δ, scalar couplings *J*, and proton
 degeneracies) into simulated ¹H NMR spectra at two field strengths. This is the

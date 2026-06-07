@@ -16,7 +16,7 @@ from model.training.runner import run_from_config
 
 
 def main():
-    ap = argparse.ArgumentParser(description="SpinHance config-driven trainer")
+    ap = argparse.ArgumentParser(description="Spinhance config-driven trainer")
     ap.add_argument("--config", required=True, help="path to a YAML run config")
     ap.add_argument("--set", dest="overrides", action="append", default=[],
                     metavar="key=value", help="dotted config override (repeatable)")

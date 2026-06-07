@@ -1,7 +1,7 @@
 """
 cli.py
 ======
-Command-line entry point for the SpinHance simulation package.
+Command-line entry point for the Spinhance simulation package.
 
 Run as a module from the repository root::
 
@@ -97,7 +97,7 @@ def _add_export(sub: argparse._SubParsersAction) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="simulation",
-        description="SpinHance Task 3 — spin simulation pipeline",
+        description="Spinhance Task 3 — spin simulation pipeline",
     )
     sub = parser.add_subparsers(dest="command", required=True)
     _add_run(sub)

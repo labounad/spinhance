@@ -19,7 +19,7 @@ from model.training.surrogate import SurrogateTrainer
 
 
 def main():
-    ap = argparse.ArgumentParser(description="SpinHance surrogate renderer trainer")
+    ap = argparse.ArgumentParser(description="Spinhance surrogate renderer trainer")
     ap.add_argument("--config", required=True)
     ap.add_argument("--set", dest="overrides", action="append", default=[], metavar="key=value")
     args = ap.parse_args()

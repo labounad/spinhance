@@ -1,7 +1,7 @@
 """
 pipeline.py
 ===========
-End-to-end orchestration for SpinHance Task 3 (simulation). Ties together
+End-to-end orchestration for Spinhance Task 3 (simulation). Ties together
 :mod:`simulation.xml_io` (XML generation), :mod:`simulation.mnova_runner`
 (MNova invocation), and NumPy post-processing.
 

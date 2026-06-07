@@ -1,5 +1,5 @@
 """
-SpinHance model package (modular rebuild).
+Spinhance model package (modular rebuild).
 
 Layers communicate only through the typed contracts in ``model.schemas``:
     data -> SpinBatch -> architecture -> ModelOutput -> loss -> LossOutput

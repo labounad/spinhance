@@ -146,7 +146,7 @@ epochs regardless of score, in addition to `best.pt` on improvement.
 hardcodes one specific small architecture. For serious training you want named
 presets with documented parameter counts.
 
-**What to add:** A `build_model(model_size: str) -> SpinHanceModel` helper with
+**What to add:** A `build_model(model_size: str) -> SpinhanceModel` helper with
 presets like `tiny` (~0.5 M), `small` (~2 M), `medium` (~8 M), `large` (~20 M).
 Wire it to `--model-size {tiny,small,medium,large}`.
 

@@ -1,7 +1,7 @@
 """
 xml_io.py
 =========
-Conversion between SpinHance spin-system parameters and the ``mnova-spinsim``
+Conversion between Spinhance spin-system parameters and the ``mnova-spinsim``
 XML format consumed by MestReNova's quantum spin simulator.
 
 This module is **pure** — it has no dependency on MNova or numpy and performs no

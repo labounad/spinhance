@@ -1,4 +1,4 @@
-/* SpinHance · dataset explorer
+/* Spinhance · dataset explorer
    Canvas histograms (themed to the site palette) over docs/data/dataset_explorer.json.
    No external libs — matches the rest of the site (vanilla canvas). */
 (function () {

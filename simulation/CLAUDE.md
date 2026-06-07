@@ -1,8 +1,8 @@
-# SpinHance — Project Context for Claude
+# Spinhance — Project Context for Claude
 
 ## What This Project Is
 
-SpinHance is a hackathon project to automatically extract ¹H chemical shifts and scalar coupling constants from **low-field (90 MHz) ¹H NMR spectra** of small molecules using deep learning. The key insight: at low field, spin systems are strongly coupled (non-first-order), making simple peak-picking fail. We train a neural network to invert the spectrum back to the underlying spin-system parameters.
+Spinhance is a hackathon project to automatically extract ¹H chemical shifts and scalar coupling constants from **low-field (90 MHz) ¹H NMR spectra** of small molecules using deep learning. The key insight: at low field, spin systems are strongly coupled (non-first-order), making simple peak-picking fail. We train a neural network to invert the spectrum back to the underlying spin-system parameters.
 
 **Team of 3. Lucas (labounader@scripps.edu) owns Task 3 (simulation) and is the user in this project.**
 

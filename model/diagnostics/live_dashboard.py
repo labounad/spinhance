@@ -1,7 +1,7 @@
 """
 model.diagnostics.live_dashboard
 ================================
-Streamlit dashboard for monitoring the SpinHance training fleet. Reads the
+Streamlit dashboard for monitoring the Spinhance training fleet. Reads the
 canonical run layout (status.json / metrics.jsonl / summary.json / probes/)
 directly from a **runs directory** (default ``model/runs/``) via
 ``model.diagnostics.run_reader`` — so it works on the HPC's GPFS runs (rsync them locally
@@ -27,7 +27,7 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from model.diagnostics import run_reader as rr  # noqa: E402
 
-st.set_page_config(page_title="SpinHance · training fleet", layout="wide",
+st.set_page_config(page_title="Spinhance · training fleet", layout="wide",
                    initial_sidebar_state="expanded")
 
 # ── Website palette (dark theme) ────────────────────────────────────────────────
@@ -122,7 +122,7 @@ def _label(run_id: str) -> str:
 # ── sidebar ─────────────────────────────────────────────────────────────────────
 
 with st.sidebar:
-    st.markdown('<div class="sh-eyebrow">SpinHance</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sh-eyebrow">Spinhance</div>', unsafe_allow_html=True)
     default_root = os.environ.get("SPINHANCE_RUNS", str(rr.RUNS_ROOT))
     runs_root = st.text_input("Runs directory", default_root,
                               help="Local path to the runs/ dir (rsync from HPC, or an s3:// session).")
@@ -322,7 +322,7 @@ def _detail(d):
 
 def _dashboard():
     st.markdown('<div class="sh-eyebrow">training fleet</div>'
-                '<div class="sh-title">SpinHance · run monitor</div>', unsafe_allow_html=True)
+                '<div class="sh-title">Spinhance · run monitor</div>', unsafe_allow_html=True)
     if not runs:
         st.info("No runs match. Set the runs directory + filter in the sidebar.")
         return

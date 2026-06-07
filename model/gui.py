@@ -1,5 +1,5 @@
 """
-model/gui.py — SpinHance training-session viewer (rebuilt-trainer edition)
+model/gui.py — Spinhance training-session viewer (rebuilt-trainer edition)
 ==========================================================================
 
 Two-page Streamlit dashboard for inspecting EC2 training runs on S3, adapted to
@@ -51,7 +51,7 @@ SSO_SESSION = "scripps-hackathon"
 SSO_START_URL = "https://d-9267e96a16.awsapps.com/start"
 ACCOUNT_ID = "127696279288"
 
-st.set_page_config(page_title="SpinHance Viewer", layout="wide",
+st.set_page_config(page_title="Spinhance Viewer", layout="wide",
                    initial_sidebar_state="collapsed")
 
 
@@ -392,7 +392,7 @@ def _mol3d_html(smiles: str, width=200, height=200) -> str:
 # ─── Page 1 — Session browser ─────────────────────────────────────────────────
 
 def _page_select() -> None:
-    st.title("SpinHance — Training Session Viewer")
+    st.title("Spinhance — Training Session Viewer")
     st.caption(f"S3 prefix: `{S3_TRAINING}`")
     if st.columns([1, 5])[0].button("↺  Refresh"):
         _list_sessions.clear()

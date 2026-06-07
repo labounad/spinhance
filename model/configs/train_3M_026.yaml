@@ -5,7 +5,8 @@
 #   model : spingraph_decoder size=xl (TIER_PRESETS: deep conv stem + dim768/enc6/dec8, ~137M)
 #   loss  : matrix (shift-2x) + soft_equiv (Idea 2)
 # Stability: the med (~57M) decoder diverged at ep7 on the 1M set; this larger model keeps the
-# tighter regime (warmup 0.05, grad_clip 0.5) and drops LR to 1.5e-4. NOTE: 3M tier is paused.
+# tighter regime (warmup 0.05, grad_clip 0.5) and drops LR to 1.5e-4. DO NOT raise LR above 1.5e-4:
+# a 2e-4 override (sqrt-scaled for a 2x batch) blew this up at ep7 again. Trains on a single A100.
 
 run:
   name: spingraph_xl_026_3M

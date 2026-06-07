@@ -1,5 +1,5 @@
 """
-generate — SpinHance Task 1 (molecule screening pipeline).
+generate — Spinhance Task 1 (molecule screening pipeline).
 
 Screens the ChEMBL compound database to identify small organic molecules
 that have exactly :data:`N_SPIN_GROUPS` magnetically distinct ¹H spin

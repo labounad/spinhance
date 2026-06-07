@@ -1,4 +1,4 @@
-# SpinHance `model/` — modular training package
+# Spinhance `model/` — modular training package
 
 Rebuilt from the original flat monolith (the pre-rebuild layout; see git history)
 around explicit, typed contracts so architectures, losses, renderers, training,
@@ -41,7 +41,8 @@ production **tiers** are `light` (64k, ~10M), `med` (500k, ~57M), and `xl`
 (3M, ~137M); see the tier table below (the single source of truth).
 See `RESULTS.md` for the full **025–030 recipe sweep**; the **fleet-best is 500k·027**
 (027 — focal loss) at **0.022 ppm** (0.59 Hz J) held-out on the
-leakage-controlled global PubChem test split. The 3M (~137M) tier is **paused / under revision**.
+leakage-controlled global PubChem test split. The 3M (~137M) tier is **now training** (recipe 026,
+single A100, lr 1.5e-4 + non-finite-grad guard); held-out results pending.
 The model also supports a decode-time **test-time refinement** step
 (`model/inference/refine.py`) that polishes predicted shifts against the input 90 MHz spectrum
 (+43–77% shift-MAE — see `RESULTS.md` and `DESIGN.md` §12).
@@ -128,7 +129,7 @@ precedence** and is the convention for all production runs. Enforced by `model/t
 | `train_64k_026_peaks_softequiv.yaml` | spingraph(peak+soft-equiv) · matrix+soft_equiv · 64k — recipe 026 |
 | 64k recipes `025`–`030` (`train_64k_*`) | spingraph **light** (~10M) · the 025–030 ladder · 64k PubChem (the ablation tier) |
 | 500k recipes `025`–`030` (`train_500k_*`) | spingraph **med** (~57M) · the 025–030 ladder · 500k PubChem — **fleet-best = 027, 0.022 ppm** |
-| 3M recipes (`026`, `030`) (`train_3M_*`) | spingraph **xl** (~137M) · 3M PubChem — **paused / under revision** |
+| 3M recipes (`026`, `030`) (`train_3M_*`) | spingraph **xl** (~137M) · 3M PubChem — **training** (026 on a single A100; held-out eval pending) |
 
 ## Data paths
 
