@@ -189,6 +189,7 @@ class Trainer:
             tr, global_step = train_epoch(
                 model, train_dl, loss_fn, opt, sched, scaler, amp_ctx, self.device,
                 epoch=epoch, global_step=global_step, grad_clip=cfg.training.grad_clip,
+                grad_spike_factor=cfg.training.grad_spike_factor,
                 log_every_steps=cfg.diagnostics.log_every_steps, stage="1",
                 diagnostics=diag)
 

@@ -106,3 +106,24 @@ def test_config_load_and_override(tmp_path):
 def test_config_rejects_unknown_key(tmp_path):
     with pytest.raises(ValueError):
         config_from_dict({"training": {"epochsss": 5}})
+
+
+def test_grad_step_accept_spike_skip():
+    """grad_step_accept: reject non-finite + finite spikes above factor*EMA (with a floor),
+    accept normal norms and warmup (ema=None)."""
+    from model.training.loops import grad_step_accept
+    import math
+    # non-finite always rejected
+    assert grad_step_accept(float("inf"), 10.0, 8.0) is False
+    assert grad_step_accept(float("nan"), 10.0, 8.0) is False
+    # warmup (no EMA yet) -> accept anything finite
+    assert grad_step_accept(700.0, None, 8.0) is True
+    # normal norm with healthy EMA -> accept
+    assert grad_step_accept(25.0, 15.0, 8.0) is True
+    # the observed spike (703 vs EMA ~15) -> reject (703 > 8*15=120)
+    assert grad_step_accept(703.0, 15.0, 8.0) is False
+    # floor: small EMA shouldn't skip a still-healthy norm below the floor
+    assert grad_step_accept(40.0, 2.0, 8.0) is True   # 40 < max(16, 50)=50
+    assert grad_step_accept(60.0, 2.0, 8.0) is False  # 60 > 50 floor
+    # disabled (factor=0) -> only non-finite rejected
+    assert grad_step_accept(1e9, 15.0, 0.0) is True
