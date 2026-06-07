@@ -7,6 +7,7 @@ metrics helper, and emits step-level diagnostics.
 """
 from __future__ import annotations
 
+import math
 import time
 
 import torch
@@ -34,11 +35,19 @@ def train_epoch(model, loader, loss_fn, opt, sched, scaler, amp_ctx, device,
             scaler.scale(total).backward()
             scaler.unscale_(opt)
             gnorm = float(torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip))
-            scaler.step(opt); scaler.update()
+            # Skip the update on a non-finite grad norm: clip_grad_norm_ can't sanitize
+            # a NaN gradient (it scales by NaN -> permanently poisons the weights). One
+            # bad step otherwise kills a multi-day run (observed: 3M blew up at ep7).
+            # In DDP the grad is all-reduced in backward(), so gnorm — hence this skip —
+            # is identical across ranks, keeping them in lockstep.
+            if math.isfinite(gnorm):
+                scaler.step(opt)
+            scaler.update()
         else:
             total.backward()
             gnorm = float(torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip))
-            opt.step()
+            if math.isfinite(gnorm):
+                opt.step()
         sched.step()
 
         running["total"] = running.get("total", 0.0) + float(total.detach())
