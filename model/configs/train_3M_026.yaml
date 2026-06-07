@@ -4,9 +4,10 @@
 # model. Trained on the FULL corrected 2.81M train split (records_3M_train.json.gz).
 #   model : spingraph_decoder size=xl (TIER_PRESETS: deep conv stem + dim768/enc6/dec8, ~137M)
 #   loss  : matrix (shift-2x) + soft_equiv (Idea 2)
-# Stability: the med (~57M) decoder diverged at ep7 on the 1M set; this larger model keeps the
-# tighter regime (warmup 0.05, grad_clip 0.5) and drops LR to 1.5e-4. DO NOT raise LR above 1.5e-4:
-# a 2e-4 override (sqrt-scaled for a 2x batch) blew this up at ep7 again. Trains on a single A100.
+# Stability: a peak-LR edge-of-stability divergence recurs at ep6-7 (the med ~57M diverged at ep7
+# on 1M; this 137M diverged at ep6 even at lr 1.5e-4 — a FINITE grad cascade 9->703->...->6.9e18
+# that global-norm clip can't damp and the non-finite guard misses). Mitigations: peak LR -> 1e-4,
+# warmup -> 0.07, and grad_spike_factor=8 (skip the spiking batch). Trains on a single A100.
 
 run:
   name: spingraph_xl_026_3M
@@ -47,13 +48,17 @@ loss:
 training:
   epochs: 60
   batch_size: 256
-  lr: 0.00015               # lower than the xl's 2e-4: a 2.4x larger decoder is more divergence-prone
+  lr: 0.0001                # 1e-4: even 1.5e-4 diverged at ep6 (finite grad cascade at peak LR);
+                            # lowered the peak to push above the edge-of-stability. DO NOT raise.
   weight_decay: 0.01
   amp: bf16
-  warmup_frac: 0.05         # match the xl: settle the transformer decoder before peak LR
+  warmup_frac: 0.07         # slightly longer warmup to settle the transformer decoder before peak LR
   lr_stable_frac: 0.50
   lr_min_factor: 0.30
-  grad_clip: 0.5            # match the xl: clamp the gradient spike that blew up ep7 at 57M
+  grad_clip: 0.5            # global-norm clip; insufficient alone (see grad_spike_factor below)
+  grad_spike_factor: 8.0    # skip a step whose grad-norm spikes >8x the running EMA — catches the
+                            # FINITE blow-ups (703->...->6.9e18) that clip can't damp and the
+                            # non-finite guard misses. The real fix for the ep6/ep7 divergence.
   patience: 30               # WSD: must bridge the peak-LR plateau into the decay (~ep30+); 8 stopped runs mid-plateau, undertrained
   num_workers: 2
   val_every: 1

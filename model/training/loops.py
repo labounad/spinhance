@@ -14,14 +14,34 @@ import torch
 
 from model.evaluation.metrics import evaluate_output
 
+_SPIKE_FLOOR = 50.0   # never treat a grad norm below this as a spike (healthy norms ~5-30)
+
+
+def grad_step_accept(gnorm: float, gnorm_ema: float | None, spike_factor: float,
+                     floor: float = _SPIKE_FLOOR) -> bool:
+    """Whether to APPLY an optimizer step given its (post-clip) grad norm. Reject when the
+    norm is non-finite OR a sharp spike above the running EMA. clip_grad_norm_ rescales the
+    GLOBAL gradient vector, so it cannot damp a single runaway parameter (and cannot sanitize
+    a NaN at all) — a finite blow-up then cascades and kills the run (observed: 3M at ep6,
+    grad 9 -> 703 -> ... -> 6.9e18 at the correct LR). Skipping the offending batch rides
+    through it. In DDP the grad is all-reduced in backward(), so gnorm — and this decision —
+    is identical across ranks, keeping them in lockstep."""
+    if not math.isfinite(gnorm):
+        return False
+    if spike_factor > 0 and gnorm_ema is not None and gnorm > max(spike_factor * gnorm_ema, floor):
+        return False
+    return True
+
 
 def train_epoch(model, loader, loss_fn, opt, sched, scaler, amp_ctx, device,
                 *, epoch, global_step, grad_clip, log_every_steps, stage,
-                diagnostics=None):
+                grad_spike_factor=0.0, diagnostics=None):
     model.train()
     running: dict[str, float] = {}
     n_batches = 0
     step = global_step
+    gnorm_ema: float | None = None   # running EMA of accepted grad norms, for spike detection
+    n_skipped = 0
 
     for batch in loader:
         batch = batch.to(device, non_blocking=True)
@@ -35,19 +55,23 @@ def train_epoch(model, loader, loss_fn, opt, sched, scaler, amp_ctx, device,
             scaler.scale(total).backward()
             scaler.unscale_(opt)
             gnorm = float(torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip))
-            # Skip the update on a non-finite grad norm: clip_grad_norm_ can't sanitize
-            # a NaN gradient (it scales by NaN -> permanently poisons the weights). One
-            # bad step otherwise kills a multi-day run (observed: 3M blew up at ep7).
-            # In DDP the grad is all-reduced in backward(), so gnorm — hence this skip —
-            # is identical across ranks, keeping them in lockstep.
-            if math.isfinite(gnorm):
+            accept = grad_step_accept(gnorm, gnorm_ema, grad_spike_factor)
+            if accept:
                 scaler.step(opt)
             scaler.update()
         else:
             total.backward()
             gnorm = float(torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip))
-            if math.isfinite(gnorm):
+            accept = grad_step_accept(gnorm, gnorm_ema, grad_spike_factor)
+            if accept:
                 opt.step()
+        if accept:
+            gnorm_ema = gnorm if gnorm_ema is None else 0.98 * gnorm_ema + 0.02 * gnorm
+        else:
+            n_skipped += 1
+            if diagnostics is not None:
+                diagnostics.log_event("grad_skip", {"epoch": epoch, "step": step,
+                                                    "grad_norm": gnorm, "ema": gnorm_ema})
         sched.step()
 
         running["total"] = running.get("total", 0.0) + float(total.detach())

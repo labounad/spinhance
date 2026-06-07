@@ -49,6 +49,8 @@ class TrainingCfg:
     lr: float = 3e-4
     weight_decay: float = 1e-2
     grad_clip: float = 1.0
+    grad_spike_factor: float = 8.0  # skip a step whose grad-norm spikes > this x the running EMA
+                                    # (catches FINITE blow-ups that clip can't damp; 0 disables)
     amp: str = "bf16"            # bf16 | fp16 | none
     warmup_frac: float = 0.03
     lr_min_factor: float = 0.05  # cosine-decay floor (LR never below this * peak)
