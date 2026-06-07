@@ -13,6 +13,7 @@ buffers), so no SyncBatchNorm is needed.
 from __future__ import annotations
 
 import os
+from datetime import timedelta
 
 import torch
 import torch.distributed as dist
@@ -56,7 +57,14 @@ def init_distributed() -> DistInfo:
     if world <= 1:
         return DistInfo(False, 0, 1, 0)
     torch.cuda.set_device(local)
-    dist.init_process_group(backend="nccl", init_method="env://")
+    # Long collective timeout (default 45 min, override via NCCL_PG_TIMEOUT_MIN).
+    # Validation runs on the main rank only, so the other ranks block on the first
+    # collective of the next epoch while rank 0 validates (~15 min on the 560k val
+    # set). NCCL's default 10-min watchdog would fire and abort the non-main ranks
+    # mid-run (observed: rank 1 core-dumped at the epoch-0 -> val boundary).
+    timeout_min = int(os.environ.get("NCCL_PG_TIMEOUT_MIN", "45"))
+    dist.init_process_group(backend="nccl", init_method="env://",
+                            timeout=timedelta(minutes=timeout_min))
     return DistInfo(True, rank, world, local)
 
 
