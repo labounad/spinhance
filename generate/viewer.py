@@ -292,7 +292,7 @@ class _MainWindow(tk.Tk):
 
     def __init__(self, rows: list[dict], source_name: str, n: int, seed: int) -> None:
         super().__init__()
-        self.title("SpinHance Viewer")
+        self.title("Spinhance Viewer")
         self.configure(bg=_BG)
         self.resizable(True, True)
         _configure_styles(self)

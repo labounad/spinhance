@@ -1,5 +1,5 @@
 """
-simulation — SpinHance Task 3 (spin simulation pipeline).
+simulation — Spinhance Task 3 (spin simulation pipeline).
 
 Converts shift+J+degeneracy matrices to ``mnova-spinsim`` XML, drives MestReNova
 to simulate ¹H spectra at low (90 MHz) and high (600.15 MHz) field, and exports

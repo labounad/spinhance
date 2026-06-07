@@ -1,4 +1,4 @@
-# SpinHance Architecture Ideas
+# Spinhance Architecture Ideas
 
 > Kept as a reference design doc. The `autoai/` autonomous-loop package this originally drove has been removed (unused); the ideas below remain a useful ranked menu of architecture/loss/representation experiments — several (the structured query decoder, peak channel, soft-equivalence) became the production `spingraph_decoder`.
 
@@ -8,7 +8,7 @@ It should be treated as a ranked menu of model/loss/representation experiments. 
 
 ## Project Context
 
-SpinHance learns an inverse map:
+Spinhance learns an inverse map:
 
 ```text id="o12f81"
 90 MHz 1H NMR spectrum → field-independent spin-system parameters

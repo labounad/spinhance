@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "spinhance-sim"
 version = "0.1.0"
-description = "SpinHance Task 3 — convert shift+J matrices to MNova spin-system XML and simulate 1H NMR spectra at low (90 MHz) and high (600 MHz) field."
+description = "Spinhance Task 3 — convert shift+J matrices to MNova spin-system XML and simulate 1H NMR spectra at low (90 MHz) and high (600 MHz) field."
 readme = "simulation/README.md"
 requires-python = ">=3.10"
 dependencies = [

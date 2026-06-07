@@ -1,4 +1,4 @@
-# SpinHance
+# Spinhance
 
 Extract ¹H chemical shifts and scalar coupling constants from low-field (90 MHz) ¹H NMR spectra using deep learning. Given a spectrum, the model predicts the underlying spin-system parameters — shifts δ (ppm), couplings J (Hz), and proton degeneracies — that reproduce it exactly at any field strength.
 
@@ -108,7 +108,7 @@ The production architecture is **`spingraph_decoder`**; the standard **026 recip
 
 ### At scale (HPC / Slurm)
 
-The large-corpus fleet streams the stacked PubChem shards. Submit via the Slurm wrappers in `model/scripts/` (e.g. `train_hpc.slurm`), which set the data paths and a reservoir `SAMPLE_N` to pick the tier (64k / 500k / 3M). On the HPC the generated data lives in the group filesystem at `/gpfs/group/shenvi/Users/labounader/spinhance/` (dataset `rebuild3M/`, checkpoints `runs/` — `model/runs` is a symlink into it). The current sweep is the **025–030 recipe ladder** at two finished model tiers — **`light` (64k, ~10M)** and **`med` (500k, ~57M)**; the **`xl` (3M, ~137M)** tier is **paused / under revision**. (Tiers are defined by `TIER_PRESETS` in `model/architectures/resnet1d.py`.) The **fleet-best is 500k·027 at 0.022 ppm** (0.59 Hz J) held-out — see `model/RESULTS.md` for the full sweep + the test-time refinement results. Score any run on the shared, leakage-controlled held-out split with:
+The large-corpus fleet streams the stacked PubChem shards. Submit via the Slurm wrappers in `model/scripts/` (e.g. `train_hpc.slurm`), which set the data paths and a reservoir `SAMPLE_N` to pick the tier (64k / 500k / 3M). On the HPC the generated data lives in the group filesystem at `/gpfs/group/shenvi/Users/labounader/spinhance/` (dataset `rebuild3M/`, checkpoints `runs/` — `model/runs` is a symlink into it). The current sweep is the **025–030 recipe ladder** at two finished model tiers — **`light` (64k, ~10M)** and **`med` (500k, ~57M)**; the **`xl` (3M, ~137M)** tier is **now training** (026 on a single A100, lr 1.5e-4). (Tiers are defined by `TIER_PRESETS` in `model/architectures/resnet1d.py`.) The **fleet-best is 500k·027 at 0.022 ppm** (0.59 Hz J) held-out — see `model/RESULTS.md` for the full sweep + the test-time refinement results. Score any run on the shared, leakage-controlled held-out split with:
 
 ```bash
 PYTHONPATH=. python -m model.experiments.eval_heldout \

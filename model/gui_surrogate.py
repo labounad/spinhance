@@ -32,7 +32,7 @@ S3_TRAINING = "s3://spinhance-data/training"
 CACHE_DIR = Path(tempfile.gettempdir()) / "spinhance_surrogate_viewer"
 DEF_JSON = str(REPO / "mol_to_spin_system/data/spin_systems_chembl_8spin_randomized.json")
 
-st.set_page_config(page_title="SpinHance Surrogate Viewer", layout="wide",
+st.set_page_config(page_title="Spinhance Surrogate Viewer", layout="wide",
                    initial_sidebar_state="expanded")
 
 
@@ -147,7 +147,7 @@ def _fig_overlay(gt_ppm, gt, su_ppm, su, title):
 # ── app ────────────────────────────────────────────────────────────────────────
 
 def main():
-    st.title("SpinHance — Surrogate Renderer Evaluation")
+    st.title("Spinhance — Surrogate Renderer Evaluation")
     st.caption("Surrogate-rendered spectrum vs pyspin ground truth (matrix → spectrum).")
 
     with st.sidebar:

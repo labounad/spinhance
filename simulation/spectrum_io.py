@@ -1,7 +1,7 @@
 """
 spectrum_io.py
 ==============
-Canonical save/load for the three SpinHance spectrum representations, in order
+Canonical save/load for the three Spinhance spectrum representations, in order
 of increasing sparsity:
 
 1. **dense**  — full intensity array on the grid (``.npy``). What the engines

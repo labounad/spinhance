@@ -1,4 +1,4 @@
-# SpinHance Model Results
+# Spinhance Model Results
 
 > The **current fleet** is the corrected-data (Audit-2) recipe sweep on the leakage-controlled
 > global 10% PubChem held-out split. Scroll to **[Current fleet](#current-fleet-2026-06-04)**
@@ -10,8 +10,9 @@
 
 The fleet is the shared `spingraph_decoder` backbone trained at two finished tiers — **64k**
 (`light`, ~10M params) and **500k** (`med`, ~57M params) — across the **025–030 recipe ladder**.
-A third **3M** tier (`xl`, ~137M params) is **paused / under revision** (architectural + training
-issues to resolve before the next 3M run), so it is not in the tables below.
+A third **3M** tier (`xl`, ~137M params) is **now training** (recipe 026, single A100, config-native
+lr 1.5e-4 + a non-finite-grad skip guard; a √-scaled 2e-4 LR blew it up at epoch 7). Held-out
+results are pending, so it is not yet in the tables below.
 (Model-size tiers `light`/`med`/`xl` are defined by `TIER_PRESETS` in `model/architectures/resnet1d.py`.)
 
 **Recipe ladder** (see `docs/models.html` / `RECIPE_DESC` in `docs/assets/viewers.js`):

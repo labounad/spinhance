@@ -268,7 +268,7 @@ def _render(run_dir: Path, save_path: Path) -> bool:
                        edgecolor=_GRID, alpha=0.95))
 
     # ── Title + save ──────────────────────────────────────────────────────────
-    fig.suptitle("SpinHance  ·  model/ smoke test",
+    fig.suptitle("Spinhance  ·  model/ smoke test",
                  fontsize=13, fontweight="bold", color=_TEXT, y=0.96)
 
     fig.savefig(save_path, dpi=130, bbox_inches="tight",
@@ -295,7 +295,7 @@ def _open_image(path: Path) -> None:
 
 def main():
     ap = argparse.ArgumentParser(
-        description="SpinHance model/ graphical smoke test")
+        description="Spinhance model/ graphical smoke test")
     ap.add_argument("--out",     default="",
                     help="PNG output path (default: smoke_YYYYMMDD_HHMMSS.png)")
     ap.add_argument("--no-open", action="store_true",

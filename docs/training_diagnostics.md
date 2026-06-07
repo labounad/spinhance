@@ -1,6 +1,6 @@
-# SpinHance Training Diagnostics
+# Spinhance Training Diagnostics
 
-SpinHance model training writes a durable, S3-backed diagnostics bundle for every run. This bundle is the canonical interface between human debugging, the Streamlit live dashboard, probe/failure analysis, and monitoring agents experiment selection.
+Spinhance model training writes a durable, S3-backed diagnostics bundle for every run. This bundle is the canonical interface between human debugging, the Streamlit live dashboard, probe/failure analysis, and monitoring agents experiment selection.
 
 The source of truth is the S3 session, not stdout, screenshots, or prose summaries.
 

@@ -2,7 +2,7 @@
 
 ## What this module does
 
-Task 1 of SpinHance: screen ChEMBL (~2.3 M compounds) down to molecules
+Task 1 of Spinhance: screen ChEMBL (~2.3 M compounds) down to molecules
 with **exactly 8 magnetically distinct ¹H spin groups**.  These molecules
 feed Task 2 (shift + J matrix generation) and ultimately Task 3 (MNova
 spin simulation).

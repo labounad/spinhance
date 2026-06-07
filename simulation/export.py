@@ -94,7 +94,7 @@ def export_spectra(spectra_dir, out, field=None, sparsify_data: bool = True,
     aux = sorted(scan_dir.rglob("ppm_axis.npy")) + list(spectra_dir.glob("index.csv"))
 
     manifest = (
-        "SpinHance spectra export\n"
+        "Spinhance spectra export\n"
         f"dense->sparse on export: {sparsify_data}  cutoff: {cutoff} x max  "
         f"renormalized: {renormalize}\n"
         "Read any spectrum with simulation.spectrum_io.load_spectrum(path):\n"

@@ -1,4 +1,4 @@
-# SpinHance monitoring — theme matched to the project website (dark palette).
+# Spinhance monitoring — theme matched to the project website (dark palette).
 [theme]
 base = "dark"
 primaryColor = "#5b8cff"             # --accent (blue)

@@ -163,7 +163,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="spinhance-gen",
         description=(
-            f"SpinHance Task 1 — screen ChEMBL for molecules with exactly "
+            f"Spinhance Task 1 — screen ChEMBL for molecules with exactly "
             f"{N_SPIN_GROUPS} magnetically distinct ¹H spin groups."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
