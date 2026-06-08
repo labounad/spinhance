@@ -40,11 +40,13 @@ loss:
 training:
   epochs: 60
   batch_size: 256
-  lr: 0.0001                # 1e-4: the 137M decoder diverges at ep6-7 above this. DO NOT raise.
+  lr: 0.00005               # 5e-5: even 1e-4 destabilized at the long peak plateau (025 ep17,
+                            # 026 ep10) — the spike-guard then stalls. Halve the peak. DO NOT raise.
   weight_decay: 0.01
   amp: bf16
   warmup_frac: 0.07         # settle the transformer decoder before peak LR
-  lr_stable_frac: 0.50
+  lr_stable_frac: 0.15      # MUCH shorter peak plateau (was 0.50): LR starts decaying by ~ep13,
+                            # before the ~ep17 edge-of-stability wall, instead of holding peak to ~ep33
   lr_min_factor: 0.30
   grad_clip: 0.5            # global-norm clip; insufficient alone (see grad_spike_factor)
   grad_spike_factor: 8.0    # skip a step whose grad-norm spikes >8x the running EMA (the real
