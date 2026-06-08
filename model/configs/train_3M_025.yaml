@@ -1,0 +1,61 @@
+# 3M tier — "xl 025": the baseline matrix recipe (NO peak-channel, NO soft-equiv) at the
+# xl (~137M) capacity on the FULL 2.81M train split — the 3M companion to train_500k_025 /
+# train_64k_025. Isolates pure data+capacity scaling for the clean 025 recipe.
+#   model : spingraph_decoder size=xl (TIER_PRESETS: deep conv stem + dim768/enc6/dec8, ~137M)
+#   loss  : matrix only, shift weighted 2x (identical recipe to the 64k/500k 025)
+# Stability (shared by all 3M recipes — a TIER property, not recipe-specific): the 137M decoder
+# hits a peak-LR edge-of-stability divergence at ep6-7 (a FINITE grad cascade clip can't damp).
+# Mitigations: peak LR 1e-4, warmup 0.07, grad_spike_factor=8 (skip the spiking batch). Single A100.
+
+run:
+  name: spingraph_xl_025_3M
+  output_dir: model/runs
+
+data:
+  records: data/pubchem/spin_systems_pubchem.json.gz
+  parts: data/pubchem/spectra_parts/90MHz
+  field: 90
+  split: none
+  max_mol: 0                                     # override with --set data.max_mol=<N>
+  preload: false           # full 2.81M is ~184GB RAM-resident — launcher sets preload + cache
+
+model:
+  name: spingraph_decoder
+  size: xl                 # model tier: 3M ~137M (TIER_PRESETS: stem deep, dim768/enc6/dec8)
+  dropout: 0.1
+  # NO use_peak_channel / use_soft_equiv — keep this a clean 025-recipe scale-up.
+
+loss:
+  name: composite
+  terms:
+    - name: matrix
+      sym_jmag: true            # symmetry-aware (automorphism-invariant) coupling term
+      weight: 1.0
+      weights:                  # shift weighted 2x (same as 025)
+        shift: 2.0
+        jmag: 1.0
+        presence: 0.5
+        deg: 0.5
+
+training:
+  epochs: 60
+  batch_size: 256
+  lr: 0.0001                # 1e-4: the 137M decoder diverges at ep6-7 above this. DO NOT raise.
+  weight_decay: 0.01
+  amp: bf16
+  warmup_frac: 0.07         # settle the transformer decoder before peak LR
+  lr_stable_frac: 0.50
+  lr_min_factor: 0.30
+  grad_clip: 0.5            # global-norm clip; insufficient alone (see grad_spike_factor)
+  grad_spike_factor: 8.0    # skip a step whose grad-norm spikes >8x the running EMA (the real
+                            # fix for the ep6/ep7 finite grad blow-up that clip can't damp)
+  patience: 30               # WSD: must bridge the peak-LR plateau into the decay (~ep30+)
+  num_workers: 2
+  val_every: 1
+  seed: 0
+
+diagnostics:
+  enabled: true
+  log_every_steps: 200
+  probe_every_epochs: 2
+  probe_count: 16
