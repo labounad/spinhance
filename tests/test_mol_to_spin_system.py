@@ -192,6 +192,35 @@ def test_proton_groups_excludes_deuterium():
     assert degeneracies(groups) == [3]  # only the methyl
 
 
+def test_proton_groups_split_diastereotopic():
+    """Diastereotopic protons are chemically INEQUIVALENT and must NOT be merged
+    (regression: the old CanonicalRankAtoms grouping collapsed them). The geminal
+    pair must also become a real inter-group coupling."""
+    from mol_to_spin_system.matrix import build_spin_system
+
+    # 3,3-disubstituted azetidine (CH3 != OH on C3 -> the ring CH2 protons are
+    # diastereotopic): expect CH3(3) + two CH2 groups (2,2) + 3 aromatic(1,1,1),
+    # NOT a single deg-4 CH2 group.
+    sys_az = build_spin_system(make_test_mol_3d("CC1(CN(C1)C2=C(C=CC=N2)C(F)(F)F)O"))
+    assert sorted(sys_az.degeneracy.tolist()) == [1, 1, 1, 2, 2, 3]
+    # the two deg-2 CH2 groups must carry a geminal 2J (~ -8..-15 Hz), not be a singlet
+    deg2 = [i for i, d in enumerate(sys_az.degeneracy) if d == 2]
+    assert len(deg2) == 2 and sys_az.matrix[deg2[0], deg2[1]] < -5.0
+
+    # CH2's flanking a defined stereocentre are diastereotopic -> every CH2 proton split
+    sys_ch = build_spin_system(make_test_mol_3d("C1=CC(=C(C=C1Br)[C@@H](CCN)N)O"))
+    assert sys_ch.degeneracy.tolist() == [1] * 8
+
+
+def test_proton_groups_keep_enantiotopic():
+    """Enantiotopic / homotopic protons ARE equivalent in an achiral solvent and must
+    stay merged (guard against the diastereotopic fix over-splitting)."""
+    # ethanol CH2 is enantiotopic -> stays deg 2
+    assert sorted(degeneracies(proton_groups(make_test_mol_3d("CCO"))[0])) == [2, 3]
+    # isopropanol's two methyls are enantiotopic -> one deg-6 group, not two deg-3
+    assert sorted(degeneracies(proton_groups(make_test_mol_3d("CC(O)C"))[0])) == [1, 6]
+
+
 # --- end-to-end (needs Java + nmrshiftdb predictor) -------------------------
 
 def _predictor_available() -> bool:
