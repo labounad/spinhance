@@ -192,6 +192,80 @@ def test_proton_groups_excludes_deuterium():
     assert degeneracies(groups) == [3]  # only the methyl
 
 
+def test_proton_groups_split_diastereotopic():
+    """Diastereotopic protons are chemically INEQUIVALENT and must NOT be merged
+    (regression: the old CanonicalRankAtoms grouping collapsed them). The geminal
+    pair must also become a real inter-group coupling."""
+    from mol_to_spin_system.matrix import build_spin_system
+
+    # 3,3-disubstituted azetidine (CH3 != OH on C3 -> the ring CH2 protons are
+    # diastereotopic): expect CH3(3) + two CH2 groups (2,2) + 3 aromatic(1,1,1),
+    # NOT a single deg-4 CH2 group.
+    sys_az = build_spin_system(make_test_mol_3d("CC1(CN(C1)C2=C(C=CC=N2)C(F)(F)F)O"))
+    assert sorted(sys_az.degeneracy.tolist()) == [1, 1, 1, 2, 2, 3]
+    # the two deg-2 CH2 groups must carry a geminal 2J (~ -8..-15 Hz), not be a singlet
+    deg2 = [i for i, d in enumerate(sys_az.degeneracy) if d == 2]
+    assert len(deg2) == 2 and sys_az.matrix[deg2[0], deg2[1]] < -5.0
+
+    # CH2's flanking a defined stereocentre are diastereotopic -> every CH2 proton split
+    sys_ch = build_spin_system(make_test_mol_3d("C1=CC(=C(C=C1Br)[C@@H](CCN)N)O"))
+    assert sys_ch.degeneracy.tolist() == [1] * 8
+
+
+def test_equiv_orbit_topicity_for_overdispersion():
+    """The over-dispersion shares a shift draw only WITHIN a topicity orbit, so the
+    orbit key must separate diastereotopic protons (independent shifts) while uniting
+    enantiotopic ones. Regression for the equiv_orbit bug: it used CanonicalRankAtoms
+    (constitutional), collapsing same-carbon diastereotopic protons into one orbit and
+    forcing Delta-delta = 0."""
+    from mol_to_spin_system.groups import _substitution_key
+
+    mol = make_test_mol_3d("CC1(CN(C1)C2=C(C=CC=N2)C(F)(F)F)O")  # 3,3-disub azetidine
+    # the two H's on a single ring CH2 carbon are diastereotopic -> distinct keys
+    ch2_carbons = [a.GetIdx() for a in mol.GetAtoms()
+                   if a.GetAtomicNum() == 6 and not a.GetIsAromatic()
+                   and sum(n.GetAtomicNum() == 1 for n in a.GetNeighbors()) == 2]
+    assert ch2_carbons
+    found_diastereotopic = False
+    for c in ch2_carbons:
+        hs = [n.GetIdx() for n in mol.GetAtomWithIdx(c).GetNeighbors() if n.GetAtomicNum() == 1]
+        if len(hs) == 2 and _substitution_key(mol, hs[0]) != _substitution_key(mol, hs[1]):
+            found_diastereotopic = True
+    assert found_diastereotopic, "same-carbon diastereotopic protons must get distinct orbit keys"
+
+
+def test_proton_groups_keep_enantiotopic():
+    """Enantiotopic / homotopic protons ARE equivalent in an achiral solvent and must
+    stay merged (guard against the diastereotopic fix over-splitting)."""
+    # ethanol CH2 is enantiotopic -> stays deg 2
+    assert sorted(degeneracies(proton_groups(make_test_mol_3d("CCO"))[0])) == [2, 3]
+    # isopropanol's two methyls are enantiotopic -> one deg-6 group, not two deg-3
+    assert sorted(degeneracies(proton_groups(make_test_mol_3d("CC(O)C"))[0])) == [1, 6]
+
+
+def test_end_to_end_diastereotopic_independent_shifts(tmp_path):
+    """Full dataset path (SMILES -> labelled XYZ -> entry_to_spin_system -> bake): a
+    same-carbon diastereotopic CH2 must land in DISTINCT equiv_orbits and therefore get
+    INDEPENDENT (different) shifts after over-dispersion. Regression for equiv_orbit being
+    computed with CanonicalRankAtoms (which lumped them -> Delta-delta = 0)."""
+    import numpy as np
+    from generate.xyz_writer import molecule_to_xyz
+    from mol_to_spin_system.xyz import iter_xyz_entries, entry_to_spin_system
+    from mol_to_spin_system.augment import sample_record
+
+    block = molecule_to_xyz("CC1(CN(C1)C2=C(C=CC=N2)C(F)(F)F)O", chembl_id="t", inchikey="k")
+    assert block, "labelled XYZ block generation failed"
+    p = tmp_path / "m.xyz"; p.write_text(block)
+    comment, atoms = next(iter(iter_xyz_entries(str(p))))
+    rec = entry_to_spin_system(comment, atoms).to_dict()
+
+    # the two azetidine CH2 shift-classes must be different orbits (not one lump)
+    assert len(set(rec["equiv_orbit"])) >= 4
+    baked = sample_record(rec, rng=np.random.default_rng(0))
+    ch2 = sorted(g[0] for g in baked["spin_groups"] if 2.0 < g[0] < 3.6)
+    assert len(ch2) >= 2 and (max(ch2) - min(ch2)) > 0.02, "diastereotopic Delta-delta missing"
+
+
 # --- end-to-end (needs Java + nmrshiftdb predictor) -------------------------
 
 def _predictor_available() -> bool:
