@@ -1,10 +1,12 @@
 """mol_to_spin_system/augment.py — randomized chemical-shift sampling.
 
-The NMRShiftDB HOSE predictor returns one deterministic shift per environment,
-so the same molecule always yields the same spectrum.  For data augmentation we
-instead sample each spin group's shift from ``N(mean, sigma)``, where *sigma* is
-derived from the empirical spread (min/max) of that HOSE environment in the
-database (stored by Task 2 as ``shift_range``)::
+The production shift engine is the pure-Python **Pretsch** additive model (not
+HOSE/NMRShiftDB); it returns one deterministic shift per environment, so the same
+molecule always yields the same spectrum.  For data augmentation we instead sample
+each spin group's shift from ``N(mean, sigma)``, where *sigma* is derived from the
+empirical spread (min/max) of that environment (stored by Task 2 as
+``shift_range``; with the Pretsch point estimate this spread is degenerate, so the
+floor below dominates)::
 
     sigma = clip((max - min) / k, floor, cap)
 

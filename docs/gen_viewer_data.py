@@ -19,22 +19,22 @@ from model.diagnostics import run_reader as rr
 RUNS = "model/runs"
 
 # key -> (run-name substring, label, tier, recipe, params). The substring matches the run
-# dir <date>_<time>_<name>_<hash>; exact names avoid the cancelled rebuild_3M_xl / 500k_030.
+# dir <date>_<time>_<name>_<hash>; exact names target the v2 rebuild fleet (3M only 025/027).
 FLEET = [
-    ("64k_025",  "rebuild_64k_025_sym",     "64k · 025", "64k",  "025", "10M"),
-    ("64k_026",  "rebuild_64k_026_sym",     "64k · 026", "64k",  "026", "10M"),
-    ("64k_027",  "rebuild_64k_027_sym",     "64k · 027", "64k",  "027", "10M"),
-    ("64k_028",  "rebuild_64k_028_sym",     "64k · 028", "64k",  "028", "10M"),
-    ("64k_029",  "rebuild_64k_029_sym",     "64k · 029", "64k",  "029", "10M"),
-    ("64k_030",  "rebuild_64k_030_sym",     "64k · 030", "64k",  "030", "10M"),
-    ("500k_025", "rebuild_500k_025_sym", "500k · 025", "500k", "025", "57M"),
-    ("500k_026", "rebuild_500k_026_sym", "500k · 026", "500k", "026", "57M"),
-    ("500k_027", "rebuild_500k_027_sym", "500k · 027", "500k", "027", "57M"),
-    ("500k_028", "rebuild_500k_028_sym", "500k · 028", "500k", "028", "57M"),
-    ("500k_029", "rebuild_500k_029_sym", "500k · 029", "500k", "029", "57M"),
-    ("500k_030", "rebuild_500k_030_sym", "500k · 030", "500k", "030", "57M"),
-    ("3M_026",   "rebuild_3M_026_sym",  "3M · 026",   "3M",   "026", "137M"),
-    ("3M_030",   "rebuild_3M_030_sym",  "3M · 030",   "3M",   "030", "137M"),
+    ("64k_025",  "rebuild_64k_025_v2",     "64k · 025", "64k",  "025", "10M"),
+    ("64k_026",  "rebuild_64k_026_v2",     "64k · 026", "64k",  "026", "10M"),
+    ("64k_027",  "rebuild_64k_027_v2",     "64k · 027", "64k",  "027", "10M"),
+    ("64k_028",  "rebuild_64k_028_v2",     "64k · 028", "64k",  "028", "10M"),
+    ("64k_029",  "rebuild_64k_029_v2",     "64k · 029", "64k",  "029", "10M"),
+    ("64k_030",  "rebuild_64k_030_v2",     "64k · 030", "64k",  "030", "10M"),
+    ("500k_025", "rebuild_500k_025_v2", "500k · 025", "500k", "025", "57M"),
+    ("500k_026", "rebuild_500k_026_v2", "500k · 026", "500k", "026", "57M"),
+    ("500k_027", "rebuild_500k_027_v2", "500k · 027", "500k", "027", "57M"),
+    ("500k_028", "rebuild_500k_028_v2", "500k · 028", "500k", "028", "57M"),
+    ("500k_029", "rebuild_500k_029_v2", "500k · 029", "500k", "029", "57M"),
+    ("500k_030", "rebuild_500k_030_v2", "500k · 030", "500k", "030", "57M"),
+    ("3M_025",   "rebuild_3M_025_v2",  "3M · 025",   "3M",   "025", "137M"),
+    ("3M_027",   "rebuild_3M_027_v2",  "3M · 027",   "3M",   "027", "137M"),
 ]
 KEYS = ["shift_mae_ppm", "j_mae_hz", "presence_f1", "deg_acc_balanced"]
 
@@ -89,10 +89,12 @@ for key, name, label, tier, recipe, params in FLEET:
         te[key] = {**meta, "state": "training"}
 
 te["_meta"] = {
-    "split": "leakage-controlled global 10% PubChem held-out",
-    "test_n_total": 312682, "test_n_eval": n_eval,
-    "note": "Held-out on a leakage-controlled global 10% PubChem split (union-find on "
-            "matrix fingerprint + InChIKey); every model scored on identical molecules.",
+    "split": "leakage-controlled global 10% PubChem held-out (union-find clusters + single seed-0 shuffle)",
+    "test_n_eval": n_eval,
+    "note": "Leakage-controlled global 10% PubChem held-out: near-duplicates grouped by "
+            "union-find (matrix fingerprint + InChIKey), the clusters placed by a single "
+            "random shuffle (numpy default_rng seed 0), last ~10% of molecules (whole "
+            "clusters) held out; every model scored on identical molecules.",
 }
 json.dump(lc, open("docs/data/learning_curves.json", "w"))
 json.dump(te, open("docs/data/test_eval.json", "w"))

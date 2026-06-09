@@ -4,21 +4,23 @@ These are things missing from `model/` that are needed for a serious training ru
 (at scale on the 3.13M-molecule PubChem dataset / HPC). Listed roughly in priority order.
 
 > **Note (2026-06-03):** several items below are now addressed — spectra are served from
-> stacked shards with an optional in-RAM `StackedSpectra` preload (#1), and the model is
-> 90 MHz-only by config (#5). The data scale is now ~3.13M, not 60k. Re-triage before acting.
+> stacked shards with an optional in-RAM preload (#1), and the model is
+> 90 MHz-only by config (#5). The data scale is now ~3.13M molecules, not 60k. The production
+> shift engine is the pure-Python **Pretsch** additive model (not HOSE/NMRShiftDB). Re-triage
+> before acting.
 
 ---
 
 ## 1. Spectra RAM cache (SpectraCache)
 
 **What's missing:** `model/dataset.py` calls `np.load(path)` from disk on every
-`__getitem__`. For 60k molecules × N epochs, that's millions of small file reads
+`__getitem__`. For 3.13M molecules × N epochs, that's millions of small file reads
 and will be the bottleneck on any networked or HDD-backed filesystem.
 
 **What to add:** A cache class that preloads all spectra into a single fp16 numpy
 array at startup. Loading from disk takes ~60 s once; subsequent epoch I/O is
 zero. Also needs to support loading from `mol_all.tar.gz` (sequential streaming
-gzip pass) as the alternative to 64k individual files.
+gzip pass) as the alternative to individual per-molecule files.
 
 ```python
 class SpectraCache:
@@ -71,7 +73,7 @@ will crash at `__getitem__` time.
 **What to add:** The cache class (see #1) should detect `mol_all.tar.gz` in the
 parent directory and do one sequential streaming pass through it to populate the
 cache, instead of reading individual files. This is the path used when uploading
-spectra to S3 as a single archive rather than 64k files.
+spectra to S3 as a single archive rather than millions of individual files.
 
 ---
 
@@ -94,7 +96,7 @@ included. On EC2 you only upload the 90 MHz data → 0 records loaded.
 
 **What's missing:** The CLI uses `--no-scaffold` to skip scaffold splitting.
 `MurckoScaffoldSmiles(mol=mol)` crashes on RDKit 2026.03 when a double bond has
-`STEREOANY` stereo (which appears in the 60k dataset). The crash is deep in
+`STEREOANY` stereo (which appears in the dataset). The crash is deep in
 `Canon.cpp` and is not catchable in Python.
 
 **What to fix:** Flip to `--scaffold` (store_true, default off). Scaffold
@@ -220,7 +222,7 @@ body) are not picklable by forkserver.
 | 3 | Gradient accumulation | Small | High — enables large effective batch on small GPU |
 | 4 | tar.gz loading in dataset | Small | Required for EC2 deployment |
 | 5 | 90 MHz only fields | Trivial | Required — currently loads 0 records on EC2 |
-| 6 | Scaffold opt-in | Trivial | Required — default crashes on 60k dataset |
+| 6 | Scaffold opt-in | Trivial | Required — default crashes on the dataset |
 | 7 | Hungarian shift MAE | Small | Medium — honest evaluation metric |
 | 8 | Checkpoint completeness + resume | Medium | High — essential for spot instances |
 | 9 | save_every periodic ckpt | Trivial | Medium — crash safety |
