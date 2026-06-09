@@ -1,12 +1,51 @@
 # Spinhance Model Results
 
-> The **current fleet** is the corrected-data (Audit-2) recipe sweep on the leakage-controlled
-> global 10% PubChem held-out split. Scroll to **[Current fleet](#current-fleet-2026-06-04)**
-> for the live numbers; everything below that section is **history** (first-pass data, pre
-> spin-equivalence fix). Live numbers are also on the website (Explore the Models) and tracked
-> in [PIPELINE_AUDIT_2.md](../PIPELINE_AUDIT_2.md).
+> ⚠️ **All numbers in this document are from the PRE-CORRECTION dataset and are SUPERSEDED.**
+> The dataset was regenerated ("Audit-2 / v2") and the **entire 025–030 recipe ladder is being
+> retrained on the corrected v2 data across all three tiers** — see
+> **[v2 retraining (in progress, results pending)](#v2-retraining-in-progress-results-pending)**.
+> Do **not** quote any metric below (e.g. 0.022 / 0.047 / 0.279 ppm, 0.59 Hz, F1 0.89) as current;
+> new numbers are **pending**. The corrected-data scoring uses a **leakage-controlled** global 10%
+> held-out test split of all 3,126,829 molecules: near-duplicates are grouped by union-find
+> (matrix fingerprint + InChIKey), the clusters are placed by a single random shuffle (`default_rng`
+> seed 0), and the last ~10% of molecules (whole clusters) are held out (~2.81M train / ~0.31M test) —
+> so no near-duplicate spans train/test, and every model is scored on the same held-out molecules.
+>
+> What changed in v2: **diastereotopic protons are now kept inequivalent and given INDEPENDENT
+> over-dispersed Gaussian shifts** — the over-dispersion orbit is computed via the 3D
+> deuterium-substitution test, not `CanonicalRankAtoms` (previously same-carbon diastereotopic
+> protons were wrongly forced to identical shift, Δδ=0) — alongside the earlier symmetric-rotor
+> and methyl-geminal fixes. The shift engine is the pure-Python **Pretsch** additive model.
 
-## Current fleet (2026-06-04)
+## v2 retraining (in progress, results pending)
+
+The corrected-data (Audit-2 / v2) fleet is the shared `spingraph_decoder` backbone with the
+**025–030 recipe ladder** retrained on the regenerated v2 dataset (PubChem 8-spin set,
+3,126,829 molecules) across all three tiers:
+
+- **64k** (`light`, ~10M) — recipes **025–030**
+- **500k** (`med`, ~57M) — recipes **025–030**
+- **3M** (`xl`, ~137M) — recipes **025 + 027**
+
+Schedule per tier: per-tier **peak LR** (64k 3e-4 / 500k 2e-4 / 3M 5e-5) + **WSD short
+plateau** (`lr_stable_frac 0.15`) + **grad-spike-guard** (`grad_spike_factor 8.0`).
+
+Scoring: the global 10% held-out test split described above (same held-out molecules for every
+model). **Results are pending** — training in progress; no v2 numbers are reported yet.
+
+(Tier model sizes `light`/`med`/`xl` are defined by `TIER_PRESETS` in
+`model/architectures/resnet1d.py`.)
+
+---
+
+## History (PRE-CORRECTION — SUPERSEDED)
+
+> Everything below is from the first-pass (pre spin-equivalence-correction) dataset and is
+> retained for the record only. These numbers are **superseded** by the v2 retraining above.
+
+## Current fleet (2026-06-04) — SUPERSEDED (pre-correction data)
+
+_(SUPERSEDED — pre-correction data. See [v2 retraining](#v2-retraining-in-progress-results-pending) for the current fleet.)_
 
 The fleet is the shared `spingraph_decoder` backbone trained at two finished tiers — **64k**
 (`light`, ~10M params) and **500k** (`med`, ~57M params) — across the **025–030 recipe ladder**.
@@ -27,9 +66,11 @@ results are pending, so it is not yet in the tables below.
 | **030** | **"super" = 026 + 027 + 028** (all four ideas at once) |
 
 Metrics are **`shift_mae_ppm / j_mae_hz / presence_f1 / deg_acc_balanced`** on the **shared
-held-out test split** (leakage-controlled global 10% PubChem, union-find on matrix fingerprint
-+ InChIKey; 312,682 held-out molecules, 30,000 scored; every model evaluated on identical
-molecules). Source of truth: `docs/data/test_eval.json`.
+held-out test split** (a **leakage-controlled** global 10% held-out test set — near-duplicates
+grouped by union-find on matrix fingerprint + InChIKey, the clusters placed by a single random
+shuffle, numpy `default_rng` seed 0, last ~10% of molecules / whole clusters held out; every model
+scored on the same held-out molecules). _(In v2, ~2.81M train / ~0.31M test.)_ Source of truth:
+`docs/data/test_eval.json`.
 
 **64k tier (`light` ~10M) — held-out test:**
 
@@ -154,11 +195,11 @@ shift again to **0.037 ppm / 0.59 Hz** — the production model.
   MAE (shift tie, J slightly worse, deg slightly better) — the soft-equiv gain is **qualitative**
   (correct peak multiplicity), which mean shift-MAE can't capture.* The 500k/3M runs test it at scale.
 
-**3. Data scaling — 64k ChEMBL → 3.2M PubChem.** New stacked-shard data path: `StackedSpectra`
-mmaps `part_NNNNN.npy` shards (1000 spectra each, 90 MHz only) keyed by record order to
-`spin_systems_pubchem.json.gz`; `data.parts` selects it, `data.sample_n` draws a uniform random
+**3. Data scaling — 64k → 3.13M PubChem.** New stacked-shard data path: the shard reader
+mmaps `part_NNNNN.npy` shards (1000 spectra each, 90 MHz only) keyed by record order to the
+PubChem records `.json.gz`; `data.parts` selects it, `data.sample_n` draws a uniform random
 subset (reservoir sampling). The `med`/`xl` tiers (~57M/~137M params, `TIER_PRESETS`) for the larger regimes. Two scales
-in flight on the HPC: a fast **medium / 500k-random "light"** A/B and the full **xl / 3.2M** A/B.
+in flight on the HPC: a fast **medium / 500k-random "light"** A/B and the full **xl / 3M** A/B.
 
 ### Hard-won lessons (worth a slide)
 - **Out-of-vocab degeneracy.** PubChem has spin groups with 5 and 8 equivalent protons that
@@ -166,7 +207,7 @@ in flight on the HPC: a fast **medium / 500k-random "light"** A/B and the full *
   crashed `Standardizer.fit`. Fix: filter those few molecules (keeps the model identical to 025/026).
 - **DataLoader memory at scale.** Persistent workers each fork-copy the record list and Python
   refcounting breaks copy-on-write, so 8 workers × ≥500k records OOM a 16 GB box (fine at 64k).
-  Fix: `num_workers ≤ 2–4` and a big-RAM node; the full 3.2M needs ≥32 GB RAM.
+  Fix: `num_workers ≤ 2–4` and a big-RAM node; the full 3M needs ≥32 GB RAM.
 - **Infra:** AWS L4/A10G capacity was exhausted across all sizes, so 3M training moved to the
   **Scripps Garibaldi HPC** (idle bf16 A6000/A5000, data already local, 251 GB RAM). A multi-GPU
   DDP build was added but the cluster's NCCL rendezvous fails (`c10d` address-family error); the

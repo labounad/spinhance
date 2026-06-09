@@ -46,10 +46,11 @@ training:
   lr: 0.0002                # halved from 4e-4: the 56M decoder diverged at ep7 (val shift 0.140->12.9 ppm) on the 1M set
   weight_decay: 0.01
   amp: bf16
-  warmup_frac: 0.05         # longer warmup (was 0.02) to settle the transformer decoder before peak LR
-  lr_stable_frac: 0.50
+  warmup_frac: 0.07         # settle decoder before peak LR (developed schedule)
+  lr_stable_frac: 0.15      # short peak plateau: LR decays early, before edge-of-stability
   lr_min_factor: 0.30
-  grad_clip: 0.5            # tighter (was 1.0) to clamp the gradient spike that blew up ep7
+  grad_clip: 0.5            # global-norm clip (works with grad_spike_factor)
+  grad_spike_factor: 8.0    # skip a step whose grad-norm spikes >8x the running EMA
   patience: 30               # WSD: must bridge the peak-LR plateau into the decay (~ep30+); 8 stopped runs mid-plateau, undertrained
   # see train_500k_025.yaml — low workers to avoid the per-worker
   # 500k-record copy thrashing a 16GB g6.xlarge. Full 3.2M needs a big-RAM box.

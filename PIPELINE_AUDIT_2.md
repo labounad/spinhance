@@ -1,10 +1,22 @@
 # Pipeline Audit 2 — Spin-System Generation Correctness
 
-**Status:** LANDED (opened 2026-06-03; core complete same day). Single source of
-truth for the second audit + generation-code fix/refactor + full dataset regeneration
-+ retrain of all PubChem models + website propagation. Audit + fix + regeneration +
-leakage-split are **done**; the 64k·026 model finished and its held-out eval is live on
-the site; the rest of the fleet (500k/3M + 64k ablations) is training. Update as it lands.
+**Status:** LANDED + v2 reconciliation (opened 2026-06-03; diastereotopic-Δδ fix + full
+regeneration 2026-06-08). Single source of truth for the second audit + generation-code
+fix/refactor + full dataset regeneration + retrain of all PubChem models + website propagation.
+
+**2026-06-08 update.** The fix is **landed** (PR #172): inequivalent groups now get
+**independent** over-dispersed shifts — the over-dispersion orbit (`mol_to_spin_system/xyz.py`)
+is computed via the **3D deuterium-substitution test**, not `CanonicalRankAtoms`, so
+diastereotopic same-carbon protons are no longer forced to Δδ=0. The dataset is **fully
+regenerated** (`rebuild3M_v2/`) and re-consolidated (`consolidated_v2/`) with a
+**leakage-controlled single-shuffle split** (the two ideas merged): union-find clusters on
+matrix fingerprint + InChIKey → **one `default_rng(0)` shuffle of the clusters** → last ~10%
+of molecules (whole clusters) held out — so near-duplicates never span train/test, it stays a
+single randomization, and train prefixes remain valid nested subsamples (`consolidate_v3.py`).
+**All three tiers retrain** (64k/500k recipes 025–030, 3M 025+027) at per-tier peak LR
+(3e-4/2e-4/5e-5) + WSD short plateau + grad-spike-guard, gated through an `afterok`
+consolidate→cache→train chain. The website model-result viewers are reset to **pending** until
+the retrained checkpoints land; the dataset narrative + split description are updated. Update as it lands.
 
 ---
 

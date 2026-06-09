@@ -37,10 +37,11 @@ training:
   lr: 0.0003
   weight_decay: 0.01
   amp: bf16
-  warmup_frac: 0.05
-  lr_stable_frac: 0.60
+  warmup_frac: 0.07         # settle decoder before peak LR (developed schedule)
+  lr_stable_frac: 0.15      # short peak plateau: LR decays early, before edge-of-stability
   lr_min_factor: 0.40
-  grad_clip: 1.0
+  grad_clip: 0.5            # global-norm clip (works with grad_spike_factor)
+  grad_spike_factor: 8.0    # skip a step whose grad-norm spikes >8x the running EMA
   patience: 20
   num_workers: 8
   val_every: 1

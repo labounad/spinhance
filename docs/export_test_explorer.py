@@ -1,15 +1,17 @@
 """Build docs/data/test_explorer.json — the held-out test-molecule explorer.
 
-Samples molecules from the global leakage-controlled held-out split
-(records_3M_test.json.gz, pre-sorted by test_rank) using the NESTED-SUBSET scheme
-(first N by rank), fetches their 90 MHz spectra from the stacked parts, and runs
-each model — the CNN baseline + the 64k spingraph_decoder configs — producing a
-prediction matrix + a rendered spectrum per model. Every model is scored on the
-SAME held-out PubChem molecules, so there is no per-model test fold.
+Samples molecules from the leakage-controlled global 10% held-out split (records_test.json.gz:
+near-duplicates grouped by union-find on matrix fingerprint + InChIKey, the clusters placed by a
+single seed-0 shuffle, last ~10% of molecules / whole clusters held out)
+using the NESTED-SUBSET scheme (first N), fetches their 90 MHz spectra from the
+stacked parts, and runs each model — the CNN baseline + the spingraph_decoder
+configs — producing a prediction matrix + a rendered spectrum per model. Every
+model is scored on the SAME held-out PubChem molecules, so there is no per-model
+test fold.
 
     PYTHONPATH=. python docs/export_test_explorer.py [OUT.json] [N]
 
-Runs on the HPC where the checkpoints + rebuild parts live (CPU is fine — inference).
+Runs on the HPC where the checkpoints + consolidated_v2 parts live (CPU is fine — inference).
 """
 import glob
 import json
@@ -28,10 +30,10 @@ from model.evaluation.metrics import decode, _np_pred
 from model.evaluation.symmetry import align_pred_couplings
 from model.inference.refine import refine_system, equiv_classes_from_softequiv
 
-REB = "/gpfs/group/shenvi/Users/labounader/spinhance/rebuild3M"
+REB = "/gpfs/group/shenvi/Users/labounader/spinhance/consolidated_v2"
 RUNS = "/gpfs/group/shenvi/Users/labounader/spinhance/runs"
-TEST = "/gpfs/group/shenvi/Users/labounader/spinhance/consolidated_test/records_test_consol.json.gz"   # consolidated (contiguous) held-out
-PARTS = "/gpfs/group/shenvi/Users/labounader/spinhance/consolidated_test/parts"
+TEST = "/gpfs/group/shenvi/Users/labounader/spinhance/consolidated_v2/records_test.json.gz"   # leakage-controlled global 10% held-out (union-find clusters + single seed-0 shuffle, last ~10%)
+PARTS = "/gpfs/group/shenvi/Users/labounader/spinhance/consolidated_v2/parts"
 # CLI:  OUT.json [N]               -> render all N molecules, write OUT (serial)
 #       --only IDX FRAGDIR [N]     -> render ONE molecule -> FRAGDIR/mol_IDX.json (SLURM array task)
 #       --combine FRAGDIR OUT [N]  -> merge per-molecule fragments -> OUT (no model load)
@@ -69,21 +71,22 @@ def best_ckpt(name):
 # The corrected-data REBUILD fleet (one run per tier) + the CNN baseline. Each model
 # is included only once its best.pt exists, so this is turnkey: re-run as checkpoints
 # land and the explorer gains tiers without edits.
-FLEET = [("64k_025", "rebuild_64k_025_sym",     "64k · 025 (matrix)"),
-         ("64k_026", "rebuild_64k_026_sym",     "64k · 026 (peak+soft-eq)"),
-         ("64k_027", "rebuild_64k_027_sym",     "64k · 027 (focal)"),
-         ("64k_028", "rebuild_64k_028_sym",     "64k · 028 (cum-integral)"),
-         ("64k_029", "rebuild_64k_029_sym",     "64k · 029 (026+focal)"),
-         ("64k_030", "rebuild_64k_030_sym",     "64k · 030 (super)"),
-         ("500k_025", "rebuild_500k_025_sym", "500k · 025 (matrix, 57M)"),
-         ("500k_026", "rebuild_500k_026_sym", "500k · 026 (peak+soft-eq, 57M)"),
-         ("500k_027", "rebuild_500k_027_sym", "500k · 027 (focal, 57M)"),
-         ("500k_028", "rebuild_500k_028_sym", "500k · 028 (cum-integral, 57M)"),
-         ("500k_029", "rebuild_500k_029_sym", "500k · 029 (026+focal, 57M, best)"),
-         ("500k_030", "rebuild_500k_030_sym", "500k · 030 (super, 57M)"),
-         ("3M",      "rebuild_3M_026_sym",  "3M · 026 (137M)")]
+FLEET = [("64k_025", "rebuild_64k_025_v2",     "64k · 025 (matrix)"),
+         ("64k_026", "rebuild_64k_026_v2",     "64k · 026 (peak+soft-eq)"),
+         ("64k_027", "rebuild_64k_027_v2",     "64k · 027 (focal)"),
+         ("64k_028", "rebuild_64k_028_v2",     "64k · 028 (cum-integral)"),
+         ("64k_029", "rebuild_64k_029_v2",     "64k · 029 (026+focal)"),
+         ("64k_030", "rebuild_64k_030_v2",     "64k · 030 (super)"),
+         ("500k_025", "rebuild_500k_025_v2", "500k · 025 (matrix, 57M)"),
+         ("500k_026", "rebuild_500k_026_v2", "500k · 026 (peak+soft-eq, 57M)"),
+         ("500k_027", "rebuild_500k_027_v2", "500k · 027 (focal, 57M)"),
+         ("500k_028", "rebuild_500k_028_v2", "500k · 028 (cum-integral, 57M)"),
+         ("500k_029", "rebuild_500k_029_v2", "500k · 029 (026+focal, 57M, best)"),
+         ("500k_030", "rebuild_500k_030_v2", "500k · 030 (super, 57M)"),
+         ("3M_025",  "rebuild_3M_025_v2",  "3M · 025 (matrix, 137M)"),
+         ("3M_027",  "rebuild_3M_027_v2",  "3M · 027 (focal, 137M)")]
 MODELS, MODEL_LABELS = {}, []
-# CNN baseline (trained on ChEMBL, but handles PubChem fine) — reference floor.
+# CNN baseline (trained on the legacy ChEMBL set, but handles PubChem fine) — reference floor.
 BASELINE = "/gpfs/group/shenvi/Users/labounader/spinhance/ckpts/baseline_best.pt"
 if os.path.exists(BASELINE):
     MODELS["baseline"] = BASELINE
@@ -259,8 +262,8 @@ if MODE == "combine":
     print("COMBINED", OUT, round(os.path.getsize(OUT) / 1024, 1), "KB |", len(mols), "mols", flush=True)
     sys.exit(0)
 
-print(f"held-out nested subset: first {N} by test_rank", flush=True)
-recs = load_pubchem_records(TEST, max_mol=N)[:N]   # pre-sorted by test_rank -> nested subset
+print(f"held-out nested subset: first {N} of the held-out split", flush=True)
+recs = load_pubchem_records(TEST, max_mol=N)[:N]   # held-out split order -> nested subset
 src = StackedSpectra(PARTS)
 
 def _emit_one(r):

@@ -39,10 +39,13 @@ ResNet1D conv stem → ppm-positioned global tokens → pre-LN Transformer encod
 degeneracy) + symmetric `PairwiseEdgeHead`. Sizes via `model.size` — the three
 production **tiers** are `light` (64k, ~10M), `med` (500k, ~57M), and `xl`
 (3M, ~137M); see the tier table below (the single source of truth).
-See `RESULTS.md` for the full **025–030 recipe sweep**; the **fleet-best is 500k·027**
-(027 — focal loss) at **0.022 ppm** (0.59 Hz J) held-out on the
-leakage-controlled global PubChem test split. The 3M (~137M) tier is **now training** (recipe 026,
-single A100, lr 1.5e-4 + non-finite-grad guard); held-out results pending.
+See `RESULTS.md` for the full **025–030 recipe sweep**. The entire fleet is currently
+being **retrained on the corrected v2 data** (Audit-2; see `RESULTS.md`) across all three
+tiers; the prior (pre-correction) metrics are **superseded** and new numbers are **pending**.
+Held-out scoring uses a **leakage-controlled** global 10% held-out test split of all 3,126,829
+molecules: near-duplicates are grouped by union-find (matrix fingerprint + InChIKey), the clusters
+are placed by a single random shuffle (`default_rng` seed 0), and the last ~10% of molecules (whole
+clusters) are held out (~2.81M train / ~0.31M test) — so no near-duplicate spans train/test.
 The model also supports a decode-time **test-time refinement** step
 (`model/inference/refine.py`) that polishes predicted shifts against the input 90 MHz spectrum
 (+43–77% shift-MAE — see `RESULTS.md` and `DESIGN.md` §12).
@@ -118,7 +121,7 @@ precedence** and is the convention for all production runs. Enforced by `model/t
 
 | config(s) | arch · loss · data |
 |---|---|
-| `baseline_matrix.yaml`, `train_64k.yaml` | resnet1d · matrix · 64k ChEMBL (CNN floor) |
+| `baseline_matrix.yaml`, `train_64k.yaml` | resnet1d · matrix · 64k (the **old CNN reference floor** every architecture must beat) |
 | `hungarian_matrix.yaml` | resnet1d · hungarian · 64k (deprecated approach) |
 | `surrogate.yaml`, `surrogate_large.yaml` | train the `surrogate` renderer (Stage-2 teacher) |
 | `train_64k_surrogate_spectral*.yaml` (5) | resnet1d · composite(matrix+spectral) · 64k — sessions 015–020 ablations |
@@ -128,25 +131,30 @@ precedence** and is the convention for all production runs. Enforced by `model/t
 | `train_64k_spingraph_regions.yaml` | spingraph + region tokens · 64k — session 023 (abandoned, slower/no gain) |
 | `train_64k_026_peaks_softequiv.yaml` | spingraph(peak+soft-equiv) · matrix+soft_equiv · 64k — recipe 026 |
 | 64k recipes `025`–`030` (`train_64k_*`) | spingraph **light** (~10M) · the 025–030 ladder · 64k PubChem (the ablation tier) |
-| 500k recipes `025`–`030` (`train_500k_*`) | spingraph **med** (~57M) · the 025–030 ladder · 500k PubChem — **fleet-best = 027, 0.022 ppm** |
-| 3M recipes (`026`, `030`) (`train_3M_*`) | spingraph **xl** (~137M) · 3M PubChem — **training** (026 on a single A100; held-out eval pending) |
+| 500k recipes `025`–`030` (`train_500k_*`) | spingraph **med** (~57M) · the 025–030 ladder · 500k PubChem |
+| 3M recipes (`025`, `027`) (`train_3M_*`) | spingraph **xl** (~137M) · 3M PubChem |
+
+> The 025–030 ladder is being **retrained on the corrected v2 data** (64k 025–030,
+> 500k 025–030, 3M 025+027); per-tier peak LR + WSD short plateau + grad-spike guard.
+> All numbers are **pending** — see `RESULTS.md`.
 
 ## Data paths
 
-- **Per-file** (default, ChEMBL 64k): `data.records` JSON + `data.spectra` dir of
+- **Per-file** (default, 64k ablation tier): `data.records` JSON + `data.spectra` dir of
   `<mol_id>.npy` (`load_records`).
 - **Stacked shards** (PubChem 500k–3M): set `data.parts` to a dir of `part_NNNNN.npy`
-  (1000 spectra each, 90 MHz only) keyed by record order to a `.json[.gz]`
-  `data.records`. `StackedSpectra` mmaps shards lazily (headers-only index);
+  (1000 spectra each, 90 MHz only, 16384-point) keyed by record order to a `.json[.gz]`
+  `data.records`. The shard reader mmaps shards lazily (headers-only index);
   `load_pubchem_records` streams the gz; `data.sample_n` reservoir-samples the tier.
   ⚠️ Use `num_workers≤2` at ≥500k records on a ≤16 GB box (per-worker record-list
   copies OOM; COW is broken by Python refcounting); full 3M needs ≥32 GB RAM.
 
-On the **Garibaldi HPC**, the training-generated data lives in the group filesystem at
-`/gpfs/group/shenvi/Users/labounader/spinhance/` — `rebuild3M/` (the 3M PubChem dataset +
-stacked spectra parts), `rebuild500k/` (the 500k tier), `runs/` (checkpoints — `model/runs` is
-a **symlink** into here), `ckpts/` (CNN baseline), `spectra_run/` (90 MHz spectra), and
-`legacy/bundle_{500k_s0,1M_s0,600_2p16}/`. The repo checkout and conda env stay in `$HOME`.
+On the **Garibaldi HPC**, the corrected **v2** dataset lives in the group filesystem at
+`/gpfs/group/shenvi/Users/labounader/spinhance/consolidated_v2/` —
+`records_train_shuf.json.gz`, `records_test.json.gz`, `parts/` (stacked 90 MHz spectra),
+and `preload_train_full.npy`. The regenerated per-shard source is under `rebuild3M_v2/`.
+`runs/` holds checkpoints (`model/runs` is a **symlink** into here). The repo checkout and
+conda env stay in `$HOME`.
 
 ## Training stages (see the master plan)
 

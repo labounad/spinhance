@@ -10,19 +10,19 @@
 # you can run it repeatedly as 64k -> 500k -> 3M finish and the viewers gain tiers.
 set -e
 C=/gpfs/home/labounader/code/spinhance
-REB=/gpfs/group/shenvi/Users/labounader/spinhance/rebuild3M
-CONSOL_TEST=/gpfs/group/shenvi/Users/labounader/spinhance/consolidated_test  # contiguous held-out shards (fast eval)
+REB=/gpfs/group/shenvi/Users/labounader/spinhance/consolidated_v2
+CONSOL_TEST=/gpfs/group/shenvi/Users/labounader/spinhance/consolidated_v2  # leakage-controlled global 10% held-out shards (union-find clusters + single seed-0 shuffle, last ~10%)
 PY=/gpfs/home/labounader/micromamba/envs/spinhance/bin/python
 cd "$C"; export PYTHONPATH=.
 RUNS="$C/model/runs"
 
-# The full fleet: 64k + 500k recipe sweeps (025-030) and the 3M tiers (026/030).
-# Exact names skip the cancelled rebuild_3M_xl / rebuild_500k_030_sym(legacy). Finished-only guard below.
-FLEET_NAMES="rebuild_64k_025_sym rebuild_64k_026_sym rebuild_64k_027_sym rebuild_64k_028_sym rebuild_64k_029_sym rebuild_64k_030_sym \
-rebuild_500k_025_sym rebuild_500k_026_sym rebuild_500k_027_sym rebuild_500k_028_sym rebuild_500k_029_sym rebuild_500k_030_sym \
-rebuild_3M_026_sym rebuild_3M_030_sym"
+# The full v2 fleet: 64k + 500k recipe sweeps (025-030) and the 3M tiers (025/027).
+# Finished-only guard below.
+FLEET_NAMES="rebuild_64k_025_v2 rebuild_64k_026_v2 rebuild_64k_027_v2 rebuild_64k_028_v2 rebuild_64k_029_v2 rebuild_64k_030_v2 \
+rebuild_500k_025_v2 rebuild_500k_026_v2 rebuild_500k_027_v2 rebuild_500k_028_v2 rebuild_500k_029_v2 rebuild_500k_030_v2 \
+rebuild_3M_025_v2 rebuild_3M_027_v2"
 
-# 1. standardized held-out eval on the leakage-controlled 10% PubChem test split.
+# 1. standardized held-out eval on the leakage-controlled global 10% PubChem test split (union-find clusters + single seed-0 shuffle, last ~10%).
 #    Every run with a best.pt, in ONE process (the held-out spectra are preloaded ONCE and
 #    shared); writes <run_dir>/heldout_eval.json that gen_viewer_data.py reads.
 DIRS=""   # collected for a SINGLE --run-dir flag (it is nargs='+'; repeating the flag keeps only the last)
@@ -36,7 +36,7 @@ done
 if [ -n "$DIRS" ]; then
   echo "== held-out eval =="
   $PY -m model.experiments.eval_heldout --run-dir $DIRS \
-      --test-records "$CONSOL_TEST/records_test_consol.json.gz" --parts "$CONSOL_TEST/parts" \
+      --test-records "$CONSOL_TEST/records_test.json.gz" --parts "$CONSOL_TEST/parts" \
       --device "${DEVICE:-cuda}" --limit "${LIMIT:-50000}"
 else
   echo "WARN: no best.pt checkpoints yet — skipping held-out eval"

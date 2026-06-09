@@ -616,6 +616,11 @@
       the dataset itself, and finally in scaling data and model capacity together. Metrics are on a
       leakage-controlled held-out test set the model never saw. <a href="#explore">Explore the learning
       curves, a full run comparison, and per-molecule test predictions ↓</a></p>
+    <p class="lead" style="background:color-mix(in srgb,var(--accent-3) 10%,transparent);border-left:3px solid var(--accent-3);padding:10px 14px;border-radius:6px;font-size:14px">
+      <b>Note (corrected dataset):</b> the dataset was regenerated to give diastereotopic protons independent
+      shifts (they were previously merged), and the whole recipe ladder is being <b>retrained on this corrected
+      data across all three tiers</b>. The quantitative model metrics below are being regenerated and will
+      update as the retrained checkpoints land — treat current numbers as <i>pending</i>.</p>
 
     <div class="carousel-wrap">
       <div class="carousel-nav">
@@ -808,7 +813,8 @@
                   <div class="detail-row"><span class="dl">Shifts:</span><span class="dv">Experimentally-derived additivity constants &mdash; aromatic base + ortho/meta/para increments, Shoolery aliphatic rules, alkene gem/cis/trans, per-ring heteroaromatic bases</span></div>
                   <div class="detail-row"><span class="dl">Couplings:</span><span class="dv">Mechanism-specific J &mdash; geminal ²J, vicinal ³J, aromatic ring-position-aware ³/⁴J, olefinic cis/trans/gem, long-range / benzylic ⁴J</span></div>
                   <div class="detail-row"><span class="dl">Dispersion:</span><span class="dv">Class-aware Gaussian jitter (shift σ floor 0.15 ppm; sign-preserving ±25 Hz clamp) so values sample the real chemical space instead of fixed table constants</span></div>
-                  <div class="detail-row"><span class="dl">Held-out split:</span><span class="dv">A leakage-controlled global 10% test set &mdash; union-find clustering on matrix fingerprint + InChIKey keeps near-duplicate molecules on the same side of the split</span></div>
+                  <div class="detail-row"><span class="dl">Topicity:</span><span class="dv">Diastereotopic protons (e.g. a CH&#8322; next to a stereocentre) are identified by the 3D deuterium-substitution test, kept <i>inequivalent</i>, and given <i>independent</i> sampled shifts &mdash; never merged onto one value</span></div>
+                  <div class="detail-row"><span class="dl">Held-out split:</span><span class="dv">A leakage-controlled global 10% test set &mdash; union-find clustering on matrix fingerprint + InChIKey groups near-duplicates, then a single seed-0 shuffle places the clusters and the last ~10% (whole clusters) is held out</span></div>
                 </div>
                 <div class="insight-box">
                   <b>Key finding:</b> an earlier dataset reused the same handful of table values over and over,
@@ -842,16 +848,17 @@
                   <div class="detail-row"><span class="dl">Yardstick:</span><span class="dv">A standardized held-out evaluation &mdash; every model scored on identical molecules it never saw, so tiers are directly comparable</span></div>
                 </div>
                 <div class="insight-box">
-                  <b>Where we are:</b> the 64k tier is trained and scored on the held-out set, and the first
-                  <b>500k (med, 57M)</b> model is in &mdash; it is the best yet (<b>0.022 ppm</b> shift &middot;
-                  <b>0.59 Hz</b> J held-out, well past the 64k tier). The rest of the 500k sweep and the 3M tier
-                  are training now; their curves and per-molecule predictions populate the viewers as they finish.
+                  <b>Where we are:</b> the full <b>025&ndash;030 recipe ladder</b> is being <b>retrained across all
+                  three tiers</b> (64k, 500k, and 3M&middot;025/027) on the corrected dataset &mdash; the
+                  diastereotopic-shift fix changed the training targets, so the prior numbers are superseded.
+                  <b>Quantitative results are pending</b>; the curves, held-out metrics, and per-molecule
+                  predictions repopulate the viewers as the retrained checkpoints land.
                 </div>
               </div>
               <div class="metrics-stack">
-                <div class="metric-row"><div class="metric-val">0.022</div><div class="metric-lbl">ppm shift MAE<br><span style="font-size:11px;color:var(--ink-faint)">500k &middot; held-out (best run)</span></div></div>
+                <div class="metric-row"><div class="metric-val">&mdash;</div><div class="metric-lbl">ppm shift MAE<br><span style="font-size:11px;color:var(--ink-faint)">retraining on corrected data &middot; pending</span></div></div>
                 <div class="metric-row"><div class="metric-val">10&rarr;57&rarr;137M</div><div class="metric-lbl">params per tier<br><span style="font-size:11px;color:var(--ink-faint)">64k / 500k / 3M</span></div></div>
-                <div class="metric-row"><div class="metric-val">3</div><div class="metric-lbl">data tiers<br><span style="font-size:11px;color:var(--ink-faint)">64k + 500k complete &middot; 3M training</span></div></div>
+                <div class="metric-row"><div class="metric-val">3</div><div class="metric-lbl">data tiers<br><span style="font-size:11px;color:var(--ink-faint)">all retraining &middot; results pending</span></div></div>
               </div>
             </div>
           </div>
