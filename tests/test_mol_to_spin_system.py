@@ -212,6 +212,28 @@ def test_proton_groups_split_diastereotopic():
     assert sys_ch.degeneracy.tolist() == [1] * 8
 
 
+def test_equiv_orbit_topicity_for_overdispersion():
+    """The over-dispersion shares a shift draw only WITHIN a topicity orbit, so the
+    orbit key must separate diastereotopic protons (independent shifts) while uniting
+    enantiotopic ones. Regression for the equiv_orbit bug: it used CanonicalRankAtoms
+    (constitutional), collapsing same-carbon diastereotopic protons into one orbit and
+    forcing Delta-delta = 0."""
+    from mol_to_spin_system.groups import _substitution_key
+
+    mol = make_test_mol_3d("CC1(CN(C1)C2=C(C=CC=N2)C(F)(F)F)O")  # 3,3-disub azetidine
+    # the two H's on a single ring CH2 carbon are diastereotopic -> distinct keys
+    ch2_carbons = [a.GetIdx() for a in mol.GetAtoms()
+                   if a.GetAtomicNum() == 6 and not a.GetIsAromatic()
+                   and sum(n.GetAtomicNum() == 1 for n in a.GetNeighbors()) == 2]
+    assert ch2_carbons
+    found_diastereotopic = False
+    for c in ch2_carbons:
+        hs = [n.GetIdx() for n in mol.GetAtomWithIdx(c).GetNeighbors() if n.GetAtomicNum() == 1]
+        if len(hs) == 2 and _substitution_key(mol, hs[0]) != _substitution_key(mol, hs[1]):
+            found_diastereotopic = True
+    assert found_diastereotopic, "same-carbon diastereotopic protons must get distinct orbit keys"
+
+
 def test_proton_groups_keep_enantiotopic():
     """Enantiotopic / homotopic protons ARE equivalent in an achiral solvent and must
     stay merged (guard against the diastereotopic fix over-splitting)."""

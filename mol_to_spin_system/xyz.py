@@ -12,6 +12,7 @@ from rdkit import Chem
 from rdkit.Geometry import Point3D
 
 from mol_to_spin_system.coupling import all_couplings_typed
+from mol_to_spin_system.groups import _substitution_key
 from mol_to_spin_system.shifts import DEFAULT_SOLVENT
 from mol_to_spin_system.shifts_pretsch import predict_shifts_pretsch
 
@@ -175,13 +176,20 @@ def entry_to_spin_system(
         group_atoms.setdefault(g, []).append(i)
     labels = sorted(group_atoms, key=lambda s: (len(s), s))
 
-    # Canonical symmetry orbit per group: groups whose protons share a graph
-    # automorphism rank are chemically equivalent (homotopic/enantiotopic) and
-    # must share a randomized shift downstream. This is BROADER than the tier
-    # `class_of` — e.g. two symmetry-equivalent OMe are separate HARD groups but
-    # one orbit. (breakTies=False keeps symmetry classes; ties NOT broken.)
-    sym_rank = list(Chem.CanonicalRankAtoms(mol, breakTies=False))
-    equiv_orbit = [int(sym_rank[group_atoms[g][0]]) for g in labels]
+    # True-topicity orbit per group: groups are co-orbit (chemically equivalent ->
+    # share ONE randomized shift downstream) iff homotopic/enantiotopic. The old key
+    # was Chem.CanonicalRankAtoms (constitutional symmetry only) — which is BROADER
+    # than the tier class (correctly unites e.g. two symmetry-equivalent OMe) but
+    # ALSO collapses DIASTEREOTOPIC protons into one orbit, forcing them to share a
+    # shift (Delta-delta = 0) when they should be sampled INDEPENDENTLY. (Audit-3:
+    # same-carbon diastereotopic protons routinely have very different shifts.)
+    # The substitution (replacement) test resolves both cases: it unites the OMe and
+    # separates diastereotopic. Needs the 3D conformer (_build_mol attaches it).
+    orbit_of_key: dict[str, int] = {}
+    equiv_orbit = []
+    for g in labels:
+        key = _substitution_key(mol, group_atoms[g][0])
+        equiv_orbit.append(orbit_of_key.setdefault(key, len(orbit_of_key)))
 
     shifts = np.zeros((len(labels), 2))
     shift_ranges = np.zeros((len(labels), 2))
