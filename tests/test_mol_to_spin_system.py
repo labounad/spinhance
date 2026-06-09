@@ -243,6 +243,29 @@ def test_proton_groups_keep_enantiotopic():
     assert sorted(degeneracies(proton_groups(make_test_mol_3d("CC(O)C"))[0])) == [1, 6]
 
 
+def test_end_to_end_diastereotopic_independent_shifts(tmp_path):
+    """Full dataset path (SMILES -> labelled XYZ -> entry_to_spin_system -> bake): a
+    same-carbon diastereotopic CH2 must land in DISTINCT equiv_orbits and therefore get
+    INDEPENDENT (different) shifts after over-dispersion. Regression for equiv_orbit being
+    computed with CanonicalRankAtoms (which lumped them -> Delta-delta = 0)."""
+    import numpy as np
+    from generate.xyz_writer import molecule_to_xyz
+    from mol_to_spin_system.xyz import iter_xyz_entries, entry_to_spin_system
+    from mol_to_spin_system.augment import sample_record
+
+    block = molecule_to_xyz("CC1(CN(C1)C2=C(C=CC=N2)C(F)(F)F)O", chembl_id="t", inchikey="k")
+    assert block, "labelled XYZ block generation failed"
+    p = tmp_path / "m.xyz"; p.write_text(block)
+    comment, atoms = next(iter(iter_xyz_entries(str(p))))
+    rec = entry_to_spin_system(comment, atoms).to_dict()
+
+    # the two azetidine CH2 shift-classes must be different orbits (not one lump)
+    assert len(set(rec["equiv_orbit"])) >= 4
+    baked = sample_record(rec, rng=np.random.default_rng(0))
+    ch2 = sorted(g[0] for g in baked["spin_groups"] if 2.0 < g[0] < 3.6)
+    assert len(ch2) >= 2 and (max(ch2) - min(ch2)) > 0.02, "diastereotopic Delta-delta missing"
+
+
 # --- end-to-end (needs Java + nmrshiftdb predictor) -------------------------
 
 def _predictor_available() -> bool:
