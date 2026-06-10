@@ -1,0 +1,55 @@
+# v3 PIA sweep variant: tau=0.001, handoff@ep30 (crossfade 30->45).
+# Part of the parallel sweep around the anchor (tau=0.001, handoff@40). Warmup `matrix`
+# establishes sharp shifts, then hands off to `sinkhorn_align` (permutation-invariant).
+# A/B vs rebuild_64k_025_v2 (held-out 20k: shift 0.046 / J 1.214 / F1 0.904 / deg 0.948).
+# See model/PERMUTATION_INVARIANT_DESIGN.md + V3_CHRONICLE.md. 90 MHz, parallel to v2.
+run:
+  name: v3_pia_t001_h30
+  output_dir: model/runs
+data:
+  records: mol_to_spin_system/data/spin_systems_chembl.json
+  spectra: simulation/data/spectra
+  field: 90
+  split: none
+model:
+  name: spingraph_decoder
+  size: light
+  dropout: 0.1
+loss:
+  name: composite
+  terms:
+    - name: matrix
+      sym_jmag: true
+      weight: 1.0
+      decay_start_epoch: 30
+      decay_epochs: 15
+      end_weight: 0.0
+      weights: {shift: 2.0, jmag: 1.0, presence: 0.5, deg: 0.5}
+    - name: sinkhorn_align
+      weight: 1.0
+      init_weight: 0.0
+      start_epoch: 30
+      ramp_epochs: 15
+      tau: 0.001
+      n_iters: 80
+      weights: {shift: 2.0, jmag: 1.0, presence: 0.5, deg: 0.5}
+training:
+  epochs: 100
+  batch_size: 256
+  lr: 0.0003
+  weight_decay: 0.01
+  amp: bf16
+  warmup_frac: 0.07
+  lr_stable_frac: 0.15
+  lr_min_factor: 0.40
+  grad_clip: 0.5
+  grad_spike_factor: 8.0
+  patience: 100
+  num_workers: 8
+  val_every: 1
+  seed: 0
+diagnostics:
+  enabled: true
+  log_every_steps: 50
+  probe_every_epochs: 5
+  probe_count: 16
