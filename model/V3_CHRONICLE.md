@@ -67,10 +67,20 @@ matched v2 baseline. Keep entries terse and factual so this doubles as a debug l
 - **Change:** sinkhorn τ 0.05→**0.001** (boundary √0.001·2.356 ≈ **0.075 ppm** ≈ 90 MHz
   resolution: ≈matrix-hard for resolvable shifts, soft only for genuine near-degeneracies);
   n_iters 50→80. Same warmup→handoff schedule.
-- **run-id / hash:** _TBD on launch._
-- **Status:** _launching (kill+relaunch on the same a100)._
-- **Watch:** post-warmup `assign_offdiag` should now be ~0 (sharp P for resolvable), shift
-  should NOT regress at the handoff; sinkhorn phase tests the near-degenerate hypothesis.
+- **run-id / hash:** `20260609_193228_v3_pia_64k_warmup_9cffca` (sbatch 42404015, a100).
+- **Result: KEY NEGATIVE — pure-sinkhorn phase DEGRADES shifts even at calibrated τ.** Ran
+  all 100 ep. **best_epoch=38** (end of matrix warmup: shift 0.068 / J 1.398). After the
+  handoff, as matrix decays to 0 and sinkhorn takes over, val regresses monotonically — by
+  ep99 shift **0.28→0.34 ppm**, J **2.76→3.04 Hz**, F1 0.84→0.78; ep99 `failure_analysis`
+  dominant = **large_shift_error (52%)** + a grad spike (norm 53 vs ema 5).
+- **Interpretation:** with matrix fully removed, sinkhorn-alone de-sharpens shifts — the
+  averaged `al_sh = Pᵀ·psh` plus the loss of a hard per-slot shift anchor lets shifts drift.
+  So **permutation-invariance must COMPLEMENT the matrix loss (residual anchor), not REPLACE
+  it.** The full matrix→sinkhorn decay-to-zero handoff is the wrong design.
+- **→ Rung 1c (next):** keep `matrix` at a residual weight (e.g. 0.3, no decay) for the whole
+  run and ADD `sinkhorn_align` on top — matrix anchors shifts/structure, sinkhorn relaxes
+  only the near-degenerate coupling ranking. Launch residual variants once the running
+  τ-sweep + handoff-sweep confirm the across-the-board pure-sinkhorn degradation.
 
 ## Parallel sweep (launched 2026-06-09 19:35) — two 1-D axes through the τ=0.001/h40 anchor
 rtxa6000 confirmed compatible with the spinhance torch build (the `gpu`/gtx1080 partition is
