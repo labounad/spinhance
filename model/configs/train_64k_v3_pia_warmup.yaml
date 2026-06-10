@@ -1,0 +1,77 @@
+# v3 / PIA Rung 1b — matrix warmup -> sinkhorn_align handoff (on corrected v2 data, 64k).
+# Fixes the cold-start failure of train_64k_v3_pia.yaml (soft assignment can't anchor sharp
+# shifts from scratch — see model/V3_CHRONICLE.md). Schedule:
+#   epochs 0-40 : pure `matrix` (establishes sharp, ordered shift predictions = the basin)
+#   epochs 40-55: crossfade (matrix 1->0, sinkhorn 0->1) — near-continuous since
+#                 sinkhorn_align == matrix for resolvable shifts (tau->0 equivalence)
+#   epochs 55-100: pure `sinkhorn_align` (relaxes near-degenerate ranking on a good basin)
+# A/B target: rebuild_64k_025_v2 (held-out 20k: shift 0.046 / J 1.214 / F1 0.904 / deg 0.948).
+# PARALLEL to v2. 90 MHz only. data paths + MAXN=64000 from train_v3.slurm.
+
+run:
+  name: v3_pia_64k_warmup
+  output_dir: model/runs
+
+data:
+  records: mol_to_spin_system/data/spin_systems_chembl.json
+  spectra: simulation/data/spectra
+  field: 90
+  split: none
+
+model:
+  name: spingraph_decoder
+  size: light
+  dropout: 0.1
+
+loss:
+  name: composite
+  terms:
+    - name: matrix                  # warmup driver — fades out over 40->55
+      sym_jmag: true
+      weight: 1.0
+      decay_start_epoch: 40
+      decay_epochs: 15
+      end_weight: 0.0
+      weights:
+        shift: 2.0
+        jmag: 1.0
+        presence: 0.5
+        deg: 0.5
+    - name: sinkhorn_align          # permutation-invariant — fades in over 40->55
+      weight: 1.0
+      init_weight: 0.0
+      start_epoch: 40
+      ramp_epochs: 15
+      tau: 0.001                    # CALIBRATED to shift_std=2.356ppm: soft/hard boundary
+                                    # ~sqrt(0.001)*2.356 = 0.075 ppm (~90MHz resolution).
+                                    # τ=0.05 was ~0.5 ppm — far too soft (run b4cb2c: offdiag
+                                    # stuck 0.53 even with sharp shifts; shifts de-sharpened).
+      n_iters: 80
+      weights:
+        shift: 2.0
+        jmag: 1.0
+        presence: 0.5
+        deg: 0.5
+
+training:
+  epochs: 100
+  batch_size: 256
+  lr: 0.0003
+  weight_decay: 0.01
+  amp: bf16
+  warmup_frac: 0.07
+  lr_stable_frac: 0.15
+  lr_min_factor: 0.40
+  grad_clip: 0.5
+  grad_spike_factor: 8.0
+  patience: 100             # effectively off: observe the FULL sinkhorn phase (best.pt by
+                            # aggregate val may be the matrix-phase model; eval last.pt too)
+  num_workers: 8
+  val_every: 1
+  seed: 0
+
+diagnostics:
+  enabled: true
+  log_every_steps: 50
+  probe_every_epochs: 5
+  probe_count: 16

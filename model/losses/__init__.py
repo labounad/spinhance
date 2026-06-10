@@ -9,6 +9,7 @@ from model.losses import matrix_loss as _matrix        # noqa: F401
 from model.losses import hungarian_loss as _hungarian  # noqa: F401
 from model.losses import surrogate_spectral_loss as _surrogate_spectral  # noqa: F401
 from model.losses import soft_equiv_loss as _soft_equiv  # noqa: F401
+from model.losses import sinkhorn_align_loss as _sinkhorn_align  # noqa: F401
 from model.losses import composite as _composite       # noqa: F401
 from model.losses.composite import build_composite
 

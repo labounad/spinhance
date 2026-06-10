@@ -1,0 +1,41 @@
+# v3 Rung 1f: matrix (full, 1.0) + sinkhorn_align COUPLING-ONLY with DETACHED assignment
+# shifts (weight 0.5). Rung 1e (coupling-only) still regressed shift because P depends on
+# psh, so coupling-loss grad flowed into shifts via P. detach_assign_shifts=true cuts that
+# path: P uses current shifts to assign, but couplings can't push shifts (verified: shift
+# grad norm 0). Shifts now PURELY matrix-supervised; sinkhorn relaxes only near-degenerate
+# coupling labels. tau=0.001. 64k/light. Parallel to v2.
+run: {name: v3_pia_jdetach05, output_dir: model/runs}
+data: {records: mol_to_spin_system/data/spin_systems_chembl.json, spectra: simulation/data/spectra, field: 90, split: none}
+model: {name: spingraph_decoder, size: light, dropout: 0.1}
+loss:
+  name: composite
+  terms:
+    - name: matrix
+      sym_jmag: true
+      weight: 1.0
+      weights: {shift: 2.0, jmag: 1.0, presence: 0.5, deg: 0.5}
+    - name: sinkhorn_align
+      weight: 0.5
+      init_weight: 0.0
+      start_epoch: 40
+      ramp_epochs: 15
+      tau: 0.001
+      n_iters: 80
+      detach_assign_shifts: true
+      weights: {shift: 0.0, jmag: 1.0, presence: 0.0, deg: 0.0}
+training:
+  epochs: 100
+  batch_size: 256
+  lr: 0.0003
+  weight_decay: 0.01
+  amp: bf16
+  warmup_frac: 0.07
+  lr_stable_frac: 0.15
+  lr_min_factor: 0.40
+  grad_clip: 0.5
+  grad_spike_factor: 8.0
+  patience: 100
+  num_workers: 8
+  val_every: 1
+  seed: 0
+diagnostics: {enabled: true, log_every_steps: 50, probe_every_epochs: 5, probe_count: 16}

@@ -1,0 +1,40 @@
+# v3 Rung 1e: matrix (full, weight 1.0) + sinkhorn_align COUPLING-ONLY (weight 0.5).
+# Rung 1d (matrix-dominant + sinkhorn aux) improved J (1.42->1.27) but regressed shift
+# (0.074->0.13) — because sinkhorn also softens SHIFTS (al_sh=PT.psh). Shifts are already
+# supervised sharply by matrix; permutation-invariance is only needed for COUPLINGS. So here
+# the sinkhorn term has shift=deg=presence=0, jmag=1 -> it ONLY relaxes near-degenerate
+# coupling ranking; matrix handles everything else. tau=0.001. 64k/light. Parallel to v2.
+run: {name: v3_pia_jonly05, output_dir: model/runs}
+data: {records: mol_to_spin_system/data/spin_systems_chembl.json, spectra: simulation/data/spectra, field: 90, split: none}
+model: {name: spingraph_decoder, size: light, dropout: 0.1}
+loss:
+  name: composite
+  terms:
+    - name: matrix
+      sym_jmag: true
+      weight: 1.0
+      weights: {shift: 2.0, jmag: 1.0, presence: 0.5, deg: 0.5}
+    - name: sinkhorn_align
+      weight: 0.5
+      init_weight: 0.0
+      start_epoch: 40
+      ramp_epochs: 15
+      tau: 0.001
+      n_iters: 80
+      weights: {shift: 0.0, jmag: 1.0, presence: 0.0, deg: 0.0}
+training:
+  epochs: 100
+  batch_size: 256
+  lr: 0.0003
+  weight_decay: 0.01
+  amp: bf16
+  warmup_frac: 0.07
+  lr_stable_frac: 0.15
+  lr_min_factor: 0.40
+  grad_clip: 0.5
+  grad_spike_factor: 8.0
+  patience: 100
+  num_workers: 8
+  val_every: 1
+  seed: 0
+diagnostics: {enabled: true, log_every_steps: 50, probe_every_epochs: 5, probe_count: 16}
