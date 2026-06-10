@@ -102,6 +102,29 @@ held-out, stratified by near-degeneracy, when done (~22 min/run).
 0.004→0.149 ppm. Handoff axis maps how little matrix warmup the soft assignment can bootstrap
 from (h10 is near-cold — expect it to approach the cold-start failure; brackets the minimum).
 
+### Sweep RESULTS (2026-06-09 ~20:45)
+**τ-sweep — the degradation is τ-INDEPENDENT.** All four τ (incl. the 0.001 anchor) peak at
+the matrix-warmup (best_ep ~35–38, shift ~0.064–0.070 / J ~1.39–1.44) then the pure-sinkhorn
+phase degrades to shift ~0.22 / J ~2.6–2.9:
+| τ | best (shift/J) | final (shift/J) |
+|---|---|---|
+| 0.0005 | 0.067 / 1.429 | 0.219 / 2.631 |
+| 0.001 (anchor) | 0.068 / 1.398 | 0.34 / 3.04 |
+| 0.002 | 0.064 / 1.393 | 0.228 / 2.713 |
+| 0.004 | 0.070 / 1.436 | 0.217 / 2.895 |
+→ **Not a τ problem. Pure sinkhorn (matrix removed) de-sharpens shifts at every τ.** Confirms
+the residual-anchor diagnosis decisively.
+**Handoff-sweep (running): earlier handoff = worse best** (h10 best 0.140 ≫ h40 best 0.067) —
+less matrix warmup → worse, as predicted (approaches cold-start).
+
+### Rung 1c — matrix RESIDUAL anchor + sinkhorn on top (launched ~20:45)
+Configs `train_64k_v3_pia_resid{02,03,05}.yaml`: `matrix` stays at weight {0.2,0.3,0.5} (NO
+decay) for the whole run; `sinkhorn_align` (τ=0.001) ramps in at ep40. Hypothesis: matrix
+anchors shifts/structure so they don't de-sharpen, while sinkhorn relaxes only the
+near-degenerate coupling ranking → val should HOLD ≈ matrix (no shift regression) and ideally
+improve near-degenerate-stratified J. Runs `v3_pia_resid02/03/05` on rtxa6000. **WATCH:** does
+post-ep40 val stay flat (vs the τ-sweep's regression)? If yes, Rung 1c is the viable design.
+
 ## Smoke tests (correctness gates before any fleet run)
 Run: `PYTHONPATH=. python3 /tmp/smoke_sinkhorn.py` (2026-06-09, torch 2.10 local). All PASS.
 - [x] **τ→0 continuity (H2):** distinct shifts, τ=0.01 → matrix total = sinkhorn total =

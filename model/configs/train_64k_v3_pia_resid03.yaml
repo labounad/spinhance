@@ -1,0 +1,39 @@
+# v3 Rung 1c: matrix RESIDUAL anchor (weight 0.3, no decay) + sinkhorn_align on top.
+# The full handoff (matrix->0) degraded shifts across all tau (V3_CHRONICLE): pure sinkhorn
+# de-sharpens. Here matrix STAYS to anchor shifts/structure; sinkhorn ramps in at ep40 to
+# relax only the near-degenerate coupling ranking. tau=0.001 (boundary ~0.075ppm). 64k/light,
+# vs 025 baseline (J 1.214 / shift 0.046). Parallel to v2. 90 MHz.
+run: {name: v3_pia_resid03, output_dir: model/runs}
+data: {records: mol_to_spin_system/data/spin_systems_chembl.json, spectra: simulation/data/spectra, field: 90, split: none}
+model: {name: spingraph_decoder, size: light, dropout: 0.1}
+loss:
+  name: composite
+  terms:
+    - name: matrix
+      sym_jmag: true
+      weight: 0.3
+      weights: {shift: 2.0, jmag: 1.0, presence: 0.5, deg: 0.5}
+    - name: sinkhorn_align
+      weight: 1.0
+      init_weight: 0.0
+      start_epoch: 40
+      ramp_epochs: 15
+      tau: 0.001
+      n_iters: 80
+      weights: {shift: 2.0, jmag: 1.0, presence: 0.5, deg: 0.5}
+training:
+  epochs: 100
+  batch_size: 256
+  lr: 0.0003
+  weight_decay: 0.01
+  amp: bf16
+  warmup_frac: 0.07
+  lr_stable_frac: 0.15
+  lr_min_factor: 0.40
+  grad_clip: 0.5
+  grad_spike_factor: 8.0
+  patience: 100
+  num_workers: 8
+  val_every: 1
+  seed: 0
+diagnostics: {enabled: true, log_every_steps: 50, probe_every_epochs: 5, probe_count: 16}
