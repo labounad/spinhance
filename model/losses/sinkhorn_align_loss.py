@@ -75,7 +75,8 @@ class SinkhornAlignLoss(Loss):
     name = "sinkhorn_align"
 
     def __init__(self, weights=None, tau: float = 0.05, n_iters: int = 50,
-                 huber_beta: float = 1.0, hard_eval: bool = False, **_ignore):
+                 huber_beta: float = 1.0, hard_eval: bool = False,
+                 detach_assign_shifts: bool = False, **_ignore):
         self.w = dict(_DEFAULT_WEIGHTS)
         if weights:
             self.w.update(weights)
@@ -83,6 +84,13 @@ class SinkhornAlignLoss(Loss):
         self.n_iters = int(n_iters)
         self.huber_beta = float(huber_beta)
         self.hard_eval = bool(hard_eval)
+        # If True, the soft assignment P is built from DETACHED predicted shifts: P still
+        # uses current shifts to choose the assignment, but no gradient flows from the
+        # coupling alignment back into the shifts — so the coupling term relaxes
+        # near-degenerate label assignments WITHOUT perturbing shifts (those stay purely
+        # matrix-supervised). Pair with weights {shift:0,deg:0,presence:0,jmag:1} for a
+        # clean coupling-only permutation-invariant term.
+        self.detach_assign_shifts = bool(detach_assign_shifts)
 
     def __call__(self, output: ModelOutput, batch: SpinBatch) -> LossOutput:
         psh = output.shifts                       # (B, G) standardized ppm
@@ -99,7 +107,8 @@ class SinkhornAlignLoss(Loss):
         tdeg = batch.degeneracy_classes            # (B, G) long
 
         # --- soft assignment: predicted node i -> target node j, gated by shift proximity
-        cost = (psh[:, :, None] - tsh[:, None, :]) ** 2            # (B, G, G)
+        psh_cost = psh.detach() if self.detach_assign_shifts else psh
+        cost = (psh_cost[:, :, None] - tsh[:, None, :]) ** 2       # (B, G, G)
         P = sinkhorn_log(cost, self.tau, self.n_iters)            # (B, G, G)
         if self.hard_eval and not torch.is_grad_enabled():
             # snap to a hard permutation (one-hot per column) for reporting parity
