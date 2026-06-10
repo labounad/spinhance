@@ -172,3 +172,12 @@ on couplings, zero shift cost. This is the validated minimal form:
 TODO at completion: held-out eval (20k, near-degeneracy-stratified) on jdetach05/10 best+last
 vs 025 baseline (held-out J 1.214 / shift 0.046) to quantify the gain and confirm it
 concentrates on near-degenerate molecules (the hypothesis).
+
+### Rung 1f FINAL (ep97) — degradation fully solved
+After LR decay both jdetach variants land at/above the matrix baseline on aggregate val:
+  jdetach05: best ep90 shift **0.049** / J **1.22** ; jdetach10: best ep76 0.048 / 1.27.
+(025 held-out: 0.046 / 1.214.) So the detached coupling-only sinkhorn is non-destructive AND
+the model matches pure-matrix on aggregate. Aggregate held-out evals launched (ev_jdetach05/10
+on 20k). NEXT: near-degeneracy-STRATIFIED held-out J-MAE (jdetach vs 025) — the hypothesis is
+the gain concentrates on near-degenerate molecules (~6%), invisible in the aggregate. Need a
+custom stratified eval (split held-out by min pairwise |Δδ|); build next tick.
