@@ -147,3 +147,16 @@ matrix residual. The anchor must be the DOMINANT term, not a minority residual.
 {0.2, 0.5}, ramp@40, τ=0.001. Runs `v3_pia_aux02/aux05`. WATCH: val should now HOLD ≈ matrix
 (matrix dominates) while sinkhorn nudges near-degenerate couplings. If aux holds AND improves
 near-degenerate-stratified J vs pure-matrix 025, that's the win condition.
+
+### Rung 1d/1e RESULTS + Rung 1f (the isolation fix)
+- **Rung 1d (matrix 1.0 + sinkhorn aux):** FIRST ADDITIVE SIGNAL. aux02 finished J 1.42→**1.26**
+  (improved!) but shift 0.069→0.130 (regressed); aux05 worse shift, same J. Lower sinkhorn
+  weight better. So permutation-invariance HELPS J but the term also costs shift.
+- **Rung 1e (coupling-only, shift weight 0):** STILL regressed shift (jonly05 0.069→0.114).
+  Diagnosis: the soft assignment P is a function of psh, so the coupling-alignment gradient
+  flows into shifts THROUGH P even with no shift loss term.
+- **Rung 1f (coupling-only + `detach_assign_shifts=true`):** detach psh in the Sinkhorn cost
+  → P uses current shifts to assign but couplings can't push shifts (verified: shift grad
+  norm = 0). Shifts now PURELY matrix-supervised. Runs `v3_pia_jdetach05/10`. **WIN CONDITION:
+  shift holds ≈ matrix warmup (~0.069) AND J improves (<1.40).** If met, this is the validated
+  minimal form of the permutation-invariant term → then held-out eval (near-deg-stratified).
