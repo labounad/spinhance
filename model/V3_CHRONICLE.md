@@ -34,7 +34,28 @@ matched v2 baseline. Keep entries terse and factual so this doubles as a debug l
   shifts sharpen (P→identity), leaving off-diagonal mass only on genuine near-degeneracies.
   If it stays high, τ=0.05 is too soft (loss isn't anchoring the ranking) → lower τ and
   relaunch. Check at ep~20/50.
-- **Result:** _TBD — eval_heldout when best.pt lands; compare to 025 baseline row above._
+- **Result: FAILED (cold-start).** Killed at ep17. `assign_offdiag` stuck ~0.73 from ep4
+  (never anchored); val collapsed/worsened (ep17 shift **1.19 ppm**, J **7.16 Hz**, F1
+  **0.38** vs baseline 0.046/1.214/0.904). **Diagnosis — chicken-and-egg:** from a cold
+  init predicted shifts are ≈constant, so the assignment cost `(psh−tsh)²` is near-uniform
+  across pred nodes → P stays loose → the averaged shift loss `Pᵀ·shifts` gives no pressure
+  to make shifts *distinct & ordered* → the model never escapes the mushy regime (training
+  loss falls by collapsing shift variance, val craters). **This is the warm-start lesson
+  (design §2) confirmed for the STRUCTURAL loss, not just the spectral one:** soft
+  assignment only has signal once the basin (sharp shifts) exists. τ wasn't the (sole)
+  problem — cold-start was.
+
+### v3_pia_64k_warmup — Rung 1b, matrix→sinkhorn HANDOFF
+- **Config:** `train_64k_v3_pia_warmup.yaml`. Composite: `matrix` (weight 1.0, decays
+  40→55 to 0) then `sinkhorn_align` (ramps 40→55 to 1.0, τ=0.05). So 0–40 pure matrix
+  establishes sharp/ordered shifts; 55–100 pure sinkhorn relaxes near-degenerate ranking on
+  a good basin. Since sinkhorn ≈ matrix for resolvable shifts (τ→0 equivalence), the
+  crossfade is near-continuous in loss — only near-degenerates change.
+- **Watch:** `assign_offdiag` should be ~0 at handoff (sharp shifts) and stay low except on
+  near-degenerate molecules; val J-MAE should hold ≈ matrix through the handoff then ideally
+  improve on near-degenerate-stratified J-MAE.
+- **run-id / hash:** _TBD on launch._
+- **Status:** _launching._
 
 ## Smoke tests (correctness gates before any fleet run)
 Run: `PYTHONPATH=. python3 /tmp/smoke_sinkhorn.py` (2026-06-09, torch 2.10 local). All PASS.
