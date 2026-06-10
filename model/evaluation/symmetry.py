@@ -106,4 +106,6 @@ def align_pred_couplings(pred_cm, tgt_cm, tgt_mask, shifts, deg, **kw):
     is the (G, G) ground-truth coupling presence mask. Identity is always a candidate, so
     the result is never worse than the unaligned prediction."""
     p = align_pred_permutation(pred_cm, tgt_cm, tgt_mask, shifts, deg, **kw)
+    if np.array_equal(p, np.arange(len(p))):
+        return pred_cm                       # no-op (identity alignment): return input untouched
     return np.asarray(pred_cm, float)[np.ix_(p, p)]
