@@ -55,10 +55,22 @@ matched v2 baseline. Keep entries terse and factual so this doubles as a debug l
   near-degenerate molecules; val J-MAE should hold ≈ matrix through the handoff then ideally
   improve on near-degenerate-stratified J-MAE.
 - **run-id / hash:** `20260609_191043_v3_pia_64k_warmup_b4cb2c` (sbatch 42403950, a100).
-- **Status:** RUNNING (18:10... launched 19:10). Matrix-warmup phase confirmed active at ep0
-  (`weight/matrix`=1.0, `weight/sinkhorn_align`=0.0). early-stop OFF (patience=100) to
-  observe the full sinkhorn phase. ~13 s/epoch → ~25 min. Check handoff (ep40-55) +
-  `assign_offdiag` (should now be ~0 post-warmup) + eval best.pt AND last.pt on the 20k set.
+- **Result: warmup GREAT, τ=0.05 sinkhorn too soft.** Warmup phase trained like 025
+  (ep38: shift **0.068**, J **1.398**, deg-bal 0.949 — best_ep=38). But at the handoff
+  (ep42) `assign_offdiag`=**0.527** *with already-sharp shifts*, and shift_mae regressed
+  0.068→0.124 as sinkhorn ramped in. **Diagnosis (measured):** `shift_std`=2.356 ppm, so
+  τ=0.05 ⇒ soft/hard boundary √0.05·2.356 ≈ **0.5 ppm** — it treats groups half a ppm apart
+  as swappable, so even sharp shifts give a loose P and de-sharpen. τ must be calibrated to
+  the standardized shift scale, not picked blind. Killed at ep44.
+
+### v3_pia_64k_warmup (τ=0.001) — Rung 1b recalibrated
+- **Change:** sinkhorn τ 0.05→**0.001** (boundary √0.001·2.356 ≈ **0.075 ppm** ≈ 90 MHz
+  resolution: ≈matrix-hard for resolvable shifts, soft only for genuine near-degeneracies);
+  n_iters 50→80. Same warmup→handoff schedule.
+- **run-id / hash:** _TBD on launch._
+- **Status:** _launching (kill+relaunch on the same a100)._
+- **Watch:** post-warmup `assign_offdiag` should now be ~0 (sharp P for resolvable), shift
+  should NOT regress at the handoff; sinkhorn phase tests the near-degenerate hypothesis.
 
 ## Smoke tests (correctness gates before any fleet run)
 Run: `PYTHONPATH=. python3 /tmp/smoke_sinkhorn.py` (2026-06-09, torch 2.10 local). All PASS.

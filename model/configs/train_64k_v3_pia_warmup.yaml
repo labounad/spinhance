@@ -42,8 +42,11 @@ loss:
       init_weight: 0.0
       start_epoch: 40
       ramp_epochs: 15
-      tau: 0.05
-      n_iters: 50
+      tau: 0.001                    # CALIBRATED to shift_std=2.356ppm: soft/hard boundary
+                                    # ~sqrt(0.001)*2.356 = 0.075 ppm (~90MHz resolution).
+                                    # τ=0.05 was ~0.5 ppm — far too soft (run b4cb2c: offdiag
+                                    # stuck 0.53 even with sharp shifts; shifts de-sharpened).
+      n_iters: 80
       weights:
         shift: 2.0
         jmag: 1.0
