@@ -72,6 +72,26 @@ matched v2 baseline. Keep entries terse and factual so this doubles as a debug l
 - **Watch:** post-warmup `assign_offdiag` should now be ~0 (sharp P for resolvable), shift
   should NOT regress at the handoff; sinkhorn phase tests the near-degenerate hypothesis.
 
+## Parallel sweep (launched 2026-06-09 19:35) — two 1-D axes through the τ=0.001/h40 anchor
+rtxa6000 confirmed compatible with the spinhance torch build (the `gpu`/gtx1080 partition is
+NOT) → ample parallel GPU capacity. All warmup→handoff, 64k/light, vs 025 baseline
+(J 1.214 / shift 0.046 / F1 0.904 / deg 0.948). Eval each best.pt+last.pt on the same 20k
+held-out, stratified by near-degeneracy, when done (~22 min/run).
+
+| run | τ | handoff@ | sbatch | node | status |
+|---|---|---|---|---|---|
+| v3_pia_64k_warmup (anchor) | 0.001 | 40 | 42404015 | a100 | RUNNING |
+| v3_pia_t0005_h40 | 0.0005 | 40 | 42404017 | rtxa6000 | RUNNING |
+| v3_pia_t002_h40  | 0.002  | 40 | 42404018 | rtxa6000 | RUNNING |
+| v3_pia_t004_h40  | 0.004  | 40 | 42404019 | rtxa6000 | queued |
+| v3_pia_t001_h30  | 0.001  | 30 | 42404020 | rtxa6000 | queued |
+| v3_pia_t001_h20  | 0.001  | 20 | 42404021 | rtxa6000 | queued |
+| v3_pia_t001_h10  | 0.001  | 10 | 42404022 | rtxa6000 | queued |
+
+τ axis maps the soft/hard boundary (√τ·2.356 ppm): 0.0005→0.053, 0.001→0.075, 0.002→0.105,
+0.004→0.149 ppm. Handoff axis maps how little matrix warmup the soft assignment can bootstrap
+from (h10 is near-cold — expect it to approach the cold-start failure; brackets the minimum).
+
 ## Smoke tests (correctness gates before any fleet run)
 Run: `PYTHONPATH=. python3 /tmp/smoke_sinkhorn.py` (2026-06-09, torch 2.10 local). All PASS.
 - [x] **τ→0 continuity (H2):** distinct shifts, τ=0.01 → matrix total = sinkhorn total =
