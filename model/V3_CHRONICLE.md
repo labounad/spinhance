@@ -54,8 +54,11 @@ matched v2 baseline. Keep entries terse and factual so this doubles as a debug l
 - **Watch:** `assign_offdiag` should be ~0 at handoff (sharp shifts) and stay low except on
   near-degenerate molecules; val J-MAE should hold ≈ matrix through the handoff then ideally
   improve on near-degenerate-stratified J-MAE.
-- **run-id / hash:** _TBD on launch._
-- **Status:** _launching._
+- **run-id / hash:** `20260609_191043_v3_pia_64k_warmup_b4cb2c` (sbatch 42403950, a100).
+- **Status:** RUNNING (18:10... launched 19:10). Matrix-warmup phase confirmed active at ep0
+  (`weight/matrix`=1.0, `weight/sinkhorn_align`=0.0). early-stop OFF (patience=100) to
+  observe the full sinkhorn phase. ~13 s/epoch → ~25 min. Check handoff (ep40-55) +
+  `assign_offdiag` (should now be ~0 post-warmup) + eval best.pt AND last.pt on the 20k set.
 
 ## Smoke tests (correctness gates before any fleet run)
 Run: `PYTHONPATH=. python3 /tmp/smoke_sinkhorn.py` (2026-06-09, torch 2.10 local). All PASS.
