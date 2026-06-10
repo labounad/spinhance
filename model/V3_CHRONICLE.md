@@ -138,3 +138,12 @@ Run: `PYTHONPATH=. python3 /tmp/smoke_sinkhorn.py` (2026-06-09, torch 2.10 local
 ## Decisions / lessons (append as they happen)
 - 2026-06-09: chose 025 (matrix-only) as the A/B base over 026 to isolate the loss change
   (no soft_equiv/peak-channel confounds). 026-based variant deferred.
+
+### Rung 1c RESULT + Rung 1d (launched ~21:13)
+Rung 1c (matrix residual {0.2,0.3,0.5} + sinkhorn weight 1.0) STILL degrades post-handoff
+(resid02/03 at ep48-49: shift 0.067→~0.21, J back up) — because sinkhorn(1.0) OVERPOWERS the
+matrix residual. The anchor must be the DOMINANT term, not a minority residual.
+**Rung 1d:** matrix weight 1.0 (dominant, no decay) + sinkhorn_align AUXILIARY at low weight
+{0.2, 0.5}, ramp@40, τ=0.001. Runs `v3_pia_aux02/aux05`. WATCH: val should now HOLD ≈ matrix
+(matrix dominates) while sinkhorn nudges near-degenerate couplings. If aux holds AND improves
+near-degenerate-stratified J vs pure-matrix 025, that's the win condition.
