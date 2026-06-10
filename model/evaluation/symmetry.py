@@ -76,6 +76,28 @@ def label_permutations(shifts, deg, *, shift_tol=1e-3, max_perms=720):
     return perms
 
 
+def align_pred_permutation(pred_cm, tgt_cm, tgt_mask, shifts, deg, **kw):
+    """Return the within-class label permutation ``p`` (G,) minimizing the masked coupling
+    discrepancy ``|p(pred_cm) − tgt_cm|``. Identity is always a candidate.
+
+    ``shifts``/``deg`` define the tie-break classes and come from the TARGET; ``tgt_mask``
+    is the (G, G) ground-truth coupling presence mask. Apply ``p`` to the prediction's
+    shifts, degeneracies AND couplings together to relabel a prediction consistently."""
+    G = len(np.asarray(shifts))
+    perms = label_permutations(shifts, deg, **kw)
+    if len(perms) == 1:
+        return np.arange(G)
+    pred_cm = np.asarray(pred_cm, float)
+    tgt_cm = np.asarray(tgt_cm, float); tgt_mask = np.asarray(tgt_mask, float)
+    best_p, best_err = np.arange(G), np.inf
+    for p in perms:
+        cand = pred_cm[np.ix_(p, p)]
+        err = float((np.abs(cand - tgt_cm) * tgt_mask).sum())
+        if err < best_err:
+            best_err, best_p = err, p
+    return best_p
+
+
 def align_pred_couplings(pred_cm, tgt_cm, tgt_mask, shifts, deg, **kw):
     """Relabel ``pred_cm`` (G, G) by the within-class label permutation minimizing the
     masked coupling discrepancy to ``tgt_cm``. Returns the aligned prediction (G, G).
@@ -83,15 +105,5 @@ def align_pred_couplings(pred_cm, tgt_cm, tgt_mask, shifts, deg, **kw):
     ``shifts``/``deg`` define the tie-break classes and come from the TARGET; ``tgt_mask``
     is the (G, G) ground-truth coupling presence mask. Identity is always a candidate, so
     the result is never worse than the unaligned prediction."""
-    perms = label_permutations(shifts, deg, **kw)
-    if len(perms) == 1:
-        return pred_cm
-    pred_cm = np.asarray(pred_cm, float)
-    tgt_cm = np.asarray(tgt_cm, float); tgt_mask = np.asarray(tgt_mask, float)
-    best, best_err = pred_cm, np.inf
-    for p in perms:
-        cand = pred_cm[np.ix_(p, p)]
-        err = float((np.abs(cand - tgt_cm) * tgt_mask).sum())
-        if err < best_err:
-            best_err, best = err, cand
-    return best
+    p = align_pred_permutation(pred_cm, tgt_cm, tgt_mask, shifts, deg, **kw)
+    return np.asarray(pred_cm, float)[np.ix_(p, p)]

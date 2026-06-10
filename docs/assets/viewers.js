@@ -330,17 +330,22 @@
           rows += `<tr><td class="gi">${i + 1}</td>${cell(m.true_shift[i].toFixed(2), P.pred_shift[i].toFixed(2), "ppm")}${cell(m.true_deg[i], P.pred_deg[i], "n")}</tr>`;
         // J heatmaps (true vs pred): 64 cells flattened into an 8-col grid
         const maxJ = Math.max(1, ...m.true_J.flat().map(Math.abs), ...P.pred_J.flat().map(Math.abs));
-        const grid = (M) => {
+        // residual = aligned prediction − target (the per-coupling error the J-MAE sums); own
+        // colour scale + red tint so it reads as an error map, not another coupling matrix.
+        const resid = m.true_J.map((row, i) => row.map((v, j) => P.pred_J[i][j] - v));
+        const maxR = Math.max(0.5, ...resid.flat().map(Math.abs));
+        const grid = (M, scale, color) => {
           let cells = "";
           M.forEach(row => row.forEach(v => {
-            const a = Math.min(1, Math.abs(v) / maxJ);
-            cells += '<i style="opacity:' + a.toFixed(2) + '" title="' + v + ' Hz"></i>';
+            const a = Math.min(1, Math.abs(v) / scale);
+            cells += '<i style="opacity:' + a.toFixed(2) + (color ? ';background:' + color : '') +
+                     '" title="' + (+v).toFixed(2) + ' Hz"></i>';
           }));
           return '<div class="jgrid">' + cells + '</div>';
         };
         mat.innerHTML =
           `<table class="nodes"><thead><tr><th>#</th><th>δ true</th><th>δ pred</th><th>n true</th><th>n pred</th></tr></thead><tbody>${rows}</tbody></table>
-           <div class="jwrap"><div><div class="jlbl">J — target</div>${grid(m.true_J)}</div><div><div class="jlbl">J — predicted</div>${grid(P.pred_J)}</div></div>`;
+           <div class="jwrap"><div><div class="jlbl">J — target</div>${grid(m.true_J, maxJ)}</div><div><div class="jlbl">J — predicted (orbit-aligned)</div>${grid(P.pred_J, maxJ)}</div><div><div class="jlbl">J — residual (pred − target)</div>${grid(resid, maxR, '#e0564b')}</div></div>`;
       }
       function setMeta() {                         // reflects the current refined-toggle state
         const m = mols[idx], P = predOf(m);

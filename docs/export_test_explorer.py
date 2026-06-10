@@ -27,7 +27,7 @@ from model.data.stacked_spectra import StackedSpectra
 from model.data.standardization import DegeneracyVocab, Standardizer
 from model.architectures import build_architecture
 from model.evaluation.metrics import decode, _np_pred
-from model.evaluation.symmetry import align_pred_couplings
+from model.evaluation.symmetry import align_pred_couplings, align_pred_permutation
 from model.inference.refine import refine_system, equiv_classes_from_softequiv
 
 REB = "/gpfs/group/shenvi/Users/labounader/spinhance/consolidated_v2"
@@ -215,10 +215,13 @@ def emit(rid, smi, sh, cp, dg, spec):
         po = np.argsort(-psh); psh2, pdg2 = psh[po], pdg[po]; pJ = pcp[np.ix_(po, po)]
         _, rspec = simulate_spectrum_composite(psh, pcp, pdg, 90.0, points=P)
         rx, ry = rdp_curve(rspec, lo, hi, sc)              # this model's adaptive mesh
-        # symmetry-aware J: align the predicted couplings to the target under the equal-shift
-        # tie-break group so swapping chemically-equivalent groups isn't penalized (model.evaluation.symmetry).
+        # symmetry-aware display: relabel the prediction (shifts, degeneracies AND couplings
+        # together) by the within-equal-shift-orbit permutation that best matches the target, so
+        # the J matrix we DISPLAY is exactly the one the reported J-MAE scores — tie-broken
+        # chemically-equivalent groups line up with the target instead of looking like big errors.
         tmask = (np.abs(tJ) > 0.5).astype(float)
-        pJ_al = align_pred_couplings(pJ, tJ, tmask, tsh, tdg)
+        p_al = align_pred_permutation(pJ, tJ, tmask, tsh, tdg)
+        psh2, pdg2, pJ = psh2[p_al], pdg2[p_al], pJ[np.ix_(p_al, p_al)]
         mm = np.abs(tJ[iu]) > 0.5
         # test-time refinement (analysis-by-synthesis): polish the predicted shifts to
         # match the INPUT spectrum (couplings/degeneracy fixed) — a "legal" correction
@@ -239,7 +242,7 @@ def emit(rid, smi, sh, cp, dg, spec):
                     "ref_skipped": bool(rinfo.get("skipped", False)),
                     "shift_mae": round(float(np.mean(np.abs(tsh - psh2))), 4),
                     "ref_shift_mae": round(float(np.mean(np.abs(tsh - rsh))), 4),
-                    "j_mae": round(float(np.mean(np.abs(tJ[iu][mm] - pJ_al[iu][mm]))) if mm.any() else 0.0, 3),
+                    "j_mae": round(float(np.mean(np.abs(tJ[iu][mm] - pJ[iu][mm]))) if mm.any() else 0.0, 3),
                     "ref_j_mae": round(float(np.mean(np.abs(tJ[iu][mm] - rpJ_al[iu][mm]))) if mm.any() else 0.0, 3)}
     ix, iy = rdp_curve(spec, lo, hi, sc)                   # the input (target) adaptive mesh
     return {"id": rid, "smiles": smi or "", "n_spins": int(np.sum(dg)), "src": "pubchem",
