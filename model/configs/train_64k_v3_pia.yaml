@@ -1,0 +1,58 @@
+# v3 / PIA (permutation-invariant alignment) at 64k, on the CORRECTED (v2) data.
+# IDENTICAL to train_64k_025.yaml EXCEPT the loss: the element-wise `matrix` term is
+# replaced by `sinkhorn_align` (shift-gated soft-assignment matrix loss). So
+# v3_pia_64k vs rebuild_64k_025_v2 is a clean A/B on the output-representation hypothesis:
+# does a permutation-invariant loss remove the near-degenerate ranking penalty without
+# hurting resolvable couplings? (See model/PERMUTATION_INVARIANT_DESIGN.md.)
+# PARALLEL to the v2 fleet — does NOT touch any v2 run. 90 MHz only.
+# data paths + max_mol come from train_v2.slurm (MAXN=64000).
+
+run:
+  name: v3_pia_64k
+  output_dir: model/runs
+
+data:
+  records: mol_to_spin_system/data/spin_systems_chembl.json
+  spectra: simulation/data/spectra
+  field: 90
+  split: none
+
+model:
+  name: spingraph_decoder
+  size: light              # same tier as 025 (~10M) for a fair A/B
+  dropout: 0.1
+
+loss:
+  name: composite
+  terms:
+    - name: sinkhorn_align      # permutation-invariant generalization of `matrix`
+      weight: 1.0
+      tau: 0.05                 # Sinkhorn temperature on standardized-shift² cost
+      n_iters: 50               # Sinkhorn normalization iterations
+      weights:                  # same term weights as 025 (shift 2x)
+        shift: 2.0
+        jmag: 1.0
+        presence: 0.5
+        deg: 0.5
+
+training:
+  epochs: 100
+  batch_size: 256
+  lr: 0.0003
+  weight_decay: 0.01
+  amp: bf16
+  warmup_frac: 0.07
+  lr_stable_frac: 0.15
+  lr_min_factor: 0.40
+  grad_clip: 0.5
+  grad_spike_factor: 8.0
+  patience: 20
+  num_workers: 8
+  val_every: 1
+  seed: 0
+
+diagnostics:
+  enabled: true
+  log_every_steps: 50
+  probe_every_epochs: 5
+  probe_count: 16
