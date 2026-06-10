@@ -181,3 +181,23 @@ the model matches pure-matrix on aggregate. Aggregate held-out evals launched (e
 on 20k). NEXT: near-degeneracy-STRATIFIED held-out J-MAE (jdetach vs 025) — the hypothesis is
 the gain concentrates on near-degenerate molecules (~6%), invisible in the aggregate. Need a
 custom stratified eval (split held-out by min pairwise |Δδ|); build next tick.
+
+## VERDICT (Rung 1 line / permutation-invariant loss) — NEGATIVE
+Near-degeneracy-stratified held-out J-MAE (jdetach05 = matrix + detached coupling-only
+sinkhorn, vs 025 = pure matrix; per-molecule-mean):
+  Δδ<0.05 (n=15936): jd 1.584 vs 025 1.524  (+0.061, jd WORSE)
+  Δδ 0.05-0.10 (n=2192): jd 1.375 vs 1.331   (+0.044, jd WORSE)
+  Δδ 0.10-0.20: -0.006 (tie);  0.20-0.50: +0.117;  ALL: +0.055 (jd worse)
+**In the near-degenerate strata — where the hypothesis predicted the WIN — jdetach is
+slightly WORSE, not better.** The permutation-invariant coupling loss recovers no accuracy
+from the canonical-section discontinuity; the soft-assignment relaxation adds a little noise.
+(Aggregate coupling-weighted held-out is parity: jd05 J 1.215 vs 025 1.214 — the matrix
+component is identical + sinkhorn added; sinkhorn is net neutral-to-slightly-harmful.)
+
+**Conclusion:** at 64k/light, the element-wise matrix loss is already adequate for couplings;
+the labeling/discontinuity concern is real in PRINCIPLE but does NOT translate to recoverable
+accuracy loss in PRACTICE. Engineering win (the detach form is non-destructive) but no
+accuracy win. This branch (Rung 1, permutation-invariant loss) is CLOSED as a negative.
+Remaining principled avenue if the output-representation problem is revisited: the generative
+posterior (Rung 3) — but the evidence here says the point-estimate + element-wise loss is not
+leaving measurable accuracy on the table from the gauge/discontinuity issue.
