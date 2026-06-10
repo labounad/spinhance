@@ -8,9 +8,11 @@ matched v2 baseline. Keep entries terse and factual so this doubles as a debug l
 ## Baselines (v2, already trained — the numbers to beat)
 | run | tier | held-out shift-MAE (ppm) | J-MAE (Hz) | presence-F1 | deg-bal-acc |
 |---|---|---|---|---|---|
-| rebuild_64k_025_v2 | light/10M | _TBD (read from heldout_eval.json)_ | _TBD_ | _TBD_ | _TBD_ |
+| rebuild_64k_025_v2 | light/10M | 0.0460 | 1.214 | 0.904 | 0.948 |
 
-> Action item: pull `rebuild_64k_025_v2/heldout_eval.json` to fill this row before judging v3.
+(n_test=20000, the standard global held-out set; run `20260609_001552_rebuild_64k_025_v2_774240`.)
+> v3 MUST be eval'd on the SAME 20k held-out set via `eval_heldout` for apples-to-apples
+> (its internal 6400-mol test split is a different, smaller set — do not compare to that).
 
 ## Runs
 ### v3_pia_64k — Rung 1, PIA (Sinkhorn-align), τ=0.05
@@ -22,9 +24,17 @@ matched v2 baseline. Keep entries terse and factual so this doubles as a debug l
   near-degenerate ranking penalty without harming resolvable couplings.
 - **Watch:** `assign_offdiag` (should be ~0 on resolvable, >0 on near-degenerate);
   shift/jmag/presence/deg sub-losses vs 025; held-out near-degenerate-stratified J-MAE.
-- **run-id / hash:** _TBD on launch_
-- **Status:** _IMPLEMENTED — smoke-test + launch pending._
-- **Result:** _TBD._
+- **run-id / hash:** `20260609_185637_v3_pia_64k_9bdcbc` (sbatch 42403947, a100/nodec0823).
+- **Status:** RUNNING (launched 2026-06-09 18:56). 10.05M params (= 025), split
+  44800/12800/6400 leak-free, ~0.075 s/step → ~100 ep in well under an hour. Plumbing
+  validated through ep2: loss 0.75→0.62, no NaN, grad_norm ~3-4, all `sinkhorn_align/*`
+  metrics logged. Parallel to v2 (separate a100 node; v2 3M runs untouched on c0819/c0821).
+- **WATCH:** `assign_offdiag` = 0.75 at ep2 — expected high while predicted shifts are
+  still untrained/unsorted (P≈uniform). It MUST fall toward ~0 for resolvable molecules as
+  shifts sharpen (P→identity), leaving off-diagonal mass only on genuine near-degeneracies.
+  If it stays high, τ=0.05 is too soft (loss isn't anchoring the ranking) → lower τ and
+  relaunch. Check at ep~20/50.
+- **Result:** _TBD — eval_heldout when best.pt lands; compare to 025 baseline row above._
 
 ## Smoke tests (correctness gates before any fleet run)
 Run: `PYTHONPATH=. python3 /tmp/smoke_sinkhorn.py` (2026-06-09, torch 2.10 local). All PASS.
