@@ -160,3 +160,15 @@ near-degenerate-stratified J vs pure-matrix 025, that's the win condition.
   norm = 0). Shifts now PURELY matrix-supervised. Runs `v3_pia_jdetach05/10`. **WIN CONDITION:
   shift holds ≈ matrix warmup (~0.069) AND J improves (<1.40).** If met, this is the validated
   minimal form of the permutation-invariant term → then held-out eval (near-deg-stratified).
+
+### Rung 1f RESULT — WIN (preliminary, ep47, confirming at completion)
+detach_assign_shifts WORKS. Past the handoff, BOTH variants hold shift AND improve J:
+  jdetach05: warmup 0.074/1.42 -> ep47 **0.063/1.34**
+  jdetach10: warmup 0.070/1.40 -> ep47 **0.059/1.36**
+Shift held (slightly better) + J improved — the permutation-invariant term is purely ADDITIVE
+on couplings, zero shift cost. This is the validated minimal form:
+  **matrix (full) + sinkhorn_align coupling-only (weights shift/deg/presence=0) with
+  detach_assign_shifts=true, ramped in after a matrix warmup.**
+TODO at completion: held-out eval (20k, near-degeneracy-stratified) on jdetach05/10 best+last
+vs 025 baseline (held-out J 1.214 / shift 0.046) to quantify the gain and confirm it
+concentrates on near-degenerate molecules (the hypothesis).
