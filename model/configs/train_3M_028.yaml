@@ -1,0 +1,62 @@
+# 3M tier — "xl 028": the ~137M scale-up of the 028 recipe = the 025 base (matrix,
+# shift-2x) PLUS a cumulative-integral input channel (use_cumint_channel). The 3M
+# companion to train_500k_028 / train_64k_028, widened to size=xl (~137M). Full
+# corrected 2.81M train split. 90 MHz only.
+#   model : spingraph_decoder size=xl + use_cumint_channel
+#   loss  : matrix (shift-2x) — NO soft_equiv (so stable like 025/027 at the 137M scale)
+# Stability: uses the stable 3M recipe (peak LR 1e-4, warmup 0.07, lr_stable_frac 0.50,
+# grad_spike_factor=8) shared with train_3M_026. Without soft_equiv this avoids the
+# systemic ~ep10 soft-equiv divergence that recurs on the 026-family at 137M.
+
+run:
+  name: spingraph_xl_028_3M
+  output_dir: model/runs
+
+data:
+  records: data/pubchem/spin_systems_pubchem.json.gz
+  parts: data/pubchem/spectra_parts/90MHz
+  field: 90
+  split: none
+  max_mol: 0                                     # override with --set data.max_mol=<N>
+  preload: false           # full 3.2M is ~196GB RAM-resident — set preload + big-RAM node at submit
+
+model:
+  name: spingraph_decoder
+  size: xl                 # model tier: 3M ~137M (TIER_PRESETS: stem deep, dim768/enc6/dec8)
+  dropout: 0.1
+  use_cumint_channel: true     # 028: cumulative-integral 2nd input channel
+
+loss:
+  name: composite
+  terms:
+    - name: matrix
+      sym_jmag: true            # symmetry-aware (automorphism-invariant) coupling term
+      weight: 1.0
+      weights:
+        shift: 2.0
+        jmag: 1.0
+        presence: 0.5
+        deg: 0.5
+
+training:
+  epochs: 60
+  batch_size: 256
+  lr: 0.00004               # 4e-5 (40u) peak: more conservative than the 025/027 5e-5. Warmup ramps
+                            # to this, then cosine-decays IMMEDIATELY (no plateau). DO NOT raise.
+  weight_decay: 0.01
+  amp: bf16
+  warmup_frac: 0.07         # linear ramp UP to the 4e-5 peak
+  lr_stable_frac: 0.0       # NO peak hold — start the cosine decay right after warmup ("slowly back down")
+  lr_min_factor: 0.25       # cosine floor = 0.25*4e-5 = 1e-5 (10u): slow decay 40u -> 10u over ~93% of steps
+  grad_clip: 0.5            # global-norm clip; works with grad_spike_factor
+  grad_spike_factor: 8.0    # skip a step whose grad-norm spikes >8x the running EMA
+  patience: 30               # WSD: must bridge the peak-LR plateau into the decay (~ep30+)
+  num_workers: 2
+  val_every: 1
+  seed: 0
+
+diagnostics:
+  enabled: true
+  log_every_steps: 200
+  probe_every_epochs: 2
+  probe_count: 16

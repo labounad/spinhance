@@ -1,9 +1,16 @@
-# 3M tier — "xl 030" super model: the ~137M scale-up with every winning ingredient —
-# 026 peak-channel + soft-equivalence, 027 focal modulation, and 028's cumulative-integral
-# input channel. Full corrected 2.81M train split. Stability tuning (lr 1.5e-4). NOTE: 3M tier is paused.
+# 3M tier — "xl 029": the ~137M scale-up of the 029 recipe = the 026 base (peak-channel
+# + soft-equivalence) PLUS 027's focal modulation (deg/presence focal). The 3M companion
+# to train_500k_029 / train_64k_029, widened to size=xl (~137M). Full corrected 2.81M
+# train split. 90 MHz only.
+#   model : spingraph_decoder size=xl + use_peak_channel (026) + use_soft_equiv (026)
+#   loss  : matrix (shift-2x) + focal (027) + soft_equiv (026)
+# Stability: uses the stable 3M recipe (peak LR 1e-4, warmup 0.07, lr_stable_frac 0.50,
+# grad_spike_factor=8) shared with train_3M_026. NOTE: the soft_equiv recipe family
+# (026/029/030) has shown a systemic ~ep10 divergence at the 137M scale even with these
+# mitigations — watch the early epochs.
 
 run:
-  name: spingraph_xl_030_3M
+  name: spingraph_xl_029_3M
   output_dir: model/runs
 
 data:
@@ -11,7 +18,7 @@ data:
   parts: data/pubchem/spectra_parts/90MHz
   field: 90
   split: none
-  max_mol: 0
+  max_mol: 0                                     # override with --set data.max_mol=<N>
   preload: false           # full 3.2M is ~196GB RAM-resident — set preload + big-RAM node at submit
 
 model:
@@ -19,8 +26,7 @@ model:
   size: xl                 # model tier: 3M ~137M (TIER_PRESETS: stem deep, dim768/enc6/dec8)
   dropout: 0.1
   use_peak_channel: true        # 026 Idea 1
-  use_soft_equiv: true          # 026 Idea 2
-  use_cumint_channel: true      # 028: cumulative-integral input channel
+  use_soft_equiv: true          # 026 Idea 2 — expose soft_equiv_logits for the loss + decode
 
 loss:
   name: composite
@@ -51,10 +57,9 @@ training:
   warmup_frac: 0.07         # linear ramp UP to the 4e-5 peak
   lr_stable_frac: 0.0       # NO peak hold — start the cosine decay right after warmup ("slowly back down")
   lr_min_factor: 0.25       # cosine floor = 0.25*4e-5 = 1e-5 (10u): slow decay 40u -> 10u over ~93% of steps
-  grad_clip: 0.5            # global-norm clip; insufficient alone (see grad_spike_factor)
-  grad_spike_factor: 8.0    # skip a step whose grad-norm spikes >8x the running EMA (the real
-                            # fix for the finite grad blow-up that clip can't damp)
-  patience: 30               # WSD: must bridge the peak-LR plateau into the decay (~ep30+); 8 stopped runs mid-plateau, undertrained
+  grad_clip: 0.5            # global-norm clip; works with grad_spike_factor
+  grad_spike_factor: 8.0    # skip a step whose grad-norm spikes >8x the running EMA
+  patience: 30               # WSD: must bridge the peak-LR plateau into the decay (~ep30+)
   num_workers: 2
   val_every: 1
   seed: 0
