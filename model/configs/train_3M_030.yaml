@@ -44,13 +44,13 @@ loss:
 training:
   epochs: 60
   batch_size: 256
-  lr: 0.00005               # 5e-5: the stable 137M peak LR (matches 025/027; 1e-4 destabilized
-                            # at the long plateau). DO NOT raise.
+  lr: 0.00004               # 4e-5 (40u) peak: more conservative than the 025/027 5e-5. Warmup ramps
+                            # to this, then cosine-decays IMMEDIATELY (no plateau). DO NOT raise.
   weight_decay: 0.01
   amp: bf16
-  warmup_frac: 0.07         # settle the transformer decoder before peak LR
-  lr_stable_frac: 0.15      # short peak plateau: LR decays by ~ep13, before the ep17 wall
-  lr_min_factor: 0.30
+  warmup_frac: 0.07         # linear ramp UP to the 4e-5 peak
+  lr_stable_frac: 0.0       # NO peak hold — start the cosine decay right after warmup ("slowly back down")
+  lr_min_factor: 0.25       # cosine floor = 0.25*4e-5 = 1e-5 (10u): slow decay 40u -> 10u over ~93% of steps
   grad_clip: 0.5            # global-norm clip; insufficient alone (see grad_spike_factor)
   grad_spike_factor: 8.0    # skip a step whose grad-norm spikes >8x the running EMA (the real
                             # fix for the finite grad blow-up that clip can't damp)
