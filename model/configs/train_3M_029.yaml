@@ -1,0 +1,70 @@
+# 3M tier — "xl 029": the ~137M scale-up of the 029 recipe = the 026 base (peak-channel
+# + soft-equivalence) PLUS 027's focal modulation (deg/presence focal). The 3M companion
+# to train_500k_029 / train_64k_029, widened to size=xl (~137M). Full corrected 2.81M
+# train split. 90 MHz only.
+#   model : spingraph_decoder size=xl + use_peak_channel (026) + use_soft_equiv (026)
+#   loss  : matrix (shift-2x) + focal (027) + soft_equiv (026)
+# Stability: uses the stable 3M recipe (peak LR 1e-4, warmup 0.07, lr_stable_frac 0.50,
+# grad_spike_factor=8) shared with train_3M_026. NOTE: the soft_equiv recipe family
+# (026/029/030) has shown a systemic ~ep10 divergence at the 137M scale even with these
+# mitigations — watch the early epochs.
+
+run:
+  name: spingraph_xl_029_3M
+  output_dir: model/runs
+
+data:
+  records: data/pubchem/spin_systems_pubchem.json.gz
+  parts: data/pubchem/spectra_parts/90MHz
+  field: 90
+  split: none
+  max_mol: 0                                     # override with --set data.max_mol=<N>
+  preload: false           # full 3.2M is ~196GB RAM-resident — set preload + big-RAM node at submit
+
+model:
+  name: spingraph_decoder
+  size: xl                 # model tier: 3M ~137M (TIER_PRESETS: stem deep, dim768/enc6/dec8)
+  dropout: 0.1
+  use_peak_channel: true        # 026 Idea 1
+  use_soft_equiv: true          # 026 Idea 2 — expose soft_equiv_logits for the loss + decode
+
+loss:
+  name: composite
+  terms:
+    - name: matrix
+      sym_jmag: true            # symmetry-aware (automorphism-invariant) coupling term
+      weight: 1.0
+      weights:
+        shift: 2.0
+        jmag: 1.0
+        presence: 0.5
+        deg: 0.5
+      deg_focal_gamma: 2.0       # 027: focal CE on degeneracy
+      presence_focal_gamma: 2.0  # 027: focal BCE on presence
+    - name: soft_equiv          # Idea 2: BCE on the edge equivalence flag vs the canonical
+                                #   SYMMETRY-ORBIT label (chemically-equivalent groups kept as
+                                #   distinct nodes; NOT shift proximity) + a shift-consistency pull.
+      weight: 0.5
+      consistency_weight: 1.0   # pull orbit-equivalent pairs' predicted shifts together
+
+training:
+  epochs: 60
+  batch_size: 256
+  lr: 0.0001                # 1e-4: the stable 137M peak LR (see train_3M_026). DO NOT raise.
+  weight_decay: 0.01
+  amp: bf16
+  warmup_frac: 0.07         # settle the transformer decoder before peak LR
+  lr_stable_frac: 0.50
+  lr_min_factor: 0.30
+  grad_clip: 0.5            # global-norm clip; works with grad_spike_factor
+  grad_spike_factor: 8.0    # skip a step whose grad-norm spikes >8x the running EMA
+  patience: 30               # WSD: must bridge the peak-LR plateau into the decay (~ep30+)
+  num_workers: 2
+  val_every: 1
+  seed: 0
+
+diagnostics:
+  enabled: true
+  log_every_steps: 200
+  probe_every_epochs: 2
+  probe_count: 16
