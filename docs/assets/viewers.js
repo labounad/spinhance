@@ -229,7 +229,7 @@
       const predOf = (m) => (m.preds ? m.preds[mkey] : m);
       const spec = $("#txSpec", host), sel = $("#txSel", host), meta = $("#txMeta", host), mat = $("#txMatrix", host);
       const modSel = $("#txModel", host), statusEl = $("#txStatus", host);
-      const vis = { target: true, pred: true, refined: true };   // per-trace visibility (legend toggles)
+      const vis = { target: true, pred: true, refined: true, qpolish: true };   // per-trace visibility (legend toggles)
       const LINE_ALPHA = 0.78;                                    // slight transparency so overlaps read clearly
       const el3d = $("#tx3d", host), load3d = $("#tx3dLoad", host), spinCb = $("#txSpin", host); let v3d = null;
       function applySpin() { if (v3d) v3d.spin(spinCb && spinCb.checked ? "y" : false, 0.6); }
@@ -264,20 +264,23 @@
       let xr0 = 0, xr1 = 12, yZoom = 1;
       const PADL = 16, PADR = 14, PADT = 12, PADB = 30;   // mirror linePlot's noY paddings
       const showRef = (P) => vis.refined && P.refined && !P.ref_skipped;   // refined available + toggled on
+      const showQ = (P) => vis.qpolish && P.qpolished && P.q_ok;            // two-stage Q-polished available + toggled on
       function drawSpec() {
         const m = mols[idx], P = predOf(m), c = C();
         const ix = m.ix || ppmOf(m), rx = (P && P.rx) || ppmOf(m);   // per-spectrum adaptive mesh x
         // target-spectrum colour encodes test membership: teal = held-out test for this model, amber = out-of-distribution
         const tgt = inTest(m) ? (css("--accent-2") || "#34e3c4") : "#f5a623";
-        const ref = showRef(P);
+        const ref = showRef(P), qp = showQ(P);
         // y-scale spans only the visible traces, so a soloed line still fills the plot
         const dmax = Math.max(1e-6, ...(vis.target ? m.input : []), ...(vis.pred ? P.rendered : []),
-                              ...(ref ? P.refined : []));
+                              ...(ref ? P.refined : []), ...(qp ? P.qpolished : []));
         const series = [];
         if (vis.target) series.push({ color: tgt, width: 1.8, alpha: LINE_ALPHA, pts: m.input.map((v, i) => [ix[i], v]) });
         if (vis.pred) series.push({ color: c.accent, width: 2, alpha: LINE_ALPHA, pts: P.rendered.map((v, i) => [rx[i], v]) });
         if (ref) { const fx = P.fx || ppmOf(m);                       // violet, drawn on top
           series.push({ color: "#b07bff", width: 2, alpha: LINE_ALPHA, pts: P.refined.map((v, i) => [fx[i], v]) }); }
+        if (qp) { const qx = P.qx || ppmOf(m);                        // green, two-stage Q-polished, drawn on top
+          series.push({ color: "#3fce6b", width: 2, alpha: LINE_ALPHA, pts: P.qpolished.map((v, i) => [qx[i], v]) }); }
         linePlot(spec, series, { xlabel: "ppm", x0: xr0, x1: xr1, y0: 0, y1: dmax / yZoom,
              invertX: true, noY: true, smooth: true, xdp: (xr1 - xr0) < 6 ? 1 : 0 });
       }
@@ -357,7 +360,13 @@
         const jTxt = (hasRef && P.ref_j_mae != null)
           ? `J MAE <b>${P.j_mae.toFixed(2)}</b> → <b style="color:#b07bff">${P.ref_j_mae.toFixed(2)}</b> Hz`
           : `J MAE <b>${P.j_mae.toFixed(2)}</b> Hz`;
-        meta.innerHTML = `<span class="mono">${m.smiles || m.id}</span> · ${m.n_spins} protons · ${shiftTxt} · ${jTxt}`;
+        // Q-polish reports its own shift/J MAE vs target — it optimizes spectral fit, not graph distance,
+        // so these can drift up even as the spectrum matches better (the open selection-vs-polish question)
+        const hasQ = showQ(P) && P.q_shift_mae != null;
+        const qTxt = hasQ
+          ? ` · <span style="color:#3fce6b">Q-polished</span> shift <b>${P.q_shift_mae.toFixed(3)}</b> ppm / J <b>${P.q_j_mae.toFixed(2)}</b> Hz`
+          : "";
+        meta.innerHTML = `<span class="mono">${m.smiles || m.id}</span> · ${m.n_spins} protons · ${shiftTxt} · ${jTxt}${qTxt}`;
       }
       function show() {
         const m = mols[idx], P = predOf(m); sel.value = idx;
