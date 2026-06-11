@@ -41,11 +41,12 @@ loss:
 training:
   epochs: 60
   batch_size: 256
-  lr: 0.0001                # 1e-4: the stable 137M peak LR (see train_3M_026). DO NOT raise.
+  lr: 0.00005               # 5e-5: the stable 137M peak LR (matches 025/027; 1e-4 destabilized
+                            # at the long plateau). DO NOT raise.
   weight_decay: 0.01
   amp: bf16
   warmup_frac: 0.07         # settle the transformer decoder before peak LR
-  lr_stable_frac: 0.50
+  lr_stable_frac: 0.15      # short peak plateau: LR decays by ~ep13, before the ep17 wall
   lr_min_factor: 0.30
   grad_clip: 0.5            # global-norm clip; works with grad_spike_factor
   grad_spike_factor: 8.0    # skip a step whose grad-norm spikes >8x the running EMA
