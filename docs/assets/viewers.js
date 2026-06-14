@@ -157,7 +157,7 @@
     "030": "super (026+027+028)" };
   const FLEET_ORDER = ["64k_025", "64k_026", "64k_027", "64k_028", "64k_029", "64k_030",
     "500k_025", "500k_026", "500k_027", "500k_028", "500k_029", "500k_030",
-    "3M_025", "3M_027"];
+    "3M_025", "3M_026", "3M_027", "3M_028", "3M_029"];
   function initTable() {
     const host = $("#cmpTable"); if (!host) return;
     fetch("data/test_eval.json").then(r => r.json()).then(d => {
