@@ -87,7 +87,8 @@ FLEET = [("64k_025", "rebuild_64k_025_v2",     "64k · 025 (matrix)"),
          ("3M_026",  "rebuild_3M_026_v2",  "3M · 026 (peak+soft-eq, 137M)"),
          ("3M_027",  "rebuild_3M_027_v2",  "3M · 027 (focal, 137M)"),
          ("3M_028",  "rebuild_3M_028_v2",  "3M · 028 (cum-integral, 137M)"),
-         ("3M_029",  "rebuild_3M_029_v2",  "3M · 029 (026+focal, 137M)")]
+         ("3M_029",  "rebuild_3M_029_v2",  "3M · 029 (026+focal, 137M)"),
+         ("3M_030",  "rebuild_3M_030_v2",  "3M · 030 (super, 137M)")]
 MODELS, MODEL_LABELS = {}, []
 # CNN baseline (trained on the legacy ChEMBL set, but handles PubChem fine) — reference floor.
 BASELINE = "/gpfs/group/shenvi/Users/labounader/spinhance/ckpts/baseline_best.pt"

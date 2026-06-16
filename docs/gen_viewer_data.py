@@ -38,6 +38,7 @@ FLEET = [
     ("3M_027",   "rebuild_3M_027_v2",  "3M · 027",   "3M",   "027", "137M"),
     ("3M_028",   "rebuild_3M_028_v2",  "3M · 028",   "3M",   "028", "137M"),
     ("3M_029",   "rebuild_3M_029_v2",  "3M · 029",   "3M",   "029", "137M"),
+    ("3M_030",   "rebuild_3M_030_v2",  "3M · 030",   "3M",   "030", "137M"),
 ]
 KEYS = ["shift_mae_ppm", "j_mae_hz", "presence_f1", "deg_acc_balanced"]
 
